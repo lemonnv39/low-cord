@@ -16,7 +16,7 @@ import { Forms } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
-import { LOWCORD_NAME, LOWCORD_REPO_URL } from "./constants";
+import { LOWCORD_AUTHOR, LOWCORD_NAME, LOWCORD_REPO_URL } from "./constants";
 
 function LowCordSettings() {
     return (
@@ -28,6 +28,9 @@ function LowCordSettings() {
                 </Forms.FormText>
                 <Forms.FormText style={{ color: "var(--text-muted)" }}>
                     Projet open source : tout le code est public. Les mises à jour passent par l'injecteur low-cord.
+                </Forms.FormText>
+                <Forms.FormText className={Margins.top8} style={{ color: "var(--text-muted)" }}>
+                    Signé {LOWCORD_AUTHOR}
                 </Forms.FormText>
             </section>
 

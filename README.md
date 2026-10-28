@@ -1,5 +1,7 @@
 # low-cord
 
+> par **shitday**
+
 Client mod Discord **open source** pour un cercle restreint d'utilisateurs —
 un fork minimal de [Vencord](https://github.com/Vendicated/Vencord) + son
 injecteur Windows portable. Tout le code est ici, rien n'est caché.

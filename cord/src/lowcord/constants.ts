@@ -8,5 +8,6 @@
 // (et dans injector/src-tauri/src/config.rs).
 
 export const LOWCORD_NAME = "low-cord";
+export const LOWCORD_AUTHOR = "shitday";
 export const LOWCORD_REPO = "lemonnv39/low-cord";
 export const LOWCORD_REPO_URL = `https://github.com/${LOWCORD_REPO}`;
