@@ -1,0 +1,115 @@
+/* low-cord Injecteur — design tokens
+   Direction : monochrome pur, noir profond OLED + blanc franc comme accent
+   (boutons inversés : blanc plein sur noir). Zéro teinte de couleur — tout se
+   joue sur le contraste, la luminosité et la lumière blanche. Typographie
+   système nette (Segoe UI natif Windows, Inter si dispo). Aucune police
+   embarquée : l'app tourne hors-ligne et Segoe UI est déjà parfait sur Windows. */
+
+:root {
+    color-scheme: dark;
+
+    /* ── Surfaces (gris neutres, aucune teinte) ───────────────────────── */
+    --bg: #000000;
+    --bg-2: #060606;
+    --surface: #0f0f10;
+    --surface-2: #18181a;
+    --surface-3: #242427;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.20);
+
+    /* ── Texte ────────────────────────────────────────────────────────── */
+    --text: #fafafa;
+    --text-dim: #9a9a9d;
+    --text-faint: #636366;
+
+    /* ── Accent = BLANC (inversion : surface blanche, texte noir) ──────── */
+    --accent: #ffffff;
+    --accent-hover: #e4e4e7;
+    --accent-press: #c7c7cc;
+    --on-accent: #000000;
+    --accent-soft: rgba(255, 255, 255, 0.10);
+    --accent-line: rgba(255, 255, 255, 0.26);
+    /* Halo blanc diffus pour les surfaces accent (remplace les ombres violettes). */
+    --accent-glow: rgba(255, 255, 255, 0.22);
+
+    /* ── États — monochromes, distingués par luminosité + texte/icône ─── */
+    --ok: #ffffff;
+    --warning: #a1a1a6;
+    --danger: #ffffff;
+    --ring: #ffffff;
+
+    /* ── Rythme ───────────────────────────────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    /* ── Mouvement ────────────────────────────────────────────────────── */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --duration-fast: 140ms;
+    --duration-base: 260ms;
+    --duration-slow: 480ms;
+
+    --font: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+    font-family: var(--font);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Scrollbar fine cohérente avec le thème. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+*::-webkit-scrollbar { width: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}

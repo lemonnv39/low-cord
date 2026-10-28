@@ -1,0 +1,9 @@
+# Marque injector/ comme racine de workspace pnpm à part entière. Sans ce
+# fichier, `pnpm install` lancé depuis injector/ remonte l'arborescence,
+# trouve le pnpm-workspace.yaml du repo principal (abyss-master) et traite
+# injector/ comme rattaché à CE workspace — alors que ce n'est pas un membre
+# du glob `packages/*` de ce dernier, donc rien ne s'installe réellement ici.
+packages:
+  - .
+allowBuilds:
+  esbuild: true
