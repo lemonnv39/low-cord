@@ -32,6 +32,7 @@ import { promisify } from "util";
 
 import { getPluginTarget } from "../utils.mjs";
 import { builtinModules } from "module";
+import { isPluginAllowed, LOWCORD_PLUGIN_DIR } from "./lowcord.mjs";
 
 /** @type {import("../../package.json")} */
 const PackageJSON = JSON.parse(readFileSync("package.json", "utf-8"));
@@ -145,7 +146,7 @@ export const globPlugins = kind => ({
         });
 
         build.onLoad({ filter, namespace: "import-plugins" }, async () => {
-            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", "userplugins"];
+            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", LOWCORD_PLUGIN_DIR, "userplugins"];
             let code = "";
             let pluginsCode = "\n";
             let metaCode = "\n";
@@ -161,6 +162,7 @@ export const globPlugins = kind => ({
                     const fileName = file.name;
                     if (fileName.startsWith("_") || fileName.startsWith(".")) continue;
                     if (fileName === "index.ts") continue;
+                    if (!isPluginAllowed(dir, fileName)) continue; // low-cord
 
                     const target = getPluginTarget(fileName);
 

@@ -22,6 +22,7 @@
 import { readdir } from "fs/promises";
 import { join, resolve } from "path";
 
+import { isPluginAllowed, LOWCORD_PLUGIN_DIR } from "./lowcord.mjs";
 import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_ANTI_CRASH_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues } from "./common.mjs";
 
 const defines = stringifyValues({
@@ -74,7 +75,7 @@ const globNativesPlugin = {
         });
 
         build.onLoad({ filter, namespace: "import-natives" }, async () => {
-            const pluginDirs = ["plugins", "userplugins"];
+            const pluginDirs = ["plugins", LOWCORD_PLUGIN_DIR, "userplugins"];
             let code = "";
             let natives = "\n";
             let i = 0;
@@ -88,6 +89,7 @@ const globNativesPlugin = {
                 const plugins = await readdir(dirPath, { withFileTypes: true });
                 for (const file of plugins) {
                     const fileName = file.name;
+                    if (!isPluginAllowed(dir, fileName)) continue; // low-cord
                     const nativePath = join(dirPath, fileName, "native.ts");
                     const indexNativePath = join(dirPath, fileName, "native/index.ts");
 
