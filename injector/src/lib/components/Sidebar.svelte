@@ -21,7 +21,7 @@
     <div class="group">// discord</div>
     {#each installs as install (install.branch)}
         {@const st = branchState(install, latestSha)}
-        {@const busy = phases[install.branch]?.kind === "installing"}
+        {@const busy = phases[install.branch]?.kind === "installing" || phases[install.branch]?.kind === "uninstalling"}
         <button class="item" class:on={selected === install.branch} onclick={() => onSelect(install.branch)}>
             <span class="caret">{selected === install.branch ? ">" : " "}</span>
             <span class="name">{BRANCH_NAME[install.branch] ?? install.branch}</span>
@@ -65,6 +65,7 @@
         text-align: left;
         color: var(--dim);
         border-left: 2px solid transparent;
+        transition: color 140ms var(--ease), background 140ms var(--ease), border-color 140ms var(--ease);
     }
     .item:hover {
         color: var(--fg-bright);
@@ -78,6 +79,7 @@
     .caret {
         width: 1ch;
         color: var(--accent);
+        transition: opacity 140ms var(--ease);
     }
     .name {
         flex: 1;

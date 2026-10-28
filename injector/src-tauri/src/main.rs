@@ -5,6 +5,7 @@ mod asar;
 mod config;
 mod discord;
 mod dist_fetch;
+mod log;
 mod patcher;
 mod presets;
 mod settings;

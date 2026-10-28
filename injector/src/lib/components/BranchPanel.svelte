@@ -1,22 +1,14 @@
-<script lang="ts" module>
-    import type { InstallProgressEvent } from "../types";
-
-    export interface LogLine {
-        step: InstallProgressEvent["step"];
-        status: "ok" | "error";
-        message?: string | null;
-    }
-</script>
-
 <script lang="ts">
-    import type { DiscordInstall, RowPhase } from "../types";
-    import { BRANCH_NAME, STEP_LABEL, STEP_PCT, asciiBar, branchState } from "../branches";
+    import { tick } from "svelte";
+    import type { DiscordInstall, InstallLogEvent, LogKind, RowPhase } from "../types";
+    import { BRANCH_NAME, STEP_LABEL, STEP_PCT, branchState } from "../branches";
 
     let {
         install,
         phase,
         log,
         latestSha,
+        locked,
         onInstall,
         onUninstall,
         onConfirmUninstall,
@@ -24,8 +16,10 @@
     }: {
         install: DiscordInstall;
         phase: RowPhase;
-        log: LogLine[];
+        log: InstallLogEvent[];
         latestSha: string | null;
+        /** Une autre branche est en cours d'opération : on bloque les actions ici. */
+        locked: boolean;
         onInstall: () => void;
         onUninstall: () => void;
         onConfirmUninstall: () => void;
@@ -34,7 +28,7 @@
 
     const name = $derived(BRANCH_NAME[install.branch] ?? install.branch);
     const st = $derived(branchState(install, latestSha));
-    const busy = $derived(phase.kind === "installing");
+    const busy = $derived(phase.kind === "installing" || phase.kind === "uninstalling");
     const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : "—");
 
     const STATE_LINE = {
@@ -56,7 +50,54 @@
         st === "outdated" ? "mettre à jour" : st === "reinject" ? "réappliquer" : st === "active" ? "réinstaller" : "installer"
     );
 
-    const pct = $derived(phase.kind === "installing" ? STEP_PCT[phase.step] : 0);
+    // ── Activité ────────────────────────────────────────────────────────
+    const SYMBOL: Record<LogKind, string> = {
+        info: "·", ok: "✓", warn: "!", err: "x", add: "+", del: "-", mod: "~", proc: "»", net: "↓",
+    };
+
+    const pct = $derived(
+        phase.kind === "installing" ? STEP_PCT[phase.step] : phase.kind === "uninstalling" ? 50 : log.length > 0 ? 100 : 0
+    );
+    const stepText = $derived(
+        phase.kind === "installing"
+            ? STEP_LABEL[phase.step]
+            : phase.kind === "uninstalling"
+              ? "désinstallation"
+              : phase.kind === "error"
+                ? "échec"
+                : "terminé"
+    );
+    const counts = $derived({
+        add: log.filter(l => l.kind === "add").length,
+        del: log.filter(l => l.kind === "del").length,
+        mod: log.filter(l => l.kind === "mod").length,
+    });
+
+    // Chrono depuis la première ligne du journal (tic toutes les 100 ms pendant l'opération).
+    let now = $state(Date.now());
+    $effect(() => {
+        if (!busy) return;
+        const t = setInterval(() => (now = Date.now()), 100);
+        return () => clearInterval(t);
+    });
+    const elapsed = $derived.by(() => {
+        if (log.length === 0) return null;
+        const end = busy ? now : log[log.length - 1].ts;
+        return ((end - log[0].ts) / 1000).toFixed(1);
+    });
+
+    function clock(ts: number) {
+        const d = new Date(ts);
+        const p = (n: number, w = 2) => String(n).padStart(w, "0");
+        return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+    }
+
+    // Auto-scroll en bas à chaque nouvelle ligne.
+    let consoleEl = $state<HTMLDivElement | null>(null);
+    $effect(() => {
+        void log.length;
+        tick().then(() => consoleEl?.scrollTo({ top: consoleEl.scrollHeight, behavior: "smooth" }));
+    });
 </script>
 
 <section class="panel">
@@ -79,32 +120,46 @@
                 <button class="cmd cmd--danger" onclick={onUninstall}>oui, retirer</button>
                 <button class="cmd" onclick={onCancelConfirm}>annuler</button>
             {:else}
-                <button class="cmd cmd--primary" disabled={busy} onclick={onInstall}>{primaryLabel}</button>
+                <button class="cmd cmd--primary" disabled={busy || locked} onclick={onInstall}>{primaryLabel}</button>
                 {#if install.patch_owner === "low_cord"}
-                    <button class="cmd cmd--danger" disabled={busy} onclick={onConfirmUninstall}>désinstaller</button>
+                    <button class="cmd cmd--danger" disabled={busy || locked} onclick={onConfirmUninstall}>désinstaller</button>
                 {/if}
             {/if}
         </div>
     {/if}
 
     {#if busy || log.length > 0 || phase.kind === "error"}
-        <div class="log">
-            <div class="log-head dim">// journal</div>
-            {#each log as line, i (i)}
-                <div>
-                    {#if line.status === "error"}
-                        <span class="err">[err]</span> {STEP_LABEL[line.step]} <span class="err">— {line.message ?? "erreur inconnue"}</span>
-                    {:else}
-                        <span class="ok">[ok]</span> {STEP_LABEL[line.step]}{#if line.message}<span class="dim"> — {line.message}</span>{/if}
-                    {/if}
-                </div>
-            {/each}
-            {#if phase.kind === "error" && !log.some(l => l.status === "error")}
-                <div><span class="err">[err] {phase.message}</span></div>
-            {/if}
-            {#if busy}
-                <div><span class="ok">[{asciiBar(pct)}]</span> {pct}%<span class="cursor"></span></div>
-            {/if}
+        <div class="activity">
+            <div class="progress-head">
+                <span class:err={phase.kind === "error"} class:bright={phase.kind !== "error"}>
+                    {stepText}{#if busy}<span class="cursor"></span>{/if}
+                </span>
+                <span class="dim">{#if elapsed}{elapsed} s · {/if}{pct}%</span>
+            </div>
+            <div class="track"><div class="fill" class:fill--err={phase.kind === "error"} style={`width:${pct}%`}></div></div>
+
+            <div class="console" bind:this={consoleEl}>
+                {#each log as line, i (i)}
+                    <div class="line k-{line.kind}">
+                        <span class="ts">{clock(line.ts)}</span>
+                        <span class="sym">{SYMBOL[line.kind]}</span>
+                        <span class="msg">{line.message}</span>
+                    </div>
+                {/each}
+                {#if phase.kind === "error"}
+                    <div class="line k-err">
+                        <span class="ts">{clock(now)}</span>
+                        <span class="sym">x</span>
+                        <span class="msg">{phase.message}</span>
+                    </div>
+                {/if}
+            </div>
+
+            <div class="counters dim">
+                <span><span class="c-add">+{counts.add}</span> ajoutés</span>
+                <span><span class="c-del">-{counts.del}</span> supprimés</span>
+                <span><span class="c-mod">~{counts.mod}</span> modifiés</span>
+            </div>
         </div>
     {/if}
 </section>
@@ -113,7 +168,9 @@
     .panel {
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 18px;
+        height: 100%;
+        min-height: 0;
     }
     .cmdline {
         color: var(--fg-bright);
@@ -121,7 +178,7 @@
     .kv {
         display: grid;
         grid-template-columns: max-content 1fr;
-        gap: 4px 14px;
+        gap: 5px 16px;
         margin: 0;
     }
     .kv dt {
@@ -151,16 +208,87 @@
         flex-wrap: wrap;
         gap: 10px;
     }
-    .log {
-        border-top: 1px dashed var(--line-strong);
-        padding-top: 10px;
-        font-size: var(--fs-sm);
+
+    /* ── Activité ───────────────────────────────────────────────────── */
+    .activity {
+        flex: 1;
+        min-height: 160px;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 8px;
+        animation: rise 220ms var(--ease);
+    }
+    .progress-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: var(--fs-sm);
+    }
+    .track {
+        height: 2px;
+        background: var(--line);
+        overflow: hidden;
+    }
+    .fill {
+        height: 100%;
+        background: var(--accent);
+        transition: width 420ms var(--ease);
+    }
+    .fill--err {
+        background: var(--err);
+    }
+    .console {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        font-size: var(--fs-sm);
+        line-height: 1.65;
         user-select: text;
     }
-    .log-head {
-        margin-bottom: 4px;
+    .line {
+        display: grid;
+        grid-template-columns: max-content 1.6ch 1fr;
+        gap: 10px;
+        animation: fade-in 160ms var(--ease);
+    }
+    .ts {
+        color: var(--faint);
+    }
+    .sym {
+        text-align: center;
+    }
+    .msg {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .k-info { color: var(--dim); }
+    .k-ok { color: var(--fg-bright); }
+    .k-ok .sym { color: var(--fg-bright); }
+    .k-warn { color: var(--warn); }
+    .k-err { color: var(--err); }
+    .k-add .sym, .c-add { color: var(--fg-bright); }
+    .k-add { color: var(--fg); }
+    .k-del .sym, .c-del { color: var(--err); }
+    .k-del { color: var(--fg); }
+    .k-mod .sym, .c-mod { color: var(--info); }
+    .k-mod { color: var(--fg); }
+    .k-proc { color: var(--fg); }
+    .k-proc .sym { color: var(--warn); }
+    .k-net { color: var(--fg); }
+    .k-net .sym { color: var(--info); }
+    .counters {
+        display: flex;
+        gap: 18px;
+        font-size: var(--fs-xs);
+    }
+
+    @keyframes rise {
+        from { opacity: 0; transform: translateY(4px); }
+    }
+    @keyframes fade-in {
+        from { opacity: 0; }
     }
 </style>

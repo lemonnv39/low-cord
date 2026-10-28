@@ -1,20 +1,21 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { fly } from "svelte/transition";
     import { listen } from "@tauri-apps/api/event";
     import { getVersion } from "@tauri-apps/api/app";
 
     import TitleBar from "./lib/components/TitleBar.svelte";
     import Sidebar from "./lib/components/Sidebar.svelte";
-    import BranchPanel, { type LogLine } from "./lib/components/BranchPanel.svelte";
+    import BranchPanel from "./lib/components/BranchPanel.svelte";
     import ConfigPanel from "./lib/components/ConfigPanel.svelte";
     import StatusBar from "./lib/components/StatusBar.svelte";
     import { patcherApi } from "./lib/api/patcher";
     import { checkForUpdate, installUpdate, type InjectorUpdate } from "./lib/api/updater";
-    import type { DiscordInstall, InstallProgressEvent, RowPhase } from "./lib/types";
+    import type { DiscordInstall, InstallLogEvent, InstallProgressEvent, RowPhase } from "./lib/types";
 
     let installs = $state<DiscordInstall[]>([]);
     let phases = $state<Record<string, RowPhase>>({});
-    let logs = $state<Record<string, LogLine[]>>({});
+    let logs = $state<Record<string, InstallLogEvent[]>>({});
     let selected = $state<string>("stable");
     let latestBuildSha = $state<string | null>(null);
     let globalError = $state<string | null>(null);
@@ -32,6 +33,9 @@
     const phaseOf = (branch: string): RowPhase => phases[branch] ?? { kind: "idle" };
     const setPhase = (branch: string, phase: RowPhase) => (phases = { ...phases, [branch]: phase });
     const current = $derived(installs.find(i => i.branch === selected) ?? null);
+    const busyBranch = $derived(
+        Object.entries(phases).find(([, p]) => p.kind === "installing" || p.kind === "uninstalling")?.[0] ?? null
+    );
 
     async function refreshInstalls() {
         try {
@@ -66,6 +70,7 @@
         if (!install.resources_path || !install.base_path) return;
         globalError = null;
         logs = { ...logs, [install.branch]: [] };
+        setPhase(install.branch, { kind: "uninstalling" });
         try {
             await patcherApi.unpatch(install.resources_path, install.base_path, install.branch);
             setPhase(install.branch, { kind: "idle" });
@@ -128,9 +133,12 @@
             listen<{ sha: string }>("latest-build-sha", e => {
                 latestBuildSha = e.payload.sha;
             }),
+            listen<InstallLogEvent>("install-log", e => {
+                const line = e.payload;
+                logs = { ...logs, [line.branch]: [...(logs[line.branch] ?? []), line] };
+            }),
             listen<InstallProgressEvent>("install-progress", e => {
                 const { branch, step, status, message } = e.payload;
-                logs = { ...logs, [branch]: [...(logs[branch] ?? []), { step, status, message }] };
                 setPhase(
                     branch,
                     status === "error" ? { kind: "error", message: message ?? "erreur inconnue" } : { kind: "installing", step }
@@ -154,6 +162,7 @@
             {/if}
 
             {#if selected === "config"}
+                <div class="view" in:fly={{ y: 6, duration: 180 }}>
                 <ConfigPanel
                     {appVersion}
                     latestSha={latestBuildSha}
@@ -162,18 +171,22 @@
                     onCheckInjectorUpdate={checkInjectorUpdate}
                     onInstallInjectorUpdate={doInstallUpdate}
                 />
+                </div>
             {:else if current}
                 {#key current.branch}
+                    <div class="view" in:fly={{ y: 6, duration: 180 }}>
                     <BranchPanel
                         install={current}
                         phase={phaseOf(current.branch)}
                         log={logs[current.branch] ?? []}
                         latestSha={latestBuildSha}
+                        locked={busyBranch !== null && busyBranch !== current.branch}
                         onInstall={() => runInstall(current)}
                         onUninstall={() => runUninstall(current)}
                         onConfirmUninstall={() => setPhase(current.branch, { kind: "confirm-uninstall" })}
                         onCancelConfirm={() => setPhase(current.branch, { kind: "idle" })}
                     />
+                    </div>
                 {/key}
             {:else}
                 <div class="dim">&gt; détection des installations discord<span class="cursor"></span></div>
@@ -208,8 +221,16 @@
     .content {
         flex: 1;
         min-width: 0;
-        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        padding: 22px 28px;
         overflow-y: auto;
+    }
+    .view {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
     }
     .global {
         margin-bottom: 14px;

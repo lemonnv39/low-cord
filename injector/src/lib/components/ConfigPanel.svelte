@@ -68,7 +68,6 @@
         <dt>build</dt><dd>{latestSha ? latestSha.slice(0, 7) : "—"} <span class="dim">(dernière publiée)</span></dd>
         <dt>données</dt><dd class="dim">%APPDATA%\low-cord</dd>
         <dt>source</dt><dd class="dim">github.com/lemonnv39/low-cord</dd>
-        <dt>auteur</dt><dd class="ok">shitday</dd>
     </dl>
 
     <div class="block">
@@ -92,10 +91,7 @@
         <div class={out.cls}>&gt; {out.text}</div>
     {/if}
 
-    <div class="sig dim">
-        low-cord · open source · gpl-3.0<br />
-        signé <span class="ok">shitday</span>
-    </div>
+    <div class="sig dim">low-cord v{appVersion || "…"} · by <span class="bright">shitday</span></div>
 </section>
 
 <style>
@@ -111,7 +107,7 @@
     .kv {
         display: grid;
         grid-template-columns: max-content 1fr;
-        gap: 4px 14px;
+        gap: 5px 16px;
         margin: 0;
     }
     .kv dt {
@@ -136,6 +132,6 @@
     .sig {
         margin-top: auto;
         font-size: var(--fs-xs);
-        line-height: 1.7;
+        white-space: nowrap;
     }
 </style>

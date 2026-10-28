@@ -25,6 +25,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::{BUILD_BASE_URL, COMMITS_API_URL, USER_AGENT};
+use crate::log::{self as ilog, Kind};
 const FILES: &[&str] = &["patcher.js", "preload.js", "renderer.js", "renderer.css"];
 
 #[derive(Deserialize)]
@@ -112,7 +113,11 @@ async fn download_file(client: &reqwest::Client, filename: &str, dest_dir: &Path
     }
 
     let bytes = resp.bytes().await.map_err(|e| format!("Échec de lecture de {filename} : {e}"))?;
-    fs::write(dest_dir.join(filename), &bytes).map_err(|e| e.to_string())?;
+    ilog::emit(Kind::Net, format!("{filename} téléchargé ({})", ilog::size(bytes.len() as u64)));
+    let dest = dest_dir.join(filename);
+    let existed = dest.exists();
+    fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    ilog::emit(if existed { Kind::Mod } else { Kind::Add }, format!("{}", dest.display()));
     Ok(())
 }
 
@@ -129,6 +134,10 @@ pub async fn download_latest(app: &AppHandle) -> Result<PathBuf, String> {
     // perd juste la capacité de détecter la PROCHAINE mise à jour tant que
     // le SHA n'aura pas pu être rafraîchi.
     let sha = fetch_latest_sha(&client).await.ok();
+    match &sha {
+        Some(sha) => ilog::emit(Kind::Net, format!("dernière build publiée : {}", &sha[..sha.len().min(7)])),
+        None => ilog::emit(Kind::Warn, "version de la build inconnue (API GitHub indisponible)"),
+    }
 
     for filename in FILES {
         download_file(&client, filename, &dir).await?;

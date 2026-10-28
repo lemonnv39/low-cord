@@ -7,7 +7,7 @@
 <!-- Barre de titre custom (decorations:false) : toute la bande est déplaçable. -->
 <header class="bar" data-tauri-drag-region>
     <span class="prompt" data-tauri-drag-region>
-        <span class="ok">low-cord</span><span class="dim">&nbsp;~&nbsp;</span><span class="who">shitday</span><span class="cursor"></span>
+        <span class="ok">low-cord</span><span class="cursor"></span>
     </span>
     <div class="ctl">
         <button title="Réduire" onclick={(e) => { e.stopPropagation(); win.minimize(); }}>_</button>
@@ -31,9 +31,6 @@
         font-weight: 700;
         letter-spacing: 0.02em;
     }
-    .who {
-        color: var(--fg-bright);
-    }
     .ctl {
         display: flex;
         height: 100%;
@@ -43,6 +40,7 @@
         height: 100%;
         color: var(--dim);
         font-size: var(--fs);
+        transition: background 140ms var(--ease), color 140ms var(--ease);
     }
     .ctl button:hover {
         background: var(--panel-2);

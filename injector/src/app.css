@@ -27,6 +27,9 @@
     --info: #8cb0d9;   /* [maj]  mise à jour disponible */
     --err: #d97a6c;    /* erreurs */
 
+    --radius: 4px;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
     --mono: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
 
     --fs-xs: 11px;
@@ -68,6 +71,18 @@ button:disabled {
     cursor: default;
 }
 
+/* Barres de défilement fines, sans flèches. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--dim); }
+::-webkit-scrollbar-button { display: none; height: 0; }
+
 ::selection {
     background: var(--accent);
     color: #000;
@@ -80,9 +95,10 @@ button:disabled {
     gap: 6px;
     padding: 5px 12px;
     border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
     color: var(--fg-bright);
     white-space: nowrap;
-    transition: background 90ms, border-color 90ms, color 90ms;
+    transition: background 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease), transform 160ms var(--ease), opacity 160ms var(--ease);
 }
 .cmd::before { content: "["; color: var(--dim); }
 .cmd::after { content: "]"; color: var(--dim); }
@@ -107,8 +123,11 @@ button:disabled {
     border-color: var(--err);
     color: var(--err);
 }
+.cmd:active:not(:disabled) {
+    transform: translateY(1px);
+}
 .cmd:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
 }
 
 .ok { color: var(--accent); }

@@ -45,10 +45,22 @@ export interface InstallProgressEvent {
     message?: string | null;
 }
 
-/// État d'affichage d'une ligne Discord, piloté depuis App.svelte et rendu
-/// par DiscordRow.svelte.
+/// Miroir de l'événement Tauri "install-log" (voir log.rs) : une opération
+/// réelle faite sur le Discord de l'utilisateur.
+export type LogKind = "info" | "ok" | "warn" | "err" | "add" | "del" | "mod" | "proc" | "net";
+
+export interface InstallLogEvent {
+    branch: string;
+    kind: LogKind;
+    message: string;
+    ts: number;
+}
+
+/// État d'affichage d'une branche Discord, piloté depuis App.svelte et rendu
+/// par BranchPanel.svelte.
 export type RowPhase =
     | { kind: "idle" }
     | { kind: "installing"; step: InstallProgressEvent["step"] }
+    | { kind: "uninstalling" }
     | { kind: "error"; message: string }
     | { kind: "confirm-uninstall" };

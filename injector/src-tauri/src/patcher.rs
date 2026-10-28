@@ -17,6 +17,7 @@
 
 use crate::asar::{self, StubOwner};
 use crate::dist_fetch;
+use crate::log::{self as ilog, Kind};
 use crate::discord::{self, DiscordInstall, PatchOwner};
 use crate::presets;
 use serde::Serialize;
@@ -57,15 +58,22 @@ fn kill_running(branch: &str) -> bool {
     let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::All, true);
 
-    let mut killed_any = false;
+    let mut killed = 0usize;
     for process in sys.processes().values() {
         if process.name().to_string_lossy().eq_ignore_ascii_case(exe) {
             process.kill();
-            killed_any = true;
+            killed += 1;
         }
+    }
+    let killed_any = killed > 0;
+
+    if !killed_any {
+        ilog::emit(Kind::Info, format!("{exe} n'est pas lancé"));
     }
 
     if killed_any {
+        ilog::emit(Kind::Proc, format!("arrêt de {exe} ({killed} processus)"));
+        let started = Instant::now();
         // Attend que TOUS les process de cette branche aient réellement disparu
         // avant de rendre la main — pas juste un délai fixe de 700ms. Deux
         // raisons :
@@ -79,6 +87,12 @@ fn kill_running(branch: &str) -> bool {
         let deadline = Instant::now() + Duration::from_secs(30);
         while count_running(&mut sys, exe) > 0 && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(200));
+        }
+        let left = count_running(&mut sys, exe);
+        if left > 0 {
+            ilog::emit(Kind::Warn, format!("{left} processus {exe} encore vivants après 30 s"));
+        } else {
+            ilog::emit(Kind::Ok, format!("tous les processus {exe} sont fermés ({:.1} s)", started.elapsed().as_secs_f32()));
         }
         // Petit répit pour laisser l'OS/Defender relâcher les derniers handles.
         thread::sleep(Duration::from_millis(400));
@@ -133,6 +147,11 @@ fn retry_io<F: FnMut() -> io::Result<()>>(mut op: F) -> io::Result<()> {
         match op() {
             Ok(()) => return Ok(()),
             Err(e) => {
+                if attempt == 0 {
+                    ilog::emit(Kind::Warn, format!("fichier bloqué ({e}) — nouvelles tentatives jusqu'à 45 s (antivirus ?)"));
+                } else if attempt % 10 == 0 {
+                    ilog::emit(Kind::Warn, format!("toujours bloqué… tentative {}/90", attempt + 1));
+                }
                 last_err = Some(e);
                 if attempt < 89 {
                     thread::sleep(Duration::from_millis(500));
@@ -177,12 +196,25 @@ fn copy_with_retry(from: &Path, to: &Path) -> io::Result<()> {
 /// en retry avant d'abandonner, ce qui figeait l'install à « Installation… ».
 /// Un `app.asar` absent est un succès (rien à retirer).
 fn remove_app_asar(app_asar: &Path) -> io::Result<()> {
+    let was = match fs::symlink_metadata(app_asar) {
+        Ok(m) if m.is_dir() => Some("dossier"),
+        Ok(_) => Some("fichier"),
+        Err(_) => None,
+    };
     retry_io(|| match fs::symlink_metadata(app_asar) {
         Ok(m) if m.is_dir() => fs::remove_dir_all(app_asar),
         Ok(_) => fs::remove_file(app_asar),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
-    })
+    })?;
+    if let Some(kind) = was {
+        ilog::emit(Kind::Del, format!("{} ({kind})", app_asar.display()));
+    }
+    Ok(())
+}
+
+fn file_size(path: &Path) -> String {
+    fs::metadata(path).map(|m| ilog::size(m.len())).unwrap_or_else(|_| "?".to_string())
 }
 
 fn write_stub_with_retry(out_file: &Path, patcher_path: &str, build_sha: Option<&str>) -> io::Result<()> {
@@ -214,7 +246,10 @@ fn unpatch_dir(resources: &Path) -> io::Result<()> {
     // de recopier le vrai asar par-dessus — indispensable pour la forme dossier.
     remove_app_asar(&app_asar)?;
     copy_with_retry(&backup, &app_asar)?;
-    let _ = fs::remove_file(&backup);
+    ilog::emit(Kind::Mod, format!("{} restauré depuis _app.asar ({})", app_asar.display(), file_size(&app_asar)));
+    if fs::remove_file(&backup).is_ok() {
+        ilog::emit(Kind::Del, format!("{}", backup.display()));
+    }
 
     Ok(())
 }
@@ -242,7 +277,9 @@ fn patch_dir(resources: &Path, patcher_path: &str, build_sha: Option<&str>) -> i
         }
         match asar::inspect_asar(&app_asar, Path::new("")) {
             // Vrai asar Discord : OK pour le sauvegarder.
-            Ok(StubOwner::Genuine) => {}
+            Ok(StubOwner::Genuine) => {
+                ilog::emit(Kind::Info, "app.asar vérifié : c'est bien le discord d'origine");
+            }
             // Déjà un stub (low-cord ou autre mod) sans backup : le vrai asar
             // manque, on refuse plutôt que de pérenniser la perte.
             Ok(_) => {
@@ -258,10 +295,14 @@ fn patch_dir(resources: &Path, patcher_path: &str, build_sha: Option<&str>) -> i
     }
 
     copy_with_retry(&app_asar, &backup)?;
+    ilog::emit(Kind::Add, format!("{} (sauvegarde du discord d'origine, {})", backup.display(), file_size(&backup)));
     if let Err(e) = write_stub_with_retry(&app_asar, patcher_path, build_sha) {
+        ilog::emit(Kind::Err, format!("écriture du stub impossible : {e} — restauration"));
         let _ = copy_with_retry(&backup, &app_asar);
         return Err(e);
     }
+    ilog::emit(Kind::Mod, format!("{} → stub low-cord ({})", app_asar.display(), file_size(&app_asar)));
+    ilog::emit(Kind::Info, format!("le stub charge {patcher_path}"));
 
     Ok(())
 }
@@ -277,16 +318,22 @@ fn clean_foreign_patch(resources: &Path, our_patcher_path: &Path) -> io::Result<
     // asar est dans _app.asar et unpatch_dir le restaure (en retirant d'abord le
     // dossier). Sans backup, unpatch_dir renvoie une erreur explicite.
     if app_asar.is_dir() {
+        let who = asar::read_dir_stub_require(&app_asar).unwrap_or_else(|| "inconnu".to_string());
+        ilog::emit(Kind::Warn, format!("autre mod détecté (app.asar en dossier → {who}) : retour au discord d'origine"));
         unpatch_dir(resources)?;
         return Ok(true);
     }
 
     match asar::inspect_asar(&app_asar, our_patcher_path) {
-        Ok(StubOwner::Foreign { .. }) => {
+        Ok(StubOwner::Foreign { require_path }) => {
+            ilog::emit(Kind::Warn, format!("autre mod détecté ({require_path}) : retour au discord d'origine"));
             unpatch_dir(resources)?;
             Ok(true)
         }
-        _ => Ok(false),
+        _ => {
+            ilog::emit(Kind::Info, "aucun autre mod à retirer");
+            Ok(false)
+        }
     }
 }
 
@@ -298,6 +345,7 @@ fn check_environment(resources: &Path) -> Result<(), String> {
     let probe = resources.join(".lowcord-write-test");
     fs::write(&probe, b"x").map_err(|e| format!("Dossier resources non accessible en écriture : {e}"))?;
     let _ = fs::remove_file(&probe);
+    ilog::emit(Kind::Ok, format!("écriture autorisée dans {}", resources.display()));
 
     const MIN_FREE_BYTES: u64 = 100 * 1024 * 1024;
     let disks = Disks::new_with_refreshed_list();
@@ -315,6 +363,7 @@ fn check_environment(resources: &Path) -> Result<(), String> {
         }
     }
     if let Some((_, available)) = best_match {
+        ilog::emit(Kind::Info, format!("espace disque libre : {}", ilog::size(available)));
         if available < MIN_FREE_BYTES {
             return Err(format!(
                 "Espace disque insuffisant ({} Mo libres, {} Mo requis).",
@@ -333,7 +382,8 @@ fn check_environment(resources: &Path) -> Result<(), String> {
 fn relaunch(base_path: &Path, branch: &str) -> io::Result<()> {
     let update_exe = base_path.join("Update.exe");
     let exe_name = discord::exe_name_for_branch(branch);
-    Command::new(update_exe).arg("--processStart").arg(exe_name).spawn()?;
+    Command::new(&update_exe).arg("--processStart").arg(exe_name).spawn()?;
+    ilog::emit(Kind::Proc, format!("lancement : {} --processStart {exe_name}", update_exe.display()));
     Ok(())
 }
 
@@ -372,6 +422,9 @@ pub async fn patch_discord(
 ) -> Result<(), String> {
     let resources = Path::new(&resources_path);
     let base = Path::new(&base_path);
+    let _log = ilog::scope(&app, &branch);
+    let started = Instant::now();
+    ilog::emit(Kind::Info, format!("installation de low-cord sur {}", resources.display()));
 
     let our_patcher_path = resolve_our_patcher_path(&app, repo_path.as_deref());
 
@@ -426,6 +479,7 @@ pub async fn patch_discord(
                 Err(e) => {
                     let cached = dist_fetch::cached_patcher_path(&app);
                     if cached.exists() {
+                        ilog::emit(Kind::Warn, format!("téléchargement impossible ({e}) — utilisation de la build en cache"));
                         cached
                     } else {
                         emit_progress(&app, &branch, "installing", "error", Some(e.clone()));
@@ -450,6 +504,7 @@ pub async fn patch_discord(
     if let Err(e) = relaunch(base, &branch) {
         // Le patch a réussi, seule la relance auto a échoué — pas bloquant,
         // l'utilisateur peut relancer Discord lui-même.
+        ilog::emit(Kind::Warn, format!("relance automatique impossible ({e}) — relance discord toi-même"));
         emit_progress(&app, &branch, "ready", "ok", Some(format!("Relance auto échouée ({e}) — relance Discord toi-même.")));
         return Ok(());
     }
@@ -458,6 +513,7 @@ pub async fn patch_discord(
         apply_default_plugins_once_ready(&app, &branch);
     }
 
+    ilog::emit(Kind::Ok, format!("terminé en {:.1} s — low-cord est installé", started.elapsed().as_secs_f32()));
     emit_progress(&app, &branch, "ready", "ok", None);
     Ok(())
 }
@@ -493,10 +549,17 @@ fn apply_default_plugins_once_ready(app: &AppHandle, branch: &str) {
 }
 
 #[tauri::command]
-pub fn unpatch_discord(resources_path: String, base_path: String, branch: String) -> Result<(), String> {
+pub async fn unpatch_discord(app: AppHandle, resources_path: String, base_path: String, branch: String) -> Result<(), String> {
+    let _log = ilog::scope(&app, &branch);
+    let started = Instant::now();
+    ilog::emit(Kind::Info, format!("désinstallation de low-cord sur {resources_path}"));
     kill_running(&branch);
-    unpatch_dir(Path::new(&resources_path)).map_err(|e| e.to_string())?;
+    unpatch_dir(Path::new(&resources_path)).map_err(|e| {
+        ilog::emit(Kind::Err, e.to_string());
+        e.to_string()
+    })?;
     let _ = relaunch(Path::new(&base_path), &branch);
+    ilog::emit(Kind::Ok, format!("terminé en {:.1} s — discord est revenu à l'origine", started.elapsed().as_secs_f32()));
     Ok(())
 }
 
@@ -509,6 +572,8 @@ pub struct FixResult {
 }
 
 async fn repair_one(app: &AppHandle, resources: &Path, base: &Path, branch: &str) -> Result<(), String> {
+    let _log = ilog::scope(app, branch);
+    ilog::emit(Kind::Info, format!("réparation de low-cord sur {}", resources.display()));
     kill_running(branch);
     let patcher_path = dist_fetch::download_latest(app).await?;
     let sha = dist_fetch::cached_sha(app);
@@ -588,6 +653,8 @@ pub async fn update_lowcord_build(app: AppHandle) -> Result<Vec<UpdateResult>, S
             continue;
         };
 
+        let _log = ilog::scope(&app, &install.branch);
+        ilog::emit(Kind::Info, format!("mise à jour de low-cord sur {resources}"));
         kill_running(&install.branch);
         let outcome = patch_dir(Path::new(resources), &patcher_path.to_string_lossy(), sha.as_deref());
         kill_running(&install.branch);

@@ -31,7 +31,6 @@
             <button class="alert" onclick={onOpenConfig}>injecteur v{injectorUpdate} dispo</button>
         {/if}
     </span>
-    <span>by <span class="ok">shitday</span></span>
 </footer>
 
 <style>
