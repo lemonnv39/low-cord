@@ -553,13 +553,25 @@ pub async fn unpatch_discord(app: AppHandle, resources_path: String, base_path: 
     let _log = ilog::scope(&app, &branch);
     let started = Instant::now();
     ilog::emit(Kind::Info, format!("désinstallation de low-cord sur {resources_path}"));
+
+    emit_progress(&app, &branch, "stopping", "ok", None);
     kill_running(&branch);
-    unpatch_dir(Path::new(&resources_path)).map_err(|e| {
-        ilog::emit(Kind::Err, e.to_string());
-        e.to_string()
-    })?;
-    let _ = relaunch(Path::new(&base_path), &branch);
+
+    emit_progress(&app, &branch, "restoring", "ok", None);
+    if let Err(e) = unpatch_dir(Path::new(&resources_path)) {
+        let msg = e.to_string();
+        ilog::emit(Kind::Err, msg.clone());
+        emit_progress(&app, &branch, "restoring", "error", Some(msg.clone()));
+        return Err(msg);
+    }
+    emit_progress(&app, &branch, "restored", "ok", None);
+
+    emit_progress(&app, &branch, "restarting", "ok", None);
+    if let Err(e) = relaunch(Path::new(&base_path), &branch) {
+        ilog::emit(Kind::Warn, format!("relance automatique impossible ({e}) — relance discord toi-même"));
+    }
     ilog::emit(Kind::Ok, format!("terminé en {:.1} s — discord est revenu à l'origine", started.elapsed().as_secs_f32()));
+    emit_progress(&app, &branch, "ready", "ok", None);
     Ok(())
 }
 
@@ -571,16 +583,48 @@ pub struct FixResult {
     message: Option<String>,
 }
 
-async fn repair_one(app: &AppHandle, resources: &Path, base: &Path, branch: &str) -> Result<(), String> {
+/// Réapplique low-cord sur une install (mise à jour de build ou réparation),
+/// avec le même journal et la même progression qu'une installation.
+/// `download` = retélécharger la dernière dist (sinon on réutilise celle déjà
+/// téléchargée juste avant pour une autre branche).
+async fn reapply(app: &AppHandle, resources: &Path, base: &Path, branch: &str, what: &str, download: bool) -> Result<(), String> {
     let _log = ilog::scope(app, branch);
-    ilog::emit(Kind::Info, format!("réparation de low-cord sur {}", resources.display()));
+    let started = Instant::now();
+    ilog::emit(Kind::Info, format!("{what} de low-cord sur {}", resources.display()));
+
+    emit_progress(app, branch, "stopping", "ok", None);
     kill_running(branch);
-    let patcher_path = dist_fetch::download_latest(app).await?;
+
+    emit_progress(app, branch, "installing", "ok", None);
+    let fail = |msg: String| {
+        ilog::emit(Kind::Err, msg.clone());
+        emit_progress(app, branch, "installing", "error", Some(msg.clone()));
+        msg
+    };
+    let patcher_path = if download {
+        dist_fetch::download_latest(app).await.map_err(fail)?
+    } else {
+        let cached = dist_fetch::cached_patcher_path(app);
+        ilog::emit(Kind::Info, format!("build déjà téléchargée : {}", cached.display()));
+        cached
+    };
     let sha = dist_fetch::cached_sha(app);
-    patch_dir(resources, &patcher_path.to_string_lossy(), sha.as_deref()).map_err(|e| e.to_string())?;
+    patch_dir(resources, &patcher_path.to_string_lossy(), sha.as_deref()).map_err(|e| fail(e.to_string()))?;
+    emit_progress(app, branch, "installed", "ok", None);
+
+    emit_progress(app, branch, "restarting", "ok", None);
     kill_running(branch);
-    let _ = relaunch(base, branch);
+    if let Err(e) = relaunch(base, branch) {
+        ilog::emit(Kind::Warn, format!("relance automatique impossible ({e}) — relance discord toi-même"));
+    }
+    let build = sha.as_deref().map(|s| &s[..s.len().min(7)]).unwrap_or("?");
+    ilog::emit(Kind::Ok, format!("terminé en {:.1} s — low-cord à jour (build {build})", started.elapsed().as_secs_f32()));
+    emit_progress(app, branch, "ready", "ok", None);
     Ok(())
+}
+
+async fn repair_one(app: &AppHandle, resources: &Path, base: &Path, branch: &str) -> Result<(), String> {
+    reapply(app, resources, base, branch, "réparation", true).await
 }
 
 /// "Fixer low-cord" (Réglages) : réinstalle proprement chaque install actuellement
@@ -638,13 +682,11 @@ pub struct UpdateResult {
 /// deuxième étape cachée.
 #[tauri::command]
 pub async fn update_lowcord_build(app: AppHandle) -> Result<Vec<UpdateResult>, String> {
-    let patcher_path = dist_fetch::download_latest(&app).await?;
-    let sha = dist_fetch::cached_sha(&app);
-
     let our_patcher_path = resolve_our_patcher_path(&app, None);
     let installs = discord::find_discords(&our_patcher_path);
 
     let mut results = Vec::new();
+    let mut downloaded = false;
     for install in installs {
         if install.patch_owner != PatchOwner::LowCord {
             continue;
@@ -653,16 +695,15 @@ pub async fn update_lowcord_build(app: AppHandle) -> Result<Vec<UpdateResult>, S
             continue;
         };
 
-        let _log = ilog::scope(&app, &install.branch);
-        ilog::emit(Kind::Info, format!("mise à jour de low-cord sur {resources}"));
-        kill_running(&install.branch);
-        let outcome = patch_dir(Path::new(resources), &patcher_path.to_string_lossy(), sha.as_deref());
-        kill_running(&install.branch);
-        let _ = relaunch(Path::new(base), &install.branch);
+        // La dist n'est téléchargée qu'une fois (dans le journal de la 1re branche).
+        let outcome = reapply(&app, Path::new(resources), Path::new(base), &install.branch, "mise à jour", !downloaded).await;
+        if outcome.is_ok() {
+            downloaded = true;
+        }
 
         match outcome {
             Ok(()) => results.push(UpdateResult { branch: install.branch, updated: true, message: None }),
-            Err(e) => results.push(UpdateResult { branch: install.branch, updated: false, message: Some(e.to_string()) }),
+            Err(e) => results.push(UpdateResult { branch: install.branch, updated: false, message: Some(e) }),
         }
     }
 

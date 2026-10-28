@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { patcherApi } from "../api/patcher";
     import type { InjectorUpdate } from "../api/updater";
     import type { FixResult } from "../types";
     import { BRANCH_NAME } from "../branches";
@@ -11,6 +10,7 @@
         installingUpdate,
         onCheckInjectorUpdate,
         onInstallInjectorUpdate,
+        onFix,
     }: {
         appVersion: string;
         latestSha: string | null;
@@ -18,6 +18,7 @@
         installingUpdate: boolean;
         onCheckInjectorUpdate: () => Promise<"found" | "none">;
         onInstallInjectorUpdate: () => void;
+        onFix: () => Promise<FixResult[]>;
     } = $props();
 
     let fixing = $state(false);
@@ -32,14 +33,14 @@
         if (failed.length > 0) {
             return { text: `échec sur ${failed.map(r => nameOf(r.branch)).join(", ")} : ${failed[0].message ?? "erreur inconnue"}`, cls: "err" };
         }
-        return { text: `réinstallé : ${results.map(r => nameOf(r.branch)).join(", ")} — discord redémarre`, cls: "ok" };
+        return { text: `réinstallé : ${results.map(r => nameOf(r.branch)).join(", ")} — détail dans le journal de chaque discord`, cls: "ok" };
     }
 
     async function fix() {
         out = null;
         fixing = true;
         try {
-            out = summarizeFix(await patcherApi.fixLowCord());
+            out = summarizeFix(await onFix());
         } catch (e) {
             out = { text: String(e), cls: "err" };
         } finally {

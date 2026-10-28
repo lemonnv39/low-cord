@@ -28,7 +28,7 @@
 
     const name = $derived(BRANCH_NAME[install.branch] ?? install.branch);
     const st = $derived(branchState(install, latestSha));
-    const busy = $derived(phase.kind === "installing" || phase.kind === "uninstalling");
+    const busy = $derived(phase.kind === "installing");
     const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : "—");
 
     const STATE_LINE = {
@@ -56,16 +56,10 @@
     };
 
     const pct = $derived(
-        phase.kind === "installing" ? STEP_PCT[phase.step] : phase.kind === "uninstalling" ? 50 : log.length > 0 ? 100 : 0
+        phase.kind === "installing" ? STEP_PCT[phase.step] : log.length > 0 ? 100 : 0
     );
     const stepText = $derived(
-        phase.kind === "installing"
-            ? STEP_LABEL[phase.step]
-            : phase.kind === "uninstalling"
-              ? "désinstallation"
-              : phase.kind === "error"
-                ? "échec"
-                : "terminé"
+        phase.kind === "installing" ? STEP_LABEL[phase.step] : phase.kind === "error" ? "échec" : "terminé"
     );
     const counts = $derived({
         add: log.filter(l => l.kind === "add").length,

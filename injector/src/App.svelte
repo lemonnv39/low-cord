@@ -11,7 +11,7 @@
     import StatusBar from "./lib/components/StatusBar.svelte";
     import { patcherApi } from "./lib/api/patcher";
     import { checkForUpdate, installUpdate, type InjectorUpdate } from "./lib/api/updater";
-    import type { DiscordInstall, InstallLogEvent, InstallProgressEvent, RowPhase } from "./lib/types";
+    import type { DiscordInstall, FixResult, InstallLogEvent, InstallProgressEvent, RowPhase } from "./lib/types";
 
     let installs = $state<DiscordInstall[]>([]);
     let phases = $state<Record<string, RowPhase>>({});
@@ -34,7 +34,7 @@
     const setPhase = (branch: string, phase: RowPhase) => (phases = { ...phases, [branch]: phase });
     const current = $derived(installs.find(i => i.branch === selected) ?? null);
     const busyBranch = $derived(
-        Object.entries(phases).find(([, p]) => p.kind === "installing" || p.kind === "uninstalling")?.[0] ?? null
+        Object.entries(phases).find(([, p]) => p.kind === "installing")?.[0] ?? null
     );
 
     async function refreshInstalls() {
@@ -70,7 +70,7 @@
         if (!install.resources_path || !install.base_path) return;
         globalError = null;
         logs = { ...logs, [install.branch]: [] };
-        setPhase(install.branch, { kind: "uninstalling" });
+        setPhase(install.branch, { kind: "installing", step: "stopping" });
         try {
             await patcherApi.unpatch(install.resources_path, install.base_path, install.branch);
             setPhase(install.branch, { kind: "idle" });
@@ -81,20 +81,55 @@
         }
     }
 
+    /** Prépare un journal vierge pour chaque branche qu'une opération groupée va toucher. */
+    function startBatch(branches: string[]) {
+        for (const b of branches) {
+            logs = { ...logs, [b]: [] };
+            setPhase(b, { kind: "installing", step: "stopping" });
+        }
+        // Montre directement le journal de la première branche concernée.
+        if (branches.length > 0 && !branches.includes(selected)) selected = branches[0];
+    }
+
+    function endBatch(results: { branch: string; ok: boolean; message?: string | null }[]) {
+        for (const r of results) {
+            setPhase(r.branch, r.ok ? { kind: "idle" } : { kind: "error", message: r.message ?? "échec inconnu" });
+        }
+    }
+
     async function updateLowCordBuild() {
         buildUpdating = true;
         globalError = null;
+        startBatch(installs.filter(i => i.patch_owner === "low_cord").map(i => i.branch));
         try {
-            const failures = (await patcherApi.updateLowCordBuild()).filter(r => !r.updated);
-            if (failures.length > 0) {
-                globalError = failures.map(r => `${r.branch} : ${r.message ?? "échec inconnu"}`).join(" — ");
-            }
+            const results = await patcherApi.updateLowCordBuild();
+            endBatch(results.map(r => ({ branch: r.branch, ok: r.updated, message: r.message })));
             buildUpdateAvailable = false;
-            await refreshInstalls();
         } catch (e) {
             globalError = String(e);
+            endBatch(installs.filter(i => i.patch_owner === "low_cord").map(i => ({ branch: i.branch, ok: false, message: String(e) })));
         } finally {
             buildUpdating = false;
+            await refreshInstalls();
+        }
+    }
+
+    /** Réparation (panneau config) : même journal que l'installation, branche par branche. */
+    async function fixLowCord(): Promise<FixResult[]> {
+        const targets = installs.filter(i => i.patch_owner === "low_cord" || i.needs_reinject).map(i => i.branch);
+        for (const b of targets) {
+            logs = { ...logs, [b]: [] };
+            setPhase(b, { kind: "installing", step: "stopping" });
+        }
+        try {
+            const results = await patcherApi.fixLowCord();
+            endBatch(results.map(r => ({ branch: r.branch, ok: r.fixed, message: r.message })));
+            return results;
+        } catch (e) {
+            endBatch(targets.map(b => ({ branch: b, ok: false, message: String(e) })));
+            throw e;
+        } finally {
+            await refreshInstalls();
         }
     }
 
@@ -169,6 +204,7 @@
                     {pendingUpdate}
                     {installingUpdate}
                     onCheckInjectorUpdate={checkInjectorUpdate}
+                    onFix={fixLowCord}
                     onInstallInjectorUpdate={doInstallUpdate}
                 />
                 </div>

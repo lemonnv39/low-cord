@@ -21,7 +21,7 @@
     <div class="group">// discord</div>
     {#each installs as install (install.branch)}
         {@const st = branchState(install, latestSha)}
-        {@const busy = phases[install.branch]?.kind === "installing" || phases[install.branch]?.kind === "uninstalling"}
+        {@const busy = phases[install.branch]?.kind === "installing"}
         <button class="item" class:on={selected === install.branch} onclick={() => onSelect(install.branch)}>
             <span class="caret">{selected === install.branch ? ">" : " "}</span>
             <span class="name">{BRANCH_NAME[install.branch] ?? install.branch}</span>

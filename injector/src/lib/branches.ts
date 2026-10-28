@@ -9,6 +9,9 @@ export const BRANCH_NAME: Record<string, string> = {
 /** Libellé d'une étape d'install (événement Rust "install-progress"). */
 export const STEP_LABEL: Record<InstallProgressEvent["step"], string> = {
     cleaning: "nettoyage des anciens mods",
+    stopping: "arrêt de discord",
+    restoring: "restauration du discord d'origine",
+    restored: "discord d'origine restauré",
     checking: "vérification de l'environnement",
     checked: "environnement ok",
     installing: "téléchargement + injection de low-cord",
@@ -21,6 +24,7 @@ export const STEP_LABEL: Record<InstallProgressEvent["step"], string> = {
 /** Avancement approximatif (ordre des étapes) pour la barre ASCII. */
 export const STEP_PCT: Record<InstallProgressEvent["step"], number> = {
     cleaning: 12, checking: 28, checked: 40, installing: 60,
+    stopping: 15, restoring: 55, restored: 80,
     installed: 78, restarting: 90, finalizing: 96, ready: 100,
 };
 

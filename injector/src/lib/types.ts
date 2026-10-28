@@ -40,7 +40,10 @@ export interface UpdateResult {
 /// Miroir de l'événement Tauri "install-progress" (voir patcher.rs).
 export interface InstallProgressEvent {
     branch: string;
-    step: "cleaning" | "checking" | "checked" | "installing" | "installed" | "restarting" | "finalizing" | "ready";
+    step:
+        | "cleaning" | "checking" | "checked" | "installing" | "installed"
+        | "stopping" | "restoring" | "restored"
+        | "restarting" | "finalizing" | "ready";
     status: "ok" | "error";
     message?: string | null;
 }
@@ -61,6 +64,5 @@ export interface InstallLogEvent {
 export type RowPhase =
     | { kind: "idle" }
     | { kind: "installing"; step: InstallProgressEvent["step"] }
-    | { kind: "uninstalling" }
     | { kind: "error"; message: string }
     | { kind: "confirm-uninstall" };
