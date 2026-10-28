@@ -1,4 +1,4 @@
-// Vencord 8ac7482
+// Vencord 606badd
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
