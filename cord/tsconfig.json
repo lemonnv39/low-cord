@@ -27,6 +27,7 @@
             "@debug/*": ["./src/debug/*"],
             "@utils/*": ["./src/utils/*"],
             "@plugins/*": ["./src/plugins/*"],
+            "@lowcord/*": ["./src/lowcord/*"],
             "@shared/*": ["./src/shared/*"],
             "@webpack/common": ["./src/webpack/common"],
             "@webpack/common/*": ["./src/webpack/common/*"],

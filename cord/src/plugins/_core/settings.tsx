@@ -17,8 +17,10 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
-import { BackupRestoreIcon, CloudIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PlaceholderIcon, PluginsIcon, UpdaterIcon, VesktopSettingsIcon } from "@components/Icons";
-import { BackupAndRestoreTab, CloudTab, PatchHelperTab, PluginsTab, ThemesTab, UpdaterTab, VencordTab } from "@components/settings/tabs";
+import { MainSettingsIcon, PlaceholderIcon, PluginsIcon, VesktopSettingsIcon } from "@components/Icons";
+import { PluginsTab } from "@components/settings/tabs";
+import { LOWCORD_NAME } from "@lowcord/constants";
+import LowCordTab from "@lowcord/LowCordTab";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
 import definePlugin, { IconProps, OptionType } from "@utils/types";
@@ -167,12 +169,12 @@ export default definePlugin({
 
         const { buildEntry } = this;
 
+        // low-cord : section réduite à "low-cord" + "Plugins" (pas de Themes/Updater/Cloud/Backup/Patch Helper).
         const vencordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "vencord_main",
-                title: "Vencord",
-                panelTitle: "Vencord Settings",
-                Component: VencordTab,
+                title: LOWCORD_NAME,
+                Component: LowCordTab,
                 Icon: MainSettingsIcon
             }),
             buildEntry({
@@ -180,38 +182,6 @@ export default definePlugin({
                 title: "Plugins",
                 Component: PluginsTab,
                 Icon: PluginsIcon
-            }),
-            buildEntry({
-                key: "vencord_themes",
-                title: "Themes",
-                Component: ThemesTab,
-                Icon: PaintbrushIcon
-            }),
-            !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
-                key: "vencord_updater",
-                title: "Updater",
-                panelTitle: "Vencord Updater",
-                Component: UpdaterTab,
-                Icon: UpdaterIcon
-            }),
-            buildEntry({
-                key: "vencord_cloud",
-                title: "Cloud",
-                panelTitle: "Vencord Cloud",
-                Component: CloudTab,
-                Icon: CloudIcon
-            }),
-            buildEntry({
-                key: "vencord_backup_restore",
-                title: "Backup & Restore",
-                Component: BackupAndRestoreTab,
-                Icon: BackupRestoreIcon
-            }),
-            !IS_STANDALONE && PatchHelperTab && buildEntry({
-                key: "vencord_patch_helper",
-                title: "Patch Helper",
-                Component: PatchHelperTab,
-                Icon: PatchHelperIcon
             }),
             ...this.customEntries.map(buildEntry),
             // TODO: Remove deprecated customSections in a future update
@@ -231,7 +201,7 @@ export default definePlugin({
         const vencordSection: SettingsLayoutNode = {
             key: "vencord_section",
             type: LayoutTypes.SECTION,
-            useTitle: () => "Vencord Settings",
+            useTitle: () => LOWCORD_NAME,
             buildLayout: () => vencordEntries
         };
 
@@ -290,7 +260,7 @@ export default definePlugin({
     getInfoRows() {
         const { electronVersion, chromiumVersion, additionalInfo } = this;
 
-        const rows = [`Vencord ${gitHash}${additionalInfo}`];
+        const rows = [`${LOWCORD_NAME} ${gitHash}${additionalInfo}`, `Vencord ${VERSION}`];
 
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);
