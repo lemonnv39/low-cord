@@ -4,62 +4,101 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-cord — onglet général des réglages (infos de build + actions rapides).
+// low-cord — onglet général des réglages (build, langue, actions rapides).
+
+import "./styles.css";
 
 import { Divider } from "@components/Divider";
 import { FolderIcon, GithubIcon, RestartIcon } from "@components/Icons";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
+import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { relaunch } from "@utils/native";
 import { Forms } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
-import { LOWCORD_AUTHOR, LOWCORD_NAME, LOWCORD_REPO_URL } from "./constants";
+import { LOWCORD_NAME, LOWCORD_REPO_URL } from "./constants";
+import { LANGS, setLang, t, useLang } from "./i18n";
+
+const cl = classNameFactory("lc-");
+
+function LanguagePicker() {
+    const lang = useLang();
+
+    return (
+        <div className={cl("segmented")} role="radiogroup" aria-label={t("tab.language")}>
+            {LANGS.map(l => (
+                <button
+                    key={l.value}
+                    role="radio"
+                    aria-checked={lang === l.value}
+                    className={cl("segment", { "segment-on": lang === l.value })}
+                    onClick={() => setLang(l.value)}
+                >
+                    {l.label}
+                </button>
+            ))}
+        </div>
+    );
+}
 
 function LowCordSettings() {
+    useLang();
+
     return (
         <SettingsTab>
             <section>
                 <Forms.FormTitle tag="h5">{LOWCORD_NAME}</Forms.FormTitle>
                 <Forms.FormText className={Margins.bottom8}>
-                    Build <code>{gitHash}</code> · basé sur Vencord {VERSION}
+                    {t("tab.build", { hash: gitHash, vencord: VERSION })}
                 </Forms.FormText>
                 <Forms.FormText style={{ color: "var(--text-muted)" }}>
-                    Projet open source : tout le code est public. Les mises à jour passent par l'injecteur low-cord.
-                </Forms.FormText>
-                <Forms.FormText className={Margins.top8} style={{ color: "var(--text-muted)" }}>
-                    Signé {LOWCORD_AUTHOR}
+                    {t("tab.about")}
                 </Forms.FormText>
             </section>
 
             <Divider className={Margins.top16} />
 
             <section className={Margins.top16}>
-                <Forms.FormTitle tag="h5">Actions rapides</Forms.FormTitle>
+                <Forms.FormTitle tag="h5">{t("tab.language")}</Forms.FormTitle>
+                <Forms.FormText className={Margins.bottom8} style={{ color: "var(--text-muted)" }}>
+                    {t("tab.languageHint")}
+                </Forms.FormText>
+                <LanguagePicker />
+            </section>
+
+            <Divider className={Margins.top16} />
+
+            <section className={Margins.top16}>
+                <Forms.FormTitle tag="h5">{t("tab.quickActions")}</Forms.FormTitle>
                 <QuickActionCard>
                     {!IS_WEB && (
                         <>
                             <QuickAction
                                 Icon={RestartIcon}
-                                text="Redémarrer Discord"
+                                text={t("tab.restart")}
                                 action={relaunch}
                             />
                             <QuickAction
                                 Icon={FolderIcon}
-                                text="Dossier des réglages"
+                                text={t("tab.settingsFolder")}
                                 action={() => VencordNative.settings.openFolder()}
                             />
                         </>
                     )}
                     <QuickAction
                         Icon={GithubIcon}
-                        text="Code source"
+                        text={t("tab.source")}
                         action={() => VencordNative.native.openExternal(LOWCORD_REPO_URL)}
                     />
                 </QuickActionCard>
             </section>
+
+            <Forms.FormText className={cl("signature")}>
+                {t("tab.signature", { version: gitHash })}
+            </Forms.FormText>
         </SettingsTab>
     );
 }

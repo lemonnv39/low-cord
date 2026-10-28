@@ -18,9 +18,9 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { MainSettingsIcon, PlaceholderIcon, PluginsIcon, VesktopSettingsIcon } from "@components/Icons";
-import { PluginsTab } from "@components/settings/tabs";
 import { LOWCORD_NAME } from "@lowcord/constants";
 import LowCordTab from "@lowcord/LowCordTab";
+import LowPluginsTab from "@lowcord/plugins/LowPluginsTab";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
 import definePlugin, { IconProps, OptionType } from "@utils/types";
@@ -180,7 +180,7 @@ export default definePlugin({
             buildEntry({
                 key: "vencord_plugins",
                 title: "Plugins",
-                Component: PluginsTab,
+                Component: LowPluginsTab,
                 Icon: PluginsIcon
             }),
             ...this.customEntries.map(buildEntry),

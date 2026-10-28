@@ -1,0 +1,127 @@
+/* low-cord — styles des réglages (préfixe lc-). Couleurs = variables Discord. */
+
+.lc-muted {
+    color: var(--text-muted);
+}
+
+/* Sélecteur de langue (segmenté) */
+.lc-segmented {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-segment {
+    min-width: 92px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+}
+
+.lc-segment:hover {
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-segment-on {
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--header-primary, var(--text-strong));
+}
+
+.lc-signature {
+    margin-top: 24px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Onglet Plugins */
+.lc-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.lc-section-head h5 {
+    margin: 0;
+}
+
+.lc-core-head {
+    margin-top: 32px;
+}
+
+.lc-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.lc-grid-core .vc-addon-card {
+    opacity: 0.75;
+}
+
+.lc-empty {
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px dashed var(--border-subtle, rgb(255 255 255 / 10%));
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.lc-restart {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--status-warning, #f0b232);
+    background: rgb(240 178 50 / 8%);
+}
+
+.lc-info-button {
+    height: 24px;
+    width: 24px;
+    padding: 0;
+    margin-right: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.lc-info-button:hover {
+    color: var(--interactive-hover, var(--text-normal));
+}
+
+.lc-info-icon {
+    width: 20px;
+    height: 20px;
+}
+
+/* Fenêtre d'un plugin */
+.lc-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 16px;
+}
+
+.lc-modal-title {
+    margin-top: 6px;
+}
+
+.lc-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
