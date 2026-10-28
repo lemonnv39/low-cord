@@ -58,6 +58,37 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        SilentTyping: {
+            description: "Cache le fait que tu écris (l'indicateur « … est en train d'écrire » n'est plus envoyé)",
+            settings: {
+                showIcon: { name: "Bouton dans la barre de chat", description: "Afficher un bouton pour activer / désactiver" },
+                contextMenu: { name: "Menu clic droit", description: "Ajouter l'option dans le menu clic droit de la zone de texte" },
+                isEnabled: { name: "Activée", description: "Frappe silencieuse active" },
+            },
+        },
+        ShowHiddenChannels: {
+            description: "Affiche les salons auxquels tu n'as pas accès, avec leurs infos (sujet, membres autorisés, connectés en vocal…)",
+            settings: {
+                hideUnreads: { name: "Masquer les non-lus", description: "Ne pas afficher les salons cachés comme non lus" },
+                showMode: {
+                    name: "Affichage",
+                    description: "Comment afficher les salons cachés",
+                    options: { "0": "Style normal avec un cadenas", "1": "Style atténué avec un œil barré à droite" },
+                },
+                defaultAllowedUsersAndRolesDropdownState: {
+                    name: "Membres autorisés dépliés",
+                    description: "Déplier par défaut la liste des membres et rôles autorisés sur un salon caché",
+                },
+            },
+        },
+        ShowHiddenThings: {
+            description: "Affiche des éléments réservés aux modérateurs : exclusions temporaires, invitations en pause, vue modération",
+            settings: {
+                showTimeouts: { name: "Exclusions temporaires", description: "Afficher l'icône d'exclusion temporaire des membres dans le chat" },
+                showInvitesPaused: { name: "Invitations en pause", description: "Afficher l'info « invitations en pause » dans la liste des serveurs" },
+                showModView: { name: "Vue modération", description: "Afficher « vue modération » sur les membres de tous les serveurs" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
