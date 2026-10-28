@@ -58,6 +58,18 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        PlatformIndicators: {
+            description: "Affiche les plateformes (ordinateur, mobile, navigateur…) des utilisateurs, amis ou non",
+            settings: {
+                list: { name: "Liste des membres", description: "Afficher les plateformes dans la liste des membres" },
+                badges: { name: "Profils", description: "Afficher les plateformes dans les profils, sous forme de badges" },
+                messages: { name: "Messages", description: "Afficher les plateformes à côté du nom dans les messages" },
+                colorMobileIndicator: {
+                    name: "Couleur de l'indicateur mobile",
+                    description: "Colorer l'indicateur mobile selon le statut de l'utilisateur (nécessite un redémarrage)",
+                },
+            },
+        },
     },
     en: {
         Settings: {

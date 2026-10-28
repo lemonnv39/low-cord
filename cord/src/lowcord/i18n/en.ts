@@ -38,4 +38,10 @@ export const en = {
     "modal.noSettings": "This plugin has no settings.",
     "modal.close": "Close",
     "modal.alwaysOn": "Core plugin — always on.",
+
+    "platform.desktop": "Desktop",
+    "platform.web": "Web",
+    "platform.mobile": "Mobile",
+    "platform.embedded": "Embedded (Console or Game)",
+    "platform.vr": "VR",
 } satisfies Record<keyof typeof fr, string>;

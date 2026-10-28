@@ -41,4 +41,11 @@ export const fr = {
     "modal.noSettings": "Ce plugin n'a pas de réglages.",
     "modal.close": "Fermer",
     "modal.alwaysOn": "Plugin du cœur — toujours actif.",
+
+    // Plateformes (PlatformIndicators)
+    "platform.desktop": "Ordinateur",
+    "platform.web": "Navigateur",
+    "platform.mobile": "Mobile",
+    "platform.embedded": "Console ou jeu",
+    "platform.vr": "VR",
 } as const;
