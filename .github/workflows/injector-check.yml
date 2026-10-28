@@ -1,0 +1,60 @@
+name: injector — check
+
+# Vérifie que l'injecteur compile (front + Rust) sur chaque push/PR qui le touche.
+# vite build ne type-check PAS : svelte-check tourne à part.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "injector/**"
+      - ".github/workflows/injector-check.yml"
+  pull_request:
+    paths:
+      - "injector/**"
+      - ".github/workflows/injector-check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: injector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: injector/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: svelte-check
+        run: pnpm check
+
+      - name: Build front
+        run: pnpm build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: injector/src-tauri
+
+      - name: cargo check
+        working-directory: injector/src-tauri
+        run: cargo check --locked
+
+      - name: cargo audit
+        working-directory: injector/src-tauri
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit

@@ -1,0 +1,104 @@
+name: cord — build & publish dist
+
+# Build du fork Vencord (cord/) puis publication des 4 fichiers de la dist
+# (+ build.json) sur la branche orpheline `builds` de CE repo. L'injecteur les
+# télécharge via raw.githubusercontent.com/<owner>/low-cord/builds/.
+# Les PR ne font que vérifier (pas de publication).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cord/**"
+      - ".github/workflows/cord.yml"
+  pull_request:
+    paths:
+      - "cord/**"
+      - ".github/workflows/cord.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cord-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_COLOR: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cord
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: cord/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: cord/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # esbuild ne type-check pas : tsc + lint à part, ils bloquent la publication.
+      - name: Type-check
+        run: pnpm testTsc
+
+      - name: Lint
+        run: pnpm lint && pnpm lint-styles
+
+      - name: Build (standalone, updater interne désactivé)
+        env:
+          VENCORD_REMOTE: ${{ github.repository }}
+        run: pnpm build --standalone --disable-updater
+
+      # esbuild minifie : on vérifie des chaînes littérales uniques, pas des noms de fonctions.
+      - name: Vérifier la dist
+        run: |
+          for f in patcher.js preload.js renderer.js renderer.css; do
+            test -s "dist/$f" || { echo "::error::dist/$f manquant"; exit 1; }
+          done
+          grep -q '"low-cord"' dist/renderer.js || { echo "::error::branding low-cord absent du renderer"; exit 1; }
+          if grep -q 'SupportHelper' dist/renderer.js; then echo "::error::SupportHelper embarqué"; exit 1; fi
+
+      - name: Publier sur la branche builds
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          REPO_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/builds"
+          if git ls-remote --exit-code --heads "$REPO_URL" builds >/dev/null; then
+            git clone --quiet --depth 1 --branch builds "$REPO_URL" "$OUT"
+          else
+            git init --quiet -b builds "$OUT"
+            git -C "$OUT" remote add origin "$REPO_URL"
+          fi
+
+          cp dist/patcher.js dist/preload.js dist/renderer.js dist/renderer.css "$OUT/"
+          VENCORD_VERSION=$(node -p "require('./package.json').version")
+          cat > "$OUT/build.json" <<JSON
+          {
+            "sha": "${GITHUB_SHA}",
+            "short": "${GITHUB_SHA::7}",
+            "vencord": "${VENCORD_VERSION}",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+          cd "$OUT"
+          git config user.name "low-cord-ci"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add patcher.js preload.js renderer.js renderer.css build.json
+          git commit --quiet -m "dist: low-cord@${GITHUB_SHA::7}"
+          git push --quiet origin builds
+          echo "Publié : $(git rev-parse HEAD)"

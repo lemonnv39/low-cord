@@ -1,0 +1,8 @@
+node_modules/
+dist/
+target/
+injector/src-tauri/gen/
+*.log
+.DS_Store
+.idea/
+graphify-out/

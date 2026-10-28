@@ -1,0 +1,68 @@
+name: injector — release
+
+# Sur un tag `injector-vX.Y.Z` : build de l'exe PORTABLE (pas d'installeur)
+# et publication d'une GitHub Release publique avec `low-cord-injector.exe`.
+# Le self-update de l'injecteur lit `releases/latest` et retire le préfixe
+# `injector-v` avant la comparaison semver (voir src-tauri/src/updater.rs).
+#
+# Avant de tagger : même version dans injector/package.json,
+# injector/src-tauri/Cargo.toml et injector/src-tauri/tauri.conf.json.
+
+on:
+  push:
+    tags: ["injector-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: injector
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier que le tag correspond aux versions
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#injector-v}"
+          PKG=$(node -p "require('./package.json').version")
+          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          echo "tag=$TAG package=$PKG tauri=$CONF cargo=$CARGO"
+          [ "$TAG" = "$PKG" ] && [ "$TAG" = "$CONF" ] && [ "$TAG" = "$CARGO" ] || { echo "::error::versions désynchronisées"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: injector/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: injector/src-tauri
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: svelte-check
+        run: pnpm check
+
+      - name: Build exe portable
+        run: pnpm tauri build --no-bundle
+
+      - name: Publier la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: low-cord Injecteur ${{ github.ref_name }}
+          make_latest: true
+          generate_release_notes: true
+          files: injector/src-tauri/target/release/low-cord-injector.exe
