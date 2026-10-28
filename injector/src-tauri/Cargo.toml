@@ -1,6 +1,6 @@
 [package]
 name = "low-cord-injector"
-version = "0.1.0"
+version = "0.2.0"
 description = "Injecteur portable de low-cord (fork Vencord) — Tauri, open source"
 authors = ["shitday"]
 edition = "2021"

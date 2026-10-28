@@ -1,9 +1,9 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- low-cord : fond carré arrondi noir -->
-  <rect width="1024" height="1024" rx="228" fill="#050505"/>
-  <!-- "l" minuscule (montant) posé sur une ligne basse : le "low" -->
-  <rect x="352" y="232" width="112" height="456" rx="56" fill="#ffffff"/>
-  <rect x="232" y="732" width="560" height="64" rx="32" fill="#ffffff"/>
-  <!-- point d'accroche (le "cord" qui part de la ligne) -->
-  <circle cx="672" cy="620" r="56" fill="#ffffff"/>
+  <!-- low-cord (shitday) : prompt de terminal "l_" vert acide sur noir, coins francs -->
+  <rect width="1024" height="1024" rx="96" fill="#0a0a0a"/>
+  <rect x="40" y="40" width="944" height="944" rx="64" fill="none" stroke="#2e2e2e" stroke-width="16"/>
+  <!-- chevron de prompt -->
+  <path d="M196 300 L396 452 L196 604" stroke="#b6ff3b" stroke-width="72" stroke-linecap="square" stroke-linejoin="miter" fill="none"/>
+  <!-- curseur bloc -->
+  <rect x="476" y="640" width="352" height="88" fill="#b6ff3b"/>
 </svg>

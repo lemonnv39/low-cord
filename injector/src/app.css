@@ -1,115 +1,131 @@
-/* low-cord Injecteur — design tokens
-   Direction : monochrome pur, noir profond OLED + blanc franc comme accent
-   (boutons inversés : blanc plein sur noir). Zéro teinte de couleur — tout se
-   joue sur le contraste, la luminosité et la lumière blanche. Typographie
-   système nette (Segoe UI natif Windows, Inter si dispo). Aucune police
-   embarquée : l'app tourne hors-ligne et Segoe UI est déjà parfait sur Windows. */
+/* low-cord Injecteur — design "terminal brut", signé shitday.
+   Noir, monospace partout, accent vert acide, zéro arrondi, zéro dégradé.
+   Toutes les couleurs passent par ces tokens. */
 
 :root {
     color-scheme: dark;
 
-    /* ── Surfaces (gris neutres, aucune teinte) ───────────────────────── */
-    --bg: #000000;
-    --bg-2: #060606;
-    --surface: #0f0f10;
-    --surface-2: #18181a;
-    --surface-3: #242427;
-    --border: rgba(255, 255, 255, 0.09);
-    --border-strong: rgba(255, 255, 255, 0.20);
+    --bg: #0a0a0a;
+    --panel: #0e0e0e;
+    --panel-2: #141414;
+    --line: #1f1f1f;
+    --line-strong: #2e2e2e;
 
-    /* ── Texte ────────────────────────────────────────────────────────── */
-    --text: #fafafa;
-    --text-dim: #9a9a9d;
-    --text-faint: #636366;
+    --fg: #d6d6d6;
+    --fg-bright: #f2f2f2;
+    --dim: #6f6f6f;
+    --faint: #444444;
 
-    /* ── Accent = BLANC (inversion : surface blanche, texte noir) ──────── */
-    --accent: #ffffff;
-    --accent-hover: #e4e4e7;
-    --accent-press: #c7c7cc;
-    --on-accent: #000000;
-    --accent-soft: rgba(255, 255, 255, 0.10);
-    --accent-line: rgba(255, 255, 255, 0.26);
-    /* Halo blanc diffus pour les surfaces accent (remplace les ombres violettes). */
-    --accent-glow: rgba(255, 255, 255, 0.22);
+    --acid: #b6ff3b;
+    --acid-dim: #6f9c24;
+    --acid-bg: rgba(182, 255, 59, 0.08);
+    --warn: #ffb020;
+    --err: #ff5a4f;
+    --info: #5ad1ff;
 
-    /* ── États — monochromes, distingués par luminosité + texte/icône ─── */
-    --ok: #ffffff;
-    --warning: #a1a1a6;
-    --danger: #ffffff;
-    --ring: #ffffff;
+    --mono: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
 
-    /* ── Rythme ───────────────────────────────────────────────────────── */
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 20px;
-    --space-6: 24px;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-
-    /* ── Mouvement ────────────────────────────────────────────────────── */
-    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-    --duration-fast: 140ms;
-    --duration-base: 260ms;
-    --duration-slow: 480ms;
-
-    --font: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
-
-    font-family: var(--font);
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
+    --fs-xs: 11px;
+    --fs-sm: 12px;
+    --fs: 13px;
+    --fs-lg: 15px;
 }
 
-* {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
 }
 
 html,
-body {
+body,
+#app {
     margin: 0;
-    padding: 0;
     height: 100%;
     background: var(--bg);
-    color: var(--text);
-    overflow: hidden;
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: var(--fs);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
     user-select: none;
+    overflow: hidden;
 }
 
 button {
-    font-family: inherit;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
     cursor: pointer;
 }
-
-:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
+button:disabled {
+    cursor: default;
 }
 
-/* Scrollbar fine cohérente avec le thème. */
-* {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+::selection {
+    background: var(--acid);
+    color: #000;
 }
-*::-webkit-scrollbar { width: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.16);
-    border-radius: 4px;
+
+/* Bouton "[ action ]" façon terminal. */
+.cmd {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid var(--line-strong);
+    color: var(--fg-bright);
+    white-space: nowrap;
+    transition: background 90ms, border-color 90ms, color 90ms;
 }
-*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
+.cmd::before { content: "["; color: var(--dim); }
+.cmd::after { content: "]"; color: var(--dim); }
+.cmd:hover:not(:disabled) {
+    border-color: var(--acid);
+    color: var(--acid);
+}
+.cmd--primary {
+    background: var(--acid);
+    border-color: var(--acid);
+    color: #000;
+    font-weight: 700;
+}
+.cmd--primary::before,
+.cmd--primary::after { color: rgba(0, 0, 0, 0.45); }
+.cmd--primary:hover:not(:disabled) {
+    background: var(--fg-bright);
+    border-color: var(--fg-bright);
+    color: #000;
+}
+.cmd--danger:hover:not(:disabled) {
+    border-color: var(--err);
+    color: var(--err);
+}
+.cmd:disabled {
+    opacity: 0.45;
+}
+
+.ok { color: var(--acid); }
+.warn { color: var(--warn); }
+.err { color: var(--err); }
+.dim { color: var(--dim); }
+.info { color: var(--info); }
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+.cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: -0.18em;
+    background: var(--acid);
+    animation: blink 1s steps(1) infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-    }
+    .cursor { animation: none; }
 }
