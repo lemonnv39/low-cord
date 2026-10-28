@@ -1,0 +1,11 @@
+/* PlainFolderIcon — conteneur du dossier fermé, quand l'aperçu des serveurs serait affiché. */
+.lc-plain-folder-icon {
+    /* Sans ça, la bascule entre les deux couches est saccadée */
+    transition: none !important;
+
+    /* Masque la grille des mini-icônes de serveurs */
+    transform: translateZ(0);
+
+    /* L'icône de dossier est transparente : fond par défaut, teinté par la couleur du dossier */
+    background-color: color-mix(in oklab, var(--custom-folder-color, var(--badge-background-default)) 40%, transparent);
+}

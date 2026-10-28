@@ -58,6 +58,9 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        PlainFolderIcon: {
+            description: "Affiche une icône de dossier simple au lieu des mini-icônes des serveurs qu'il contient",
+        },
         PlatformIndicators: {
             description: "Affiche les plateformes (ordinateur, mobile, navigateur…) des utilisateurs, amis ou non",
             settings: {
