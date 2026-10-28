@@ -28,6 +28,7 @@
             "@utils/*": ["./src/utils/*"],
             "@plugins/*": ["./src/plugins/*"],
             "@lowcord/*": ["./src/lowcord/*"],
+            "@lowplugins/*": ["./src/lowplugins/*"],
             "@shared/*": ["./src/shared/*"],
             "@webpack/common": ["./src/webpack/common"],
             "@webpack/common/*": ["./src/webpack/common/*"],

@@ -58,6 +58,19 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        PermissionsViewer: {
+            description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
+            settings: {
+                permissionsSortOrder: {
+                    name: "Ordre de tri",
+                    description: "Quel rôle afficher comme source d'une permission quand plusieurs l'accordent",
+                    options: { "0": "Rôle le plus haut", "1": "Rôle le plus bas" },
+                },
+            },
+        },
+        ServerInfo: {
+            description: "Fiche complète d'un serveur : infos, membres, contenu, sécurité, boosts, fonctionnalités, et tes amis / bloqués / ignorés présents",
+        },
         PlainFolderIcon: {
             description: "Affiche une icône de dossier simple au lieu des mini-icônes des serveurs qu'il contient",
         },

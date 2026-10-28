@@ -1,0 +1,189 @@
+.vc-gp-banner {
+    cursor: pointer;
+    aspect-ratio: auto 240 / 135;
+    height: 334px;
+    width: 100%;
+    padding-inline: 0.5em;
+    box-sizing: border-box;
+    object-fit: cover;
+    overflow: clip;
+    overflow-clip-margin: content-box;
+}
+
+.vc-gp-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0.5em;
+}
+
+.vc-gp-icon {
+    width: 48px;
+    height: 48px;
+    cursor: pointer;
+}
+
+.vc-gp-name-and-description {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+}
+
+.vc-gp-name {
+    margin: 0;
+}
+
+.vc-gp-tab-bar {
+    border-bottom: 1px solid var(--border-subtle);
+    margin: 20px 12px 0;
+    display: flex;
+    gap: 40px;
+    align-items: stretch;
+    flex-direction: row;
+}
+
+.vc-gp-tab {
+    border-bottom: 2px solid transparent;
+    color: var(--interactive-icon-default);
+    cursor: pointer;
+    line-height: 14px;
+}
+
+.vc-gp-tab-content {
+    margin: 1em;
+}
+
+.vc-gp-tab:where(.vc-gp-selected, :hover, :focus) {
+    border-bottom-color: var(--interactive-icon-active);
+}
+
+.vc-gp-info {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1em;
+}
+
+.vc-gp-server-info-pair {
+    color: var(--text-default);
+}
+
+.vc-gp-server-info-pair [class*="timestamp"] {
+    margin-left: 0;
+}
+
+.vc-gp-owner {
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+}
+
+.vc-gp-owner-avatar {
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.vc-gp-scroller {
+    max-height: 500px;
+}
+
+.vc-gp-scroller [class*="row"] {
+    margin: 1px 0;
+}
+
+/* low-cord : sections, acronyme, champs copiables, fonctionnalités, lignes membres */
+.vc-gp-acronym {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--text-default);
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.vc-gp-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.vc-gp-section-title {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.vc-gp-copyable {
+    cursor: pointer;
+}
+
+.vc-gp-copyable:hover {
+    text-decoration: underline;
+}
+
+.vc-gp-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.vc-gp-feature {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
+    color: var(--text-default);
+    font-size: 12px;
+}
+
+.vc-gp-muted {
+    color: var(--text-muted);
+}
+
+.vc-gp-user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.vc-gp-user-row:hover {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
+}
+
+.vc-gp-user-avatar-wrap {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex: none;
+}
+
+.vc-gp-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+.vc-gp-user-status {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 3px solid var(--modal-background, var(--background-base-low, #313338));
+}
+
+.vc-gp-user-names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
