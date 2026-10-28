@@ -72,12 +72,12 @@
     }
     .item.on {
         color: var(--fg-bright);
-        background: var(--acid-bg);
-        border-left-color: var(--acid);
+        background: var(--accent-bg);
+        border-left-color: var(--accent);
     }
     .caret {
         width: 1ch;
-        color: var(--acid);
+        color: var(--accent);
     }
     .name {
         flex: 1;

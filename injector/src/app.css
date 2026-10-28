@@ -1,5 +1,7 @@
 /* low-cord Injecteur — design "terminal brut", signé shitday.
-   Noir, monospace partout, accent vert acide, zéro arrondi, zéro dégradé.
+   Noir, monospace partout, accent blanc/gris (monochrome), zéro arrondi, zéro dégradé.
+   États : une seule famille de teintes douces, même luminosité (ambre, bleu acier,
+   corail) pour rester lisibles sans casser le monochrome.
    Toutes les couleurs passent par ces tokens. */
 
 :root {
@@ -16,12 +18,14 @@
     --dim: #6f6f6f;
     --faint: #444444;
 
-    --acid: #b6ff3b;
-    --acid-dim: #6f9c24;
-    --acid-bg: rgba(182, 255, 59, 0.08);
-    --warn: #ffb020;
-    --err: #ff5a4f;
-    --info: #5ad1ff;
+    --accent: #f2f2f2;
+    --accent-hover: #c9c9c9;
+    --accent-bg: rgba(255, 255, 255, 0.06);
+
+    /* États (teintes désaturées, luminosité alignée) */
+    --warn: #d9a866;   /* [mod]  autre mod détecté / à réappliquer */
+    --info: #8cb0d9;   /* [maj]  mise à jour disponible */
+    --err: #d97a6c;    /* erreurs */
 
     --mono: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
 
@@ -65,7 +69,7 @@ button:disabled {
 }
 
 ::selection {
-    background: var(--acid);
+    background: var(--accent);
     color: #000;
 }
 
@@ -83,20 +87,20 @@ button:disabled {
 .cmd::before { content: "["; color: var(--dim); }
 .cmd::after { content: "]"; color: var(--dim); }
 .cmd:hover:not(:disabled) {
-    border-color: var(--acid);
-    color: var(--acid);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 .cmd--primary {
-    background: var(--acid);
-    border-color: var(--acid);
+    background: var(--accent);
+    border-color: var(--accent);
     color: #000;
     font-weight: 700;
 }
 .cmd--primary::before,
 .cmd--primary::after { color: rgba(0, 0, 0, 0.45); }
 .cmd--primary:hover:not(:disabled) {
-    background: var(--fg-bright);
-    border-color: var(--fg-bright);
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
     color: #000;
 }
 .cmd--danger:hover:not(:disabled) {
@@ -107,7 +111,7 @@ button:disabled {
     opacity: 0.45;
 }
 
-.ok { color: var(--acid); }
+.ok { color: var(--accent); }
 .warn { color: var(--warn); }
 .err { color: var(--err); }
 .dim { color: var(--dim); }
@@ -122,7 +126,7 @@ button:disabled {
     height: 1.05em;
     margin-left: 2px;
     vertical-align: -0.18em;
-    background: var(--acid);
+    background: var(--accent);
     animation: blink 1s steps(1) infinite;
 }
 
