@@ -118,6 +118,18 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 notices: { name: "Bandeau en plus", description: "Afficher aussi un bandeau en haut de Discord (pour ne rien rater)" },
             },
         },
+        RoleColorEverywhere: {
+            description: "Affiche la couleur du rôle le plus haut partout : mentions, liste des membres, vocal, réactions, sondages",
+            settings: {
+                chatMentions: { name: "Mentions", description: "Couleur du rôle dans les mentions (messages et zone de saisie)" },
+                memberList: { name: "Liste des membres", description: "Couleur des titres de rôle dans la liste des membres" },
+                voiceUsers: { name: "Vocal", description: "Couleur du rôle dans la liste des membres en vocal" },
+                reactorsList: { name: "Réactions", description: "Couleur du rôle dans la liste de qui a réagi" },
+                pollResults: { name: "Sondages", description: "Couleur du rôle dans les résultats des sondages" },
+                colorChatMessages: { name: "Messages colorés", description: "Teinter le texte des messages avec la couleur du rôle de l'auteur" },
+                messageSaturation: { name: "Intensité", description: "Force de la teinte des messages colorés" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
