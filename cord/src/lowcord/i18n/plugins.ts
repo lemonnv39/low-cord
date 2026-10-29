@@ -98,7 +98,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             },
         },
         FollowUser: {
-            description: "Suit un utilisateur en vocal : quand il change de salon, tu le rejoins. Ajoute aussi le faux muet / faux sourd",
+            description: "Suit un utilisateur en vocal : quand il change de salon, tu le rejoins",
             settings: {
                 inactivityMinutes: {
                     name: "Arrêt automatique",

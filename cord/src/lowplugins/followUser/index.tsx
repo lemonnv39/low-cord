@@ -8,10 +8,6 @@
  * FollowUser — suit un utilisateur en vocal : quand il change de salon, tu le
  * rejoins. Clic droit sur quelqu'un → « Suivre ». Un cœur dans la barre du
  * haut indique le suivi actif (clic : rejoindre son vocal, clic droit : arrêter).
- *
- * Inclut le faux muet / faux sourd : les autres te voient muet / sourd, mais
- * ton micro et ton audio continuent de fonctionner. On réécrit uniquement
- * l'état vocal envoyé à Discord, au moment où le client l'envoie lui-même.
  */
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
@@ -21,14 +17,13 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy, findComponentByCodeLazy, findStoreLazy } from "@webpack";
+import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
 import { ChannelStore, Menu, PermissionsBits, PermissionStore, SelectedChannelStore, showToast, useEffect, UserStore, useState, VoiceStateStore } from "@webpack/common";
 import type { PropsWithChildren } from "react";
 
 const logger = new Logger("FollowUser");
 
 const ChannelActions = findByPropsLazy("selectVoiceChannel", "selectChannel");
-const GatewayConnectionStore = findStoreLazy("GatewayConnectionStore");
 const HeaderBarIcon = findComponentByCodeLazy(".HEADER_BAR_BADGE_BOTTOM,", 'position:"bottom"');
 
 const DS_KEY = "followuser-v2";
@@ -53,20 +48,6 @@ let followedId: string | null = null;
 let followedName = "";
 let followedChannel: string | null = null;
 let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-
-let fakeMute = false;
-let fakeDeafen = false;
-
-interface VoiceStatePayload {
-    guildId?: string | null;
-    channelId?: string | null;
-    selfMute?: boolean;
-    selfDeaf?: boolean;
-    [key: string]: unknown;
-}
-// Dernier état vocal réellement envoyé par Discord (sans nos modifications) :
-// sert à le renvoyer tel quel quand on (dés)active le faux muet / sourd.
-let lastVoiceState: VoiceStatePayload | null = null;
 
 const listeners = new Set<() => void>();
 function notifyAll() { listeners.forEach(fn => fn()); }
@@ -131,41 +112,6 @@ function resetInactivityTimer() {
         showToast({ text: t("fu.inactive", { name: followedName, minutes }), variant: "critical" });
         unfollow(true);
     }, minutes * 60 * 1000);
-}
-
-// ── Faux muet / faux sourd ───────────────────────────────────────────────────
-function applyFakeVoice(state: VoiceStatePayload) {
-    lastVoiceState = state;
-    if (!fakeMute && !fakeDeafen) return state;
-    return {
-        ...state,
-        selfMute: fakeMute || state.selfMute,
-        selfDeaf: fakeDeafen || state.selfDeaf,
-    };
-}
-
-function resendVoiceState() {
-    if (!lastVoiceState?.channelId) return;
-    try {
-        // Passe par la fonction patchée : le faux état est appliqué au passage.
-        GatewayConnectionStore.getSocket()?.voiceStateUpdate(lastVoiceState);
-    } catch (e) {
-        logger.error("Renvoi de l'état vocal impossible", e);
-    }
-}
-
-function toggleFakeMute() {
-    fakeMute = !fakeMute;
-    resendVoiceState();
-    notifyAll();
-    showToast({ text: t(fakeMute ? "fu.fakeMuteOn" : "fu.fakeMuteOff"), variant: fakeMute ? "success" : "default" });
-}
-
-function toggleFakeDeafen() {
-    fakeDeafen = !fakeDeafen;
-    resendVoiceState();
-    notifyAll();
-    showToast({ text: t(fakeDeafen ? "fu.fakeDeafOn" : "fu.fakeDeafOff"), variant: fakeDeafen ? "success" : "default" });
 }
 
 // ── Suivi ────────────────────────────────────────────────────────────────────
@@ -238,37 +184,18 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
     const userId: string | undefined = props?.user?.id;
     if (!userId) return;
 
-    const isSelf = userId === UserStore.getCurrentUser()?.id;
-    const inVoice = SelectedChannelStore.getVoiceChannelId() != null;
-    if (isSelf && !inVoice) return;
+    // On ne se suit pas soi-même.
+    if (userId === UserStore.getCurrentUser()?.id) return;
 
     const isFollowed = followedId === userId;
     children.push(
         <Menu.MenuGroup>
-            {!isSelf && (
-                <Menu.MenuCheckboxItem
-                    id="vc-follow-user"
-                    label={t("fu.follow")}
-                    checked={isFollowed}
-                    action={() => isFollowed ? unfollow() : follow(userId)}
-                />
-            )}
-            {inVoice && (
-                <Menu.MenuCheckboxItem
-                    id="vc-follow-user-fake-mute"
-                    label={t("fu.fakeMute")}
-                    checked={fakeMute}
-                    action={toggleFakeMute}
-                />
-            )}
-            {inVoice && (
-                <Menu.MenuCheckboxItem
-                    id="vc-follow-user-fake-deafen"
-                    label={t("fu.fakeDeafen")}
-                    checked={fakeDeafen}
-                    action={toggleFakeDeafen}
-                />
-            )}
+            <Menu.MenuCheckboxItem
+                id="vc-follow-user"
+                label={t("fu.follow")}
+                checked={isFollowed}
+                action={() => isFollowed ? unfollow() : follow(userId)}
+            />
         </Menu.MenuGroup>
     );
 };
@@ -276,20 +203,12 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
 // ── Plugin ───────────────────────────────────────────────────────────────────
 export default definePlugin({
     name: "FollowUser",
-    description: "Follow a user in voice: when they switch channels, you join them. Also adds fake mute / fake deafen",
+    description: "Follow a user in voice: when they switch channels, you join them",
     tags: ["Voice", "Utility"],
     authors: [{ name: "0ctane", id: 0n }],
     settings,
 
     patches: [
-        // Envoi de l'état vocal au serveur (muet, sourd, salon…)
-        {
-            find: '"QOS_HEARTBEAT"',
-            replacement: {
-                match: /voiceStateUpdate\((\i)\){/,
-                replace: "$&$1=$self.applyFakeVoice($1);"
-            }
-        },
         // Boutons à droite de la barre du haut
         {
             find: '?"BACK_FORWARD_NAVIGATION":',
@@ -324,8 +243,6 @@ export default definePlugin({
         },
     },
 
-    applyFakeVoice,
-
     TrailingWrapper({ children }: PropsWithChildren) {
         return (
             <>
@@ -349,11 +266,6 @@ export default definePlugin({
     },
 
     stop() {
-        if (fakeMute || fakeDeafen) {
-            fakeMute = false;
-            fakeDeafen = false;
-            resendVoiceState();
-        }
         clearInactivityTimer();
         followedId = null;
         followedName = "";
