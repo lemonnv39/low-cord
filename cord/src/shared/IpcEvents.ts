@@ -62,6 +62,7 @@ export const enum IpcEvents {
     USER_PLUGINS_BOOT_OK = "LowCordUserPluginsBootOk",
     USER_PLUGINS_LIST = "LowCordUserPluginsList",
     USER_PLUGINS_IMPORT = "LowCordUserPluginsImport",
+    USER_PLUGINS_PICK = "LowCordUserPluginsPick",
     USER_PLUGINS_DELETE = "LowCordUserPluginsDelete",
     USER_PLUGINS_OPEN_FOLDER = "LowCordUserPluginsOpenFolder",
 }

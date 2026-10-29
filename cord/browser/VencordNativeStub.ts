@@ -140,6 +140,7 @@ window.VencordNative = {
         bootOk: async () => { },
         list: async () => [],
         import: async () => Promise.reject("userPlugins are not supported on web"),
+        pick: async () => null,
         delete: async () => { },
         openFolder: async () => "",
     },

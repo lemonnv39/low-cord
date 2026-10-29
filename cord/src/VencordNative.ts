@@ -97,6 +97,8 @@ export default {
         bootOk: () => invoke<void>(IpcEvents.USER_PLUGINS_BOOT_OK),
         list: () => invoke<UserPluginMeta[]>(IpcEvents.USER_PLUGINS_LIST),
         import: (fileName: string, code: string) => invoke<UserPluginMeta>(IpcEvents.USER_PLUGINS_IMPORT, fileName, code),
+        /** Ouvre le sélecteur dans le dossier des plugins perso et importe le fichier choisi. */
+        pick: (title: string) => invoke<UserPluginMeta | null>(IpcEvents.USER_PLUGINS_PICK, title),
         delete: (fileName: string) => invoke<void>(IpcEvents.USER_PLUGINS_DELETE, fileName),
         openFolder: () => invoke<string>(IpcEvents.USER_PLUGINS_OPEN_FOLDER),
     },

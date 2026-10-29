@@ -39,15 +39,12 @@ function Warning() {
     );
 }
 
-/** Affiche l'avertissement (première fois) puis ouvre le sélecteur de fichier. */
+/** Affiche l'avertissement (à chaque ajout) puis ouvre le sélecteur de fichier. */
 export function addUserPlugin(onDone: () => void) {
     const pick = async () => {
         try {
-            const [file] = await DiscordNative.fileManager.openFiles({
-                filters: [{ name: "low-cord plugin", extensions: ["js"] }]
-            });
-            if (!file) return;
-            const meta = await VencordNative.userPlugins.import(file.filename, new TextDecoder().decode(file.data));
+            const meta = await VencordNative.userPlugins.pick(t("userPlugins.add"));
+            if (!meta) return;
             showToast({ text: t("userPlugins.added", { name: meta.name }), variant: "success" });
             onDone();
         } catch (e) {
@@ -58,8 +55,7 @@ export function addUserPlugin(onDone: () => void) {
         }
     };
 
-    if (isWarningAccepted()) return void pick();
-
+    // Avertissement à CHAQUE ajout : c'est le moment où le risque se prend.
     Alerts.show({
         title: t("userPlugins.warnModalTitle"),
         body: <Warning />,

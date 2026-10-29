@@ -25,7 +25,7 @@
 // précédente : on démarre SANS plugins perso et on prévient l'utilisateur.
 
 import { IpcEvents } from "@shared/IpcEvents";
-import { ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 
@@ -115,7 +115,7 @@ ipcMain.handle(IpcEvents.USER_PLUGINS_BOOT_OK, () => {
 
 ipcMain.handle(IpcEvents.USER_PLUGINS_LIST, () => listPlugins());
 
-ipcMain.handle(IpcEvents.USER_PLUGINS_IMPORT, (_, fileName: unknown, code: unknown) => {
+function importPlugin(fileName: unknown, code: unknown): UserPluginMeta {
     const file = safeFile(typeof fileName === "string" ? basename(fileName) : null);
     if (!file) throw new Error("bad-file");
     if (typeof code !== "string" || code.length > MAX_SIZE) throw new Error("too-big");
@@ -123,7 +123,29 @@ ipcMain.handle(IpcEvents.USER_PLUGINS_IMPORT, (_, fileName: unknown, code: unkno
     if (meta.error) throw new Error(meta.error);
     ensureDir();
     writeFileSync(join(USER_PLUGINS_DIR, file), code, "utf-8");
-    return { file, size: code.length, ...meta } satisfies UserPluginMeta;
+    return { file, size: code.length, ...meta };
+}
+
+ipcMain.handle(IpcEvents.USER_PLUGINS_IMPORT, (_, fileName: unknown, code: unknown) => importPlugin(fileName, code));
+
+// Sélecteur de fichier ouvert directement dans le dossier des plugins perso
+// (celui de Discord ne permet pas de choisir le dossier de départ).
+// Renvoie null si l'utilisateur annule.
+ipcMain.handle(IpcEvents.USER_PLUGINS_PICK, async (e, title: unknown) => {
+    ensureDir();
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.OpenDialogOptions = {
+        title: typeof title === "string" ? title : undefined,
+        defaultPath: USER_PLUGINS_DIR,
+        filters: [{ name: "low-cord plugin", extensions: ["js"] }],
+        properties: ["openFile"],
+    };
+    const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+    if (canceled || !filePaths[0]) return null;
+
+    const path = filePaths[0];
+    if (statSync(path).size > MAX_SIZE) throw new Error("too-big");
+    return importPlugin(basename(path), readFileSync(path, "utf-8"));
 });
 
 ipcMain.handle(IpcEvents.USER_PLUGINS_DELETE, (_, fileName: unknown) => {
