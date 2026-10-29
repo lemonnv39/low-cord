@@ -11,7 +11,6 @@ import type { fr } from "./fr";
 export const en = {
     "tab.build": "Build {hash}",
     "tab.about": "The open source Discord client, built for a better experience.",
-    "tab.aboutSub": "All the code is public · one-click updates from the low-cord injector.",
     "tab.copyBuild": "Copy build number",
     "tab.buildCopied": "Build copied",
     "tab.language": "Language",

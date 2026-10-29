@@ -49,7 +49,6 @@ export function Banner({ hash }: { hash: string; }) {
 
             <div className={cl("text")}>
                 <div className={cl("tagline")}>{t("tab.about")}</div>
-                <div className={cl("sub")}>{t("tab.aboutSub")}</div>
             </div>
 
             <button

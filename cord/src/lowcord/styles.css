@@ -244,14 +244,6 @@
 }
 
 .lc-banner-tagline {
-    color: var(--lc-text);
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-}
-
-.lc-banner-sub {
-    margin-top: 4px;
     color: var(--text-muted);
     font-size: 13px;
 }
