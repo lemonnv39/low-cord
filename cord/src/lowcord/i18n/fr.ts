@@ -10,8 +10,11 @@
 
 export const fr = {
     // Onglet low-cord
-    "tab.build": "Build {hash} · basé sur Vencord {vencord}",
-    "tab.about": "Projet open source : tout le code est public. Les mises à jour passent par l'injecteur low-cord.",
+    "tab.build": "Build {hash}",
+    "tab.about": "Le client Discord open source, pensé pour une meilleure expérience.",
+    "tab.aboutSub": "Tout le code est public · mises à jour en un clic depuis l'injecteur low-cord.",
+    "tab.copyBuild": "Copier le numéro de build",
+    "tab.buildCopied": "Build copiée",
     "tab.language": "Langue",
     "tab.languageHint": "Langue de l'interface low-cord (réglages, plugins). Discord garde sa propre langue.",
     "tab.quickActions": "Actions rapides",

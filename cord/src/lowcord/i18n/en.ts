@@ -9,8 +9,11 @@
 import type { fr } from "./fr";
 
 export const en = {
-    "tab.build": "Build {hash} · based on Vencord {vencord}",
-    "tab.about": "Open source project: all the code is public. Updates go through the low-cord injector.",
+    "tab.build": "Build {hash}",
+    "tab.about": "The open source Discord client, built for a better experience.",
+    "tab.aboutSub": "All the code is public · one-click updates from the low-cord injector.",
+    "tab.copyBuild": "Copy build number",
+    "tab.buildCopied": "Build copied",
     "tab.language": "Language",
     "tab.languageHint": "Language of the low-cord interface (settings, plugins). Discord keeps its own language.",
     "tab.quickActions": "Quick actions",

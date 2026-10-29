@@ -121,98 +121,172 @@
 }
 
 /* ── Bannière de l'onglet low-cord ───────────────────────────────────────
-   Le logo est un masque : sa couleur suit le thème (--lc-ink), un reflet le
-   traverse une fois à l'ouverture. Fond : grille fine qui s'estompe sur les
-   bords + halo discret derrière le logo. */
+   Pas de cadre : le nid d'abeilles déborde de la colonne et s'efface en
+   douceur dans la page. Logo = deux masques (encre grise + ombre d'origine),
+   reflet qui traverse l'encre, lueur qui parcourt les alvéoles (et suit la
+   souris au survol). */
+@property --lc-mx {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 50%;
+}
+
+@property --lc-my {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 45%;
+}
+
 .lc-banner-root {
-    --lc-ink: var(--header-primary, var(--text-strong, #f2f3f5));
-    --lc-line: color-mix(in srgb, var(--lc-ink) 7%, transparent);
-    --lc-shadow: rgb(0 0 0 / 35%);
+    --lc-text: var(--header-primary, var(--text-strong, #f2f3f5));
+    --lc-logo: #8a8a8a;
+    --lc-logo-shadow: rgb(0 0 0 / 92%);
+    --lc-cell: color-mix(in srgb, var(--lc-text) 9%, transparent);
+    --lc-cell-lit: color-mix(in srgb, var(--lc-text) 32%, transparent);
+    --lc-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22.517' height='39' viewBox='0 0 22.517 39'%3E%3Cpath d='M11.26 0L22.52 6.5L22.52 19.5L11.26 26L0 19.5L0 6.5ZM11.26 26L11.26 39' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
 
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 210px;
-    margin-bottom: 20px;
-    overflow: hidden;
-    border-radius: 12px;
-    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
-    background: var(--background-base-lower, var(--background-secondary));
+    padding: 34px 0 30px;
     isolation: isolate;
 }
 
-/* Thème clair : ombre bien plus légère, sinon elle salit le logo sombre. */
+/* Thème clair : le gris et l'ombre de l'original, tels quels. */
 .theme-light .lc-banner-root {
-    --lc-shadow: rgb(0 0 0 / 10%);
+    --lc-logo: #737373;
+    --lc-logo-shadow: rgb(0 0 0 / 42%);
+    --lc-cell: color-mix(in srgb, var(--lc-text) 8%, transparent);
+    --lc-cell-lit: color-mix(in srgb, var(--lc-text) 22%, transparent);
 }
 
-.lc-banner-grid {
+/* Nid d'abeilles : déborde de la colonne, s'efface vers les bords. */
+.lc-banner-hex {
     position: absolute;
-    inset: 0;
+    inset: -28px -64px -8px;
+    z-index: -3;
+    background: var(--lc-cell);
+    mask-image: radial-gradient(ellipse 50% 50% at 50% 46%, #000 25%, transparent 100%), var(--lc-hex);
+    mask-size: 100% 100%, 22.517px 39px;
+    mask-repeat: no-repeat, repeat;
+    mask-position: center, center;
+    mask-composite: intersect;
+    pointer-events: none;
+    animation: lc-banner-fade 900ms ease both;
+}
+
+/* Lueur qui parcourt les alvéoles : dérive seule, suit la souris au survol. */
+.lc-banner-hex-light {
     z-index: -2;
-    background-image:
-        linear-gradient(var(--lc-line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--lc-line) 1px, transparent 1px);
-    background-size: 24px 24px;
-    background-position: center;
-    mask-image: radial-gradient(ellipse 70% 75% at 50% 50%, #000 20%, transparent 80%);
+    background: radial-gradient(circle 150px at var(--lc-mx) var(--lc-my), var(--lc-cell-lit), transparent 100%);
+    animation: lc-banner-drift 14s ease-in-out infinite alternate, lc-banner-fade 1200ms ease both;
+    transition: --lc-mx 600ms ease, --lc-my 600ms ease;
 }
 
-.lc-banner-glow {
+.lc-banner-root:hover .lc-banner-hex-light {
+    animation: lc-banner-fade 1200ms ease both;
+    transition: --lc-mx 120ms linear, --lc-my 120ms linear;
+}
+
+/* Halo derrière le logo : éclaircit le fond pour que l'ombre se lise. */
+.lc-banner-halo {
     position: absolute;
-    inset: 0;
+    left: 50%;
+    top: 40%;
     z-index: -1;
-    background: radial-gradient(ellipse 45% 55% at 50% 50%, color-mix(in srgb, var(--lc-ink) 9%, transparent), transparent 70%);
-    animation: lc-banner-glow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.lc-banner-logo-wrap {
-    width: min(540px, 80%);
-    filter: drop-shadow(0 6px 18px var(--lc-shadow));
-    animation: lc-banner-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    width: 520px;
+    height: 180px;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--lc-text) 7%, transparent), transparent);
+    pointer-events: none;
+    animation: lc-banner-fade 900ms ease both;
 }
 
 .lc-banner-logo {
-    aspect-ratio: 1229 / 362;
-    width: 100%;
-    mask-size: contain;
-    mask-repeat: no-repeat;
-    mask-position: center;
+    position: relative;
+    width: min(520px, 84%);
+    aspect-ratio: 1248 / 370;
+    animation: lc-banner-in 750ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
 
-    /* Couleur du logo + reflet (bande claire) qui glisse de gauche à droite. */
-    background-color: color-mix(in srgb, var(--lc-ink) 88%, transparent);
-    background-image: linear-gradient(105deg, transparent 42%, rgb(255 255 255 / 85%) 50%, transparent 58%);
+.lc-banner-shadow,
+.lc-banner-ink {
+    position: absolute;
+    inset: 0;
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+}
+
+.lc-banner-shadow {
+    background: var(--lc-logo-shadow);
+}
+
+/* Encre grise + reflet (bande claire) qui glisse de gauche à droite. */
+.lc-banner-ink {
+    background-color: var(--lc-logo);
+    background-image: linear-gradient(105deg, transparent 42%, rgb(255 255 255 / 55%) 50%, transparent 58%);
     background-size: 250% 100%;
     background-repeat: no-repeat;
     background-position: 130% 0;
-    animation: lc-banner-sheen 1600ms cubic-bezier(0.45, 0, 0.25, 1) 500ms both;
+    animation: lc-banner-sheen 1700ms cubic-bezier(0.45, 0, 0.25, 1) 550ms both;
 }
 
-.lc-banner-root:hover .lc-banner-logo {
+.lc-banner-root:hover .lc-banner-ink {
     animation: lc-banner-sheen 1400ms cubic-bezier(0.45, 0, 0.25, 1) both;
 }
 
-.lc-banner-meta {
-    position: absolute;
-    right: 14px;
-    bottom: 10px;
+.lc-banner-text {
+    margin-top: 18px;
+    text-align: center;
+    animation: lc-banner-in 750ms cubic-bezier(0.2, 0.8, 0.2, 1) 150ms both;
+}
+
+.lc-banner-tagline {
+    color: var(--lc-text);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.lc-banner-sub {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* Build : petite pastille cliquable (copie le numéro). */
+.lc-banner-build {
+    margin-top: 14px;
+    padding: 3px 10px;
+    border: 1px solid color-mix(in srgb, var(--lc-text) 14%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--lc-text) 4%, transparent);
     color: var(--text-muted);
     font-family: var(--font-code, monospace);
     font-size: 11px;
-    letter-spacing: 0.02em;
-    opacity: 0.8;
+    letter-spacing: 0.03em;
+    cursor: copy;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+    animation: lc-banner-in 750ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms both;
+}
+
+.lc-banner-build:hover {
+    border-color: color-mix(in srgb, var(--lc-text) 30%, transparent);
+    background: color-mix(in srgb, var(--lc-text) 8%, transparent);
+    color: var(--lc-text);
 }
 
 @keyframes lc-banner-in {
     from {
         opacity: 0;
-        transform: translateY(8px) scale(0.98);
-        filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0%)) blur(4px);
+        transform: translateY(8px) scale(0.985);
+        filter: blur(4px);
     }
 }
 
-@keyframes lc-banner-glow {
+@keyframes lc-banner-fade {
     from { opacity: 0; }
 }
 
@@ -221,11 +295,33 @@
     to { background-position: -30% 0; }
 }
 
+@keyframes lc-banner-drift {
+    0% {
+        --lc-mx: 18%;
+        --lc-my: 30%;
+    }
+
+    50% {
+        --lc-mx: 55%;
+        --lc-my: 70%;
+    }
+
+    100% {
+        --lc-mx: 85%;
+        --lc-my: 35%;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .lc-banner-glow,
-    .lc-banner-logo-wrap,
+    .lc-banner-hex,
+    .lc-banner-hex-light,
+    .lc-banner-halo,
     .lc-banner-logo,
-    .lc-banner-root:hover .lc-banner-logo {
+    .lc-banner-ink,
+    .lc-banner-text,
+    .lc-banner-build,
+    .lc-banner-root:hover .lc-banner-ink,
+    .lc-banner-root:hover .lc-banner-hex-light {
         animation: none;
     }
 }

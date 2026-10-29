@@ -50,13 +50,7 @@ function LowCordSettings() {
 
     return (
         <SettingsTab>
-            <Banner meta={t("tab.build", { hash: gitHash, vencord: VERSION })} />
-
-            <section>
-                <Forms.FormText style={{ color: "var(--text-muted)" }}>
-                    {t("tab.about")}
-                </Forms.FormText>
-            </section>
+            <Banner hash={gitHash} />
 
             <Divider className={Margins.top16} />
 

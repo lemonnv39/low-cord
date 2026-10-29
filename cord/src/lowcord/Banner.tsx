@@ -6,30 +6,59 @@
 
 // low-cord — bannière en tête de l'onglet low-cord.
 //
-// Le logo est un PNG détouré (blanc + transparence) utilisé comme MASQUE : sa
-// couleur vient du thème (clair ou sombre), et un reflet le traverse à
-// l'ouverture. Embarqué en base64 dans la build : aucun fichier externe.
+// Logo en deux calques détourés depuis l'original (encre grise + son ombre),
+// utilisés comme MASQUES : les couleurs restent pilotées par le CSS (thème
+// clair / sombre) et un reflet traverse l'encre. Derrière : un nid d'abeilles
+// qui se fond dans la page, et une lueur qui le parcourt (elle suit la souris
+// au survol). Images embarquées en base64 : aucun fichier externe.
 
 import { classNameFactory } from "@utils/css";
-import logo from "file://assets/banner.png?base64";
+import { copyWithToast } from "@utils/discord";
+import { useRef } from "@webpack/common";
+import ink from "file://assets/logo-ink.png?base64";
+import shadow from "file://assets/logo-shadow.png?base64";
+
+import { t } from "./i18n";
 
 const cl = classNameFactory("lc-banner-");
-const LOGO_URL = `url("data:image/png;base64,${logo}")`;
+const INK_URL = `url("data:image/png;base64,${ink}")`;
+const SHADOW_URL = `url("data:image/png;base64,${shadow}")`;
 
-export function Banner({ meta }: { meta: string; }) {
+export function Banner({ hash }: { hash: string; }) {
+    const rootRef = useRef<HTMLDivElement>(null);
+
+    // Position de la souris -> variables CSS (pas d'état React : aucun re-rendu).
+    function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+        const el = rootRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        el.style.setProperty("--lc-mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+        el.style.setProperty("--lc-my", `${((e.clientY - r.top) / r.height) * 100}%`);
+    }
+
     return (
-        <div className={cl("root")}>
-            <div className={cl("grid")} aria-hidden="true" />
-            <div className={cl("glow")} aria-hidden="true" />
-            <div className={cl("logo-wrap")}>
-                <div
-                    className={cl("logo")}
-                    role="img"
-                    aria-label="low-cord by shitday"
-                    style={{ maskImage: LOGO_URL, WebkitMaskImage: LOGO_URL }}
-                />
+        <div className={cl("root")} ref={rootRef} onMouseMove={onMouseMove}>
+            <div className={cl("hex")} aria-hidden="true" />
+            <div className={cl("hex", "hex-light")} aria-hidden="true" />
+            <div className={cl("halo")} aria-hidden="true" />
+
+            <div className={cl("logo")} role="img" aria-label="low-cord by Shitday">
+                <div className={cl("shadow")} style={{ maskImage: SHADOW_URL, WebkitMaskImage: SHADOW_URL }} />
+                <div className={cl("ink")} style={{ maskImage: INK_URL, WebkitMaskImage: INK_URL }} />
             </div>
-            <span className={cl("meta")}>{meta}</span>
+
+            <div className={cl("text")}>
+                <div className={cl("tagline")}>{t("tab.about")}</div>
+                <div className={cl("sub")}>{t("tab.aboutSub")}</div>
+            </div>
+
+            <button
+                className={cl("build")}
+                title={t("tab.copyBuild")}
+                onClick={() => copyWithToast(hash, t("tab.buildCopied"))}
+            >
+                {t("tab.build", { hash })}
+            </button>
         </div>
     );
 }
