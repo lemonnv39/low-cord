@@ -68,6 +68,15 @@ fn latest_sha_path(app: &AppHandle) -> PathBuf {
     dist_dir(app).join(".latest-sha")
 }
 
+/// Interroge GitHub pour le dernier SHA publié et le mémorise comme "dernier
+/// connu" (bouton "vérifier les mises à jour" d'une branche).
+pub async fn refresh_latest_sha(app: &AppHandle) -> Result<String, String> {
+    let client = http_client()?;
+    let sha = fetch_latest_sha(&client).await?;
+    let _ = fs::write(latest_sha_path(app), &sha);
+    Ok(sha)
+}
+
 pub fn latest_known_sha(app: &AppHandle) -> Option<String> {
     fs::read_to_string(latest_sha_path(app)).ok().map(|s| s.trim().to_string())
 }

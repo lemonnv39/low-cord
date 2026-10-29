@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { DiscordInstall, RowPhase } from "../types";
     import { BRANCH_NAME, STATE_TAG, branchState } from "../branches";
+    import Spinner from "./Spinner.svelte";
 
     let {
         installs,
@@ -21,12 +22,12 @@
     <div class="group">// discord</div>
     {#each installs as install (install.branch)}
         {@const st = branchState(install, latestSha)}
-        {@const busy = phases[install.branch]?.kind === "installing"}
+        {@const busy = phases[install.branch]?.kind === "installing" || phases[install.branch]?.kind === "checking"}
         <button class="item" class:on={selected === install.branch} onclick={() => onSelect(install.branch)}>
             <span class="caret">{selected === install.branch ? ">" : " "}</span>
             <span class="name">{BRANCH_NAME[install.branch] ?? install.branch}</span>
             {#if busy}
-                <span class="tag info">..</span>
+                <span class="tag"><Spinner /></span>
             {:else}
                 <span class="tag {STATE_TAG[st].cls}">[{STATE_TAG[st].text}]</span>
             {/if}

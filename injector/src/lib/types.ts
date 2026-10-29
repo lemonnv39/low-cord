@@ -65,4 +65,8 @@ export type RowPhase =
     | { kind: "idle" }
     | { kind: "installing"; step: InstallProgressEvent["step"] }
     | { kind: "error"; message: string }
-    | { kind: "confirm-uninstall" };
+    | { kind: "confirm-uninstall" }
+    /** Vérification des mises à jour en cours (requête GitHub). */
+    | { kind: "checking" }
+    /** Vérifié : déjà sur la dernière build. */
+    | { kind: "up-to-date"; sha: string; at: number };

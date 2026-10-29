@@ -718,6 +718,20 @@ pub async fn check_lowcord_build_update(app: AppHandle) -> Result<Option<String>
     dist_fetch::check_for_update(&app).await
 }
 
+/// "Vérifier les mises à jour" d'une branche, étape 1 : demande à GitHub le
+/// dernier SHA publié. Le frontend le compare au build installé.
+#[tauri::command]
+pub async fn fetch_latest_build_sha(app: AppHandle) -> Result<String, String> {
+    dist_fetch::refresh_latest_sha(&app).await
+}
+
+/// "Vérifier les mises à jour" d'une branche, étape 2 (s'il y en a une) :
+/// télécharge la dernière build et la réapplique sur CETTE branche seulement.
+#[tauri::command]
+pub async fn update_branch(app: AppHandle, resources_path: String, base_path: String, branch: String) -> Result<(), String> {
+    reapply(&app, Path::new(&resources_path), Path::new(&base_path), &branch, "mise à jour", true).await
+}
+
 /// Dernier SHA distant connu (rafraîchi au lancement, voir
 /// dist_fetch::spawn_silent_check) — sert au frontend à calculer "à jour" /
 /// "mettre à jour" par ligne en comparant à `DiscordInstall.build_sha`. Filet

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fly } from "svelte/transition";
+    import { cubicOut } from "svelte/easing";
     import { listen } from "@tauri-apps/api/event";
     import { getVersion } from "@tauri-apps/api/app";
 
@@ -9,6 +10,7 @@
     import BranchPanel from "./lib/components/BranchPanel.svelte";
     import ConfigPanel from "./lib/components/ConfigPanel.svelte";
     import StatusBar from "./lib/components/StatusBar.svelte";
+    import Spinner from "./lib/components/Spinner.svelte";
     import { patcherApi } from "./lib/api/patcher";
     import { checkForUpdate, installUpdate, type InjectorUpdate } from "./lib/api/updater";
     import type { DiscordInstall, FixResult, InstallLogEvent, InstallProgressEvent, RowPhase } from "./lib/types";
@@ -24,9 +26,6 @@
     let pendingUpdate = $state<InjectorUpdate | null>(null);
     let installingUpdate = $state(false);
 
-    let buildUpdating = $state(false);
-    let buildUpdateAvailable = $state(false);
-
     let pickedInitial = false;
 
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -34,7 +33,7 @@
     const setPhase = (branch: string, phase: RowPhase) => (phases = { ...phases, [branch]: phase });
     const current = $derived(installs.find(i => i.branch === selected) ?? null);
     const busyBranch = $derived(
-        Object.entries(phases).find(([, p]) => p.kind === "installing")?.[0] ?? null
+        Object.entries(phases).find(([, p]) => p.kind === "installing" || p.kind === "checking")?.[0] ?? null
     );
 
     async function refreshInstalls() {
@@ -81,35 +80,44 @@
         }
     }
 
-    /** Prépare un journal vierge pour chaque branche qu'une opération groupée va toucher. */
-    function startBatch(branches: string[]) {
-        for (const b of branches) {
-            logs = { ...logs, [b]: [] };
-            setPhase(b, { kind: "installing", step: "stopping" });
-        }
-        // Montre directement le journal de la première branche concernée.
-        if (branches.length > 0 && !branches.includes(selected)) selected = branches[0];
-    }
-
     function endBatch(results: { branch: string; ok: boolean; message?: string | null }[]) {
         for (const r of results) {
             setPhase(r.branch, r.ok ? { kind: "idle" } : { kind: "error", message: r.message ?? "échec inconnu" });
         }
     }
 
-    async function updateLowCordBuild() {
-        buildUpdating = true;
+    /** "Vérifier les mises à jour" : demande la dernière build à GitHub, et
+     *  l'installe sur cette branche seulement si elle est différente. */
+    async function checkAndUpdate(install: DiscordInstall) {
+        if (!install.resources_path || !install.base_path) return;
+        const branch = install.branch;
         globalError = null;
-        startBatch(installs.filter(i => i.patch_owner === "low_cord").map(i => i.branch));
+        setPhase(branch, { kind: "checking" });
+
+        let sha: string;
         try {
-            const results = await patcherApi.updateLowCordBuild();
-            endBatch(results.map(r => ({ branch: r.branch, ok: r.updated, message: r.message })));
-            buildUpdateAvailable = false;
+            // Délai minimal : sinon la vérification "clignote" quand GitHub répond vite.
+            [sha] = await Promise.all([patcherApi.fetchLatestBuildSha(), sleep(450)]);
+            latestBuildSha = sha;
         } catch (e) {
-            globalError = String(e);
-            endBatch(installs.filter(i => i.patch_owner === "low_cord").map(i => ({ branch: i.branch, ok: false, message: String(e) })));
+            setPhase(branch, { kind: "error", message: String(e) });
+            return;
+        }
+
+        if (install.build_sha && install.build_sha === sha) {
+            setPhase(branch, { kind: "up-to-date", sha, at: Date.now() });
+            return;
+        }
+
+        logs = { ...logs, [branch]: [] };
+        setPhase(branch, { kind: "installing", step: "stopping" });
+        try {
+            await patcherApi.updateBranch(install.resources_path, install.base_path, branch);
+            await sleep(800);
+            setPhase(branch, { kind: "idle" });
+        } catch (e) {
+            setPhase(branch, { kind: "error", message: String(e) });
         } finally {
-            buildUpdating = false;
             await refreshInstalls();
         }
     }
@@ -162,9 +170,6 @@
             listen<InjectorUpdate>("injector-update-available", e => {
                 pendingUpdate = e.payload;
             }),
-            listen<{ sha: string }>("lowcord-build-update-available", () => {
-                buildUpdateAvailable = true;
-            }),
             listen<{ sha: string }>("latest-build-sha", e => {
                 latestBuildSha = e.payload.sha;
             }),
@@ -197,7 +202,7 @@
             {/if}
 
             {#if selected === "config"}
-                <div class="view" in:fly={{ y: 6, duration: 180 }}>
+                <div class="view" in:fly={{ y: 8, duration: 260, easing: cubicOut }}>
                 <ConfigPanel
                     {appVersion}
                     latestSha={latestBuildSha}
@@ -210,7 +215,7 @@
                 </div>
             {:else if current}
                 {#key current.branch}
-                    <div class="view" in:fly={{ y: 6, duration: 180 }}>
+                    <div class="view" in:fly={{ y: 8, duration: 260, easing: cubicOut }}>
                     <BranchPanel
                         install={current}
                         phase={phaseOf(current.branch)}
@@ -218,6 +223,7 @@
                         latestSha={latestBuildSha}
                         locked={busyBranch !== null && busyBranch !== current.branch}
                         onInstall={() => runInstall(current)}
+                        onCheckUpdate={() => checkAndUpdate(current)}
                         onUninstall={() => runUninstall(current)}
                         onConfirmUninstall={() => setPhase(current.branch, { kind: "confirm-uninstall" })}
                         onCancelConfirm={() => setPhase(current.branch, { kind: "idle" })}
@@ -225,7 +231,7 @@
                     </div>
                 {/key}
             {:else}
-                <div class="dim">&gt; détection des installations discord<span class="cursor"></span></div>
+                <div class="dim">&gt; détection des installations discord<Spinner /></div>
             {/if}
         </main>
     </div>
@@ -234,9 +240,6 @@
         {appVersion}
         latestSha={latestBuildSha}
         injectorUpdate={pendingUpdate?.version ?? null}
-        buildUpdate={buildUpdateAvailable}
-        {buildUpdating}
-        onUpdateBuild={updateLowCordBuild}
         onOpenConfig={() => (selected = "config")}
     />
 </div>

@@ -30,6 +30,8 @@ fn main() {
             patcher::update_lowcord_build,
             patcher::check_lowcord_build_update,
             patcher::get_latest_build_sha,
+            patcher::fetch_latest_build_sha,
+            patcher::update_branch,
             patcher::fix_lowcord,
             presets::export_plugin_presets,
             presets::import_plugin_presets,

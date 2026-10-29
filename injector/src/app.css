@@ -135,20 +135,3 @@ button:disabled {
 .err { color: var(--err); }
 .dim { color: var(--dim); }
 .info { color: var(--info); }
-
-@keyframes blink {
-    50% { opacity: 0; }
-}
-.cursor {
-    display: inline-block;
-    width: 0.6em;
-    height: 1.05em;
-    margin-left: 2px;
-    vertical-align: -0.18em;
-    background: var(--accent);
-    animation: blink 1s steps(1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .cursor { animation: none; }
-}

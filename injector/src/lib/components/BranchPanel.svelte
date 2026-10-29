@@ -1,5 +1,9 @@
 <script lang="ts">
     import { tick } from "svelte";
+    import { Tween } from "svelte/motion";
+    import { cubicOut } from "svelte/easing";
+    import { fade, fly, slide } from "svelte/transition";
+    import Spinner from "./Spinner.svelte";
     import type { DiscordInstall, InstallLogEvent, LogKind, RowPhase } from "../types";
     import { BRANCH_NAME, STEP_LABEL, STEP_PCT, branchState } from "../branches";
 
@@ -10,6 +14,7 @@
         latestSha,
         locked,
         onInstall,
+        onCheckUpdate,
         onUninstall,
         onConfirmUninstall,
         onCancelConfirm,
@@ -21,6 +26,8 @@
         /** Une autre branche est en cours d'opération : on bloque les actions ici. */
         locked: boolean;
         onInstall: () => void;
+        /** Vérifie la dernière build et l'installe si besoin (low-cord déjà actif). */
+        onCheckUpdate: () => void;
         onUninstall: () => void;
         onConfirmUninstall: () => void;
         onCancelConfirm: () => void;
@@ -29,6 +36,7 @@
     const name = $derived(BRANCH_NAME[install.branch] ?? install.branch);
     const st = $derived(branchState(install, latestSha));
     const busy = $derived(phase.kind === "installing");
+    const checking = $derived(phase.kind === "checking");
     const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : "—");
 
     const STATE_LINE = {
@@ -46,8 +54,15 @@
             : STATE_LINE[st]
     );
 
+    // low-cord déjà là et à jour / en retard : un seul bouton qui vérifie la
+    // dernière build et l'installe s'il y en a une nouvelle.
+    const isUpdateAction = $derived(st === "active" || st === "outdated");
     const primaryLabel = $derived(
-        st === "outdated" ? "mettre à jour" : st === "reinject" ? "réappliquer" : st === "active" ? "réinstaller" : "installer"
+        checking ? "vérification…"
+            : st === "outdated" ? "installer la mise à jour"
+            : st === "active" ? "vérifier les mises à jour"
+            : st === "reinject" ? "réappliquer"
+            : "installer"
     );
 
     // ── Activité ────────────────────────────────────────────────────────
@@ -58,6 +73,8 @@
     const pct = $derived(
         phase.kind === "installing" ? STEP_PCT[phase.step] : log.length > 0 ? 100 : 0
     );
+    // Avance animée : la barre et le pourcentage glissent d'une étape à l'autre.
+    const shownPct = Tween.of(() => pct, { duration: 600, easing: cubicOut });
     const stepText = $derived(
         phase.kind === "installing" ? STEP_LABEL[phase.step] : phase.kind === "error" ? "échec" : "terminé"
     );
@@ -114,23 +131,39 @@
                 <button class="cmd cmd--danger" onclick={onUninstall}>oui, retirer</button>
                 <button class="cmd" onclick={onCancelConfirm}>annuler</button>
             {:else}
-                <button class="cmd cmd--primary" disabled={busy || locked} onclick={onInstall}>{primaryLabel}</button>
+                <button
+                    class="cmd cmd--primary"
+                    disabled={busy || checking || locked}
+                    onclick={isUpdateAction ? onCheckUpdate : onInstall}
+                >
+                    {#key primaryLabel}<span class="label" in:fade={{ duration: 180 }}>{primaryLabel}</span>{/key}
+                    {#if checking}<Spinner />{/if}
+                </button>
                 {#if install.patch_owner === "low_cord"}
-                    <button class="cmd cmd--danger" disabled={busy || locked} onclick={onConfirmUninstall}>désinstaller</button>
+                    <button class="cmd cmd--danger" disabled={busy || checking || locked} onclick={onConfirmUninstall}>désinstaller</button>
                 {/if}
             {/if}
         </div>
+
+        {#if phase.kind === "up-to-date"}
+            <div class="note" in:fly={{ y: -4, duration: 260, easing: cubicOut }}>
+                <span class="ok">✓</span> déjà à jour <span class="dim">· build</span> {short(phase.sha)}
+                <span class="dim">· vérifié à {clock(phase.at).slice(0, 8)}</span>
+            </div>
+        {/if}
     {/if}
 
     {#if busy || log.length > 0 || phase.kind === "error"}
-        <div class="activity">
+        <div class="activity" transition:slide={{ duration: 320, easing: cubicOut }}>
             <div class="progress-head">
                 <span class:err={phase.kind === "error"} class:bright={phase.kind !== "error"}>
-                    {stepText}{#if busy}<span class="cursor"></span>{/if}
+                    {#key stepText}<span in:fade={{ duration: 200 }}>{stepText}</span>{/key}{#if busy}<Spinner />{/if}
                 </span>
-                <span class="dim">{#if elapsed}{elapsed} s · {/if}{pct}%</span>
+                <span class="dim">{#if elapsed}{elapsed} s · {/if}{Math.round(shownPct.current)}%</span>
             </div>
-            <div class="track"><div class="fill" class:fill--err={phase.kind === "error"} style={`width:${pct}%`}></div></div>
+            <div class="track" class:track--busy={busy}>
+                <div class="fill" class:fill--err={phase.kind === "error"} style={`transform:scaleX(${shownPct.current / 100})`}></div>
+            </div>
 
             <div class="console" bind:this={consoleEl}>
                 {#each log as line, i (i)}
@@ -210,7 +243,13 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        animation: rise 220ms var(--ease);
+    }
+    .note {
+        font-size: var(--fs-sm);
+        margin-top: -6px;
+    }
+    .label {
+        display: inline-block;
     }
     .progress-head {
         display: flex;
@@ -218,6 +257,7 @@
         font-size: var(--fs-sm);
     }
     .track {
+        position: relative;
         height: 2px;
         background: var(--line);
         overflow: hidden;
@@ -225,7 +265,20 @@
     .fill {
         height: 100%;
         background: var(--accent);
-        transition: width 420ms var(--ease);
+        transform-origin: left;
+        will-change: transform;
+        transition: background 240ms var(--ease);
+    }
+    /* Pendant l'opération : un reflet glisse le long de la barre, pour montrer
+       que ça travaille même quand une étape dure. */
+    .track--busy::after {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 18%;
+        background: var(--fg-bright);
+        opacity: 0.35;
+        animation: sweep 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     }
     .fill--err {
         background: var(--err);
@@ -246,7 +299,7 @@
         display: grid;
         grid-template-columns: max-content 1.6ch 1fr;
         gap: 10px;
-        animation: fade-in 160ms var(--ease);
+        animation: line-in 220ms var(--ease) both;
     }
     .ts {
         color: var(--faint);
@@ -279,10 +332,15 @@
         font-size: var(--fs-xs);
     }
 
-    @keyframes rise {
-        from { opacity: 0; transform: translateY(4px); }
+    @keyframes line-in {
+        from { opacity: 0; transform: translateX(-4px); }
     }
-    @keyframes fade-in {
-        from { opacity: 0; }
+    @keyframes sweep {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(560%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .line { animation: none; }
+        .track--busy::after { animation: none; opacity: 0; }
     }
 </style>

@@ -7,7 +7,7 @@
 <!-- Barre de titre custom (decorations:false) : toute la bande est déplaçable. -->
 <header class="bar" data-tauri-drag-region>
     <span class="prompt" data-tauri-drag-region>
-        <span class="ok">low-cord</span><span class="cursor"></span>
+        <span class="ok">low-cord</span>
     </span>
     <div class="ctl">
         <button title="Réduire" onclick={(e) => { e.stopPropagation(); win.minimize(); }}>_</button>

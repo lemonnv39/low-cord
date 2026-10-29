@@ -22,6 +22,13 @@ export const patcherApi = {
 
     getLatestBuildSha: () => invoke<string | null>("get_latest_build_sha"),
 
+    /** Demande à GitHub le dernier build publié (bouton "vérifier les mises à jour"). */
+    fetchLatestBuildSha: () => invoke<string>("fetch_latest_build_sha"),
+
+    /** Télécharge la dernière build et la réapplique sur une seule branche. */
+    updateBranch: (resourcesPath: string, basePath: string, branch: string) =>
+        invoke<void>("update_branch", { resourcesPath, basePath, branch }),
+
     getSettings: () => invoke<InjectorSettings>("get_settings"),
 
     saveSettings: (settings: InjectorSettings) =>
