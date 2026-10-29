@@ -18,7 +18,6 @@ export const fr = {
     "tab.restart": "Redémarrer Discord",
     "tab.settingsFolder": "Dossier des réglages",
     "tab.source": "Code source",
-    "tab.signature": "low-cord {version} · by shitday",
 
     // Onglet Plugins
     "plugins.summary": "{active} actif(s) sur {total}",

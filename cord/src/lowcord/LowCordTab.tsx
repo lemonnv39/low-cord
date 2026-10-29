@@ -19,7 +19,8 @@ import { Forms } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
-import { LOWCORD_NAME, LOWCORD_REPO_URL } from "./constants";
+import { Banner } from "./Banner";
+import { LOWCORD_REPO_URL } from "./constants";
 import { LANGS, setLang, t, useLang } from "./i18n";
 
 const cl = classNameFactory("lc-");
@@ -49,11 +50,9 @@ function LowCordSettings() {
 
     return (
         <SettingsTab>
+            <Banner meta={t("tab.build", { hash: gitHash, vencord: VERSION })} />
+
             <section>
-                <Forms.FormTitle tag="h5">{LOWCORD_NAME}</Forms.FormTitle>
-                <Forms.FormText className={Margins.bottom8}>
-                    {t("tab.build", { hash: gitHash, vencord: VERSION })}
-                </Forms.FormText>
                 <Forms.FormText style={{ color: "var(--text-muted)" }}>
                     {t("tab.about")}
                 </Forms.FormText>
@@ -95,10 +94,6 @@ function LowCordSettings() {
                     />
                 </QuickActionCard>
             </section>
-
-            <Forms.FormText className={cl("signature")}>
-                {t("tab.signature", { version: gitHash })}
-            </Forms.FormText>
         </SettingsTab>
     );
 }

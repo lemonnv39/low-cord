@@ -17,7 +17,6 @@ export const en = {
     "tab.restart": "Restart Discord",
     "tab.settingsFolder": "Settings folder",
     "tab.source": "Source code",
-    "tab.signature": "low-cord {version} · by shitday",
 
     "plugins.summary": "{active} of {total} enabled",
     "plugins.section": "Plugins",

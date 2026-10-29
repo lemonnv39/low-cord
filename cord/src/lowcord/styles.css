@@ -35,12 +35,6 @@
     color: var(--header-primary, var(--text-strong));
 }
 
-.lc-signature {
-    margin-top: 24px;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
 /* Onglet Plugins */
 .lc-section-head {
     display: flex;
@@ -124,4 +118,114 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+/* ── Bannière de l'onglet low-cord ───────────────────────────────────────
+   Le logo est un masque : sa couleur suit le thème (--lc-ink), un reflet le
+   traverse une fois à l'ouverture. Fond : grille fine qui s'estompe sur les
+   bords + halo discret derrière le logo. */
+.lc-banner-root {
+    --lc-ink: var(--header-primary, var(--text-strong, #f2f3f5));
+    --lc-line: color-mix(in srgb, var(--lc-ink) 7%, transparent);
+    --lc-shadow: rgb(0 0 0 / 35%);
+
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 210px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    background: var(--background-base-lower, var(--background-secondary));
+    isolation: isolate;
+}
+
+/* Thème clair : ombre bien plus légère, sinon elle salit le logo sombre. */
+.theme-light .lc-banner-root {
+    --lc-shadow: rgb(0 0 0 / 10%);
+}
+
+.lc-banner-grid {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background-image:
+        linear-gradient(var(--lc-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--lc-line) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: center;
+    mask-image: radial-gradient(ellipse 70% 75% at 50% 50%, #000 20%, transparent 80%);
+}
+
+.lc-banner-glow {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(ellipse 45% 55% at 50% 50%, color-mix(in srgb, var(--lc-ink) 9%, transparent), transparent 70%);
+    animation: lc-banner-glow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lc-banner-logo-wrap {
+    width: min(540px, 80%);
+    filter: drop-shadow(0 6px 18px var(--lc-shadow));
+    animation: lc-banner-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lc-banner-logo {
+    aspect-ratio: 1229 / 362;
+    width: 100%;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+
+    /* Couleur du logo + reflet (bande claire) qui glisse de gauche à droite. */
+    background-color: color-mix(in srgb, var(--lc-ink) 88%, transparent);
+    background-image: linear-gradient(105deg, transparent 42%, rgb(255 255 255 / 85%) 50%, transparent 58%);
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    background-position: 130% 0;
+    animation: lc-banner-sheen 1600ms cubic-bezier(0.45, 0, 0.25, 1) 500ms both;
+}
+
+.lc-banner-root:hover .lc-banner-logo {
+    animation: lc-banner-sheen 1400ms cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+
+.lc-banner-meta {
+    position: absolute;
+    right: 14px;
+    bottom: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-code, monospace);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    opacity: 0.8;
+}
+
+@keyframes lc-banner-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+        filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0%)) blur(4px);
+    }
+}
+
+@keyframes lc-banner-glow {
+    from { opacity: 0; }
+}
+
+@keyframes lc-banner-sheen {
+    from { background-position: 130% 0; }
+    to { background-position: -30% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lc-banner-glow,
+    .lc-banner-logo-wrap,
+    .lc-banner-logo,
+    .lc-banner-root:hover .lc-banner-logo {
+        animation: none;
+    }
 }
