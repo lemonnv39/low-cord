@@ -1,0 +1,96 @@
+/* === Proof — plugin de confidentialité unifié ===
+   Chaque mode = une classe sur <body> (proof-*). Les sélecteurs visent des
+   classes hashées de Discord : à ajuster mode par mode si Discord bouge son
+   code (envoyer l'élément inspecté via DevTools pour un sélecteur exact). */
+
+/* ---- Liste des MP (floute chaque conversation, survol = révèle) ---- */
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has(img),
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has([class*="avatar"]) {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has(img):hover,
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has(img):focus-within,
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has([class*="avatar"]):hover,
+.proof-dmlist [class*="privateChannels_"] [class*="channel_"]:has([class*="avatar"]):focus-within {
+    filter: none;
+}
+
+/* ---- Conversation ouverte (floute les messages, survol du message = révèle) ---- */
+.proof-conversation [class*="chatContent_"] [class*="messageContent_"],
+.proof-conversation [class*="chatContent_"] [class*="username_"] {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-conversation [class*="chatContent_"] [class*="message_"]:hover [class*="messageContent_"],
+.proof-conversation [class*="chatContent_"] [class*="message_"]:hover [class*="username_"] {
+    filter: none;
+}
+/* Nom du DM dans l'en-tête de la conversation */
+.proof-conversation [class*="title_"] > [class*="children_"] {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-conversation [class*="title_"]:hover > [class*="children_"] { filter: none; }
+
+/* ---- Moi (panneau de compte en bas à gauche) ---- */
+.proof-self [class*="panels_"] [class*="nameTag_"],
+.proof-self [class*="panels_"] [class*="avatarWrapper_"],
+.proof-self [class*="panels_"] [class*="avatar_"] {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-self [class*="panels_"] [class*="container_"]:hover [class*="nameTag_"],
+.proof-self [class*="panels_"] [class*="container_"]:hover [class*="avatarWrapper_"],
+.proof-self [class*="panels_"] [class*="container_"]:hover [class*="avatar_"] { filter: none; }
+
+/* ---- Serveurs (noms de serveurs + de membres) ---- */
+.proof-servers [class*="listItem_"] [class*="name_"],
+.proof-servers [class*="header_"] h1[class*="name_"],
+.proof-servers [class*="membersWrap_"] [class*="member_"] [class*="name_"],
+.proof-servers [class*="members_"] [class*="member_"] [class*="name_"] {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-servers [class*="members_"] [class*="member_"]:hover [class*="name_"],
+.proof-servers [class*="membersWrap_"] [class*="member_"]:hover [class*="name_"] { filter: none; }
+
+/* ---- Vocal & appels (cache les pseudos) ---- */
+/* Noms sous un salon vocal dans la sidebar */
+.proof-voice [class*="voiceUser_"] [class*="username_"],
+.proof-voice [class*="voiceUser_"] [class*="name_"],
+/* Grille d'appel / vocal (tuiles de participants) */
+.proof-voice [class*="voiceCallWrapper_"] [class*="name_"],
+.proof-voice [class*="tile_"] [class*="name_"],
+.proof-voice [class*="tile_"] [class*="username_"],
+.proof-voice [class*="overlay_"] [class*="name_"] {
+    filter: blur(6px);
+    transition: filter .15s ease-in-out;
+}
+.proof-voice [class*="voiceUser_"]:hover [class*="username_"],
+.proof-voice [class*="voiceUser_"]:hover [class*="name_"],
+.proof-voice [class*="tile_"]:hover [class*="name_"],
+.proof-voice [class*="tile_"]:hover [class*="username_"] { filter: none; }
+
+/* ---- Stream (messages/médias, clic pour révéler) ---- */
+.proof-stream [class*="messageContent_"]:not(.proof-revealed),
+.proof-stream [class*="markup_"]:not(.proof-revealed) {
+    filter: blur(8px);
+    transition: filter .2s ease-in-out;
+    cursor: pointer !important;
+    user-select: none;
+    border-radius: 4px;
+}
+.proof-stream [id^="message-accessories-"] article:not(.proof-revealed),
+.proof-stream [class*="imageWrapper_"]:not(.proof-revealed),
+.proof-stream [class*="embedWrapper_"]:not(.proof-revealed),
+.proof-stream [class*="attachment_"]:not(.proof-revealed),
+.proof-stream [class*="video_"]:not(.proof-revealed),
+.proof-stream [class*="newMosaicStyle_"]:not(.proof-revealed),
+.proof-stream [class*="stickerAsset_"]:not(.proof-revealed) {
+    filter: blur(20px);
+    transition: filter .2s ease-in-out;
+    cursor: pointer !important;
+}
+.proof-stream [class*="messageContent_"]:not(.proof-revealed) a,
+.proof-stream [class*="markup_"]:not(.proof-revealed) a { pointer-events: none; }
