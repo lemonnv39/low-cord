@@ -1,0 +1,508 @@
+/* ── Journal des messages (low-cord) ──────────────────────────────────── */
+.vc-mlj-root {
+    display: flex;
+    height: min(72vh, 760px);
+    margin: 0 -16px -16px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.vc-mlj-side {
+    flex: none;
+    width: 250px;
+    padding: 8px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.vc-mlj-side-title {
+    display: flex;
+    justify-content: space-between;
+    margin: 14px 8px 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.vc-mlj-side-empty {
+    padding: 16px 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.vc-mlj-conv {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.vc-mlj-conv:hover {
+    background: var(--background-modifier-hover, rgb(255 255 255 / 4%));
+}
+
+.vc-mlj-conv-active,
+.vc-mlj-conv-active:hover {
+    background: var(--background-modifier-selected, rgb(255 255 255 / 8%));
+}
+
+.vc-mlj-conv-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.vc-mlj-conv-name {
+    overflow: hidden;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 14px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-mlj-conv-sub {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-mlj-avatar {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.vc-mlj-square {
+    border-radius: 8px;
+}
+
+.vc-mlj-avatar-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 600;
+}
+
+.vc-mlj-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.vc-mlj-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+}
+
+.vc-mlj-chips {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.vc-mlj-chip {
+    padding: 3px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 999px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.vc-mlj-chip:hover {
+    color: var(--text-normal, var(--text-default));
+}
+
+.vc-mlj-chip-on {
+    border-color: var(--header-primary, var(--text-strong));
+    color: var(--header-primary, var(--text-strong));
+}
+
+.vc-mlj-sep {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--border-subtle, rgb(255 255 255 / 10%));
+}
+
+.vc-mlj-search {
+    width: 220px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 6px;
+    background: var(--background-secondary, rgb(0 0 0 / 15%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+    outline: none;
+}
+
+.vc-mlj-search:focus {
+    border-color: var(--text-muted);
+}
+
+.vc-mlj-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px 8px;
+    font-size: 12px;
+}
+
+.vc-mlj-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--text-normal, var(--text-default));
+}
+
+.vc-mlj-filter-x {
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.vc-mlj-spacer {
+    flex: 1;
+}
+
+.vc-mlj-list {
+    flex: 1;
+    padding: 0 14px 14px;
+    overflow-y: auto;
+}
+
+.vc-mlj-empty {
+    padding: 48px 0;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.vc-mlj-day-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 2px 6px;
+    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    background: var(--modal-background, var(--background-primary));
+    color: var(--header-primary, var(--text-strong));
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vc-mlj-entry {
+    display: flex;
+    gap: 12px;
+    padding: 12px 8px;
+    border-left: 2px solid transparent;
+}
+
+.vc-mlj-entry + .vc-mlj-entry {
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 4%));
+}
+
+.vc-mlj-entry-delete {
+    border-left-color: var(--status-danger, #f23f43);
+}
+
+.vc-mlj-entry-edit {
+    border-left-color: var(--status-warning, #f0b232);
+}
+
+.vc-mlj-entry-attachments {
+    border-left-color: var(--text-muted);
+}
+
+.vc-mlj-entry-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.vc-mlj-entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.vc-mlj-author {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.vc-mlj-author:hover {
+    text-decoration: underline;
+}
+
+.vc-mlj-time {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-mlj-meta {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-mlj-muted {
+    color: var(--text-muted);
+}
+
+.vc-mlj-badge {
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.vc-mlj-badge-delete {
+    background: color-mix(in srgb, var(--status-danger, #f23f43) 18%, transparent);
+    color: var(--status-danger, #f23f43);
+}
+
+.vc-mlj-badge-edit {
+    background: color-mix(in srgb, var(--status-warning, #f0b232) 18%, transparent);
+    color: var(--status-warning, #f0b232);
+}
+
+.vc-mlj-badge-warn {
+    color: var(--status-warning, #f0b232);
+}
+
+.vc-mlj-body {
+    margin-top: 6px;
+    color: var(--text-normal, var(--text-default));
+    font-size: 15px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.vc-mlj-diff {
+    display: grid;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.vc-mlj-diff-old,
+.vc-mlj-diff-new {
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.vc-mlj-diff-old {
+    background: color-mix(in srgb, var(--status-danger, #f23f43) 8%, transparent);
+}
+
+.vc-mlj-diff-new {
+    background: color-mix(in srgb, var(--status-positive, #23a55a) 8%, transparent);
+}
+
+.vc-mlj-diff-label {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.vc-mlj-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.vc-mlj-file {
+    max-width: 320px;
+    padding: 6px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.vc-mlj-thumb {
+    display: block;
+    max-width: 100%;
+    max-height: 200px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    cursor: zoom-in;
+}
+
+.vc-mlj-thumb-loading {
+    width: 160px;
+    height: 100px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 6%));
+}
+
+.vc-mlj-file-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.vc-mlj-file-name {
+    max-width: 180px;
+    overflow: hidden;
+    color: var(--text-normal, var(--text-default));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-mlj-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 8px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.vc-mlj-entry:hover .vc-mlj-actions {
+    opacity: 1;
+}
+
+.vc-mlj-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.vc-mlj-link:hover {
+    color: var(--header-primary, var(--text-strong));
+}
+
+.vc-mlj-link-danger:hover {
+    color: var(--status-danger, #f23f43);
+}
+
+.vc-mlj-more {
+    display: block;
+    margin: 16px auto 0;
+    padding: 6px 14px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: none;
+    color: var(--text-normal, var(--text-default));
+    cursor: pointer;
+}
+
+.vc-mlj-footer {
+    display: flex;
+    gap: 16px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+/* Panneau dans les réglages */
+.vc-mlj-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.vc-mlj-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.vc-mlj-stats > div {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.vc-mlj-stats b {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 18px;
+}
+
+.vc-mlj-stats span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-mlj-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.vc-mlj-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 6%));
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.vc-mlj-btn-primary {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+}
+
+.vc-mlj-btn-danger:hover {
+    border-color: var(--status-danger, #f23f43);
+    color: var(--status-danger, #f23f43);
+}

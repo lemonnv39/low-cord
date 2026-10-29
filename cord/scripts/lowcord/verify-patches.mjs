@@ -114,6 +114,8 @@ function resolveTs(base) {
     return base;
 }
 
+// Les plugins avec une partie native lisent VencordNative au chargement.
+globalThis.VencordNative ??= /** @type {any} */ ({ pluginHelpers: {} });
 const bundle = require(out);
 const { canonicalizeMatch, canonicalizeReplace } = bundle;
 const plugins = Object.keys(bundle).filter(k => k.startsWith("plugin_")).map(k => bundle[k])

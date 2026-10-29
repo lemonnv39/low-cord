@@ -130,6 +130,27 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 messageSaturation: { name: "Intensité", description: "Force de la teinte des messages colorés" },
             },
         },
+        MessageLogger: {
+            description: "Garde les messages supprimés et modifiés, avec un journal permanent sur ton PC et les médias des MP archivés",
+            settings: {
+                deleteStyle: { name: "Style des messages supprimés", description: "Comment afficher un message supprimé dans le chat", options: { text: "Texte rouge", overlay: "Fond rouge" } },
+                logDeletes: { name: "Messages supprimés", description: "Garder les messages supprimés" },
+                collapseDeleted: { name: "Replier les supprimés", description: "Regrouper les messages supprimés comme les messages bloqués" },
+                logEdits: { name: "Messages modifiés", description: "Garder l'ancien texte des messages modifiés" },
+                logDeletedAttachments: { name: "Pièces jointes retirées", description: "Garder les pièces jointes retirées d'un message" },
+                inlineEdits: { name: "Historique sous le message", description: "Afficher les anciennes versions directement sous le message" },
+                journal: { name: "Journal permanent", description: "Enregistrer sur ton PC (garde tout, même après un redémarrage)" },
+                journalServers: { name: "Journal des serveurs", description: "Enregistrer aussi les serveurs (les MP et groupes le sont toujours)" },
+                archiveMedia: { name: "Archiver les médias", description: "Télécharger les médias dès leur réception pour les garder même s'ils sont supprimés", options: { dm: "MP et groupes", all: "MP, groupes et serveurs", off: "Désactivé" } },
+                maxMediaMB: { name: "Taille max d'un média (Mo)", description: "Les fichiers plus gros ne sont pas archivés" },
+                snapshotDays: { name: "Mémoire des MP (jours)", description: "Durée pendant laquelle les MP reçus sont gardés en copie, pour retrouver un message supprimé qui n'était pas affiché" },
+                ignoreBots: { name: "Ignorer les bots", description: "Ne pas garder les messages des bots" },
+                ignoreSelf: { name: "Ignorer mes messages", description: "Ne pas garder tes propres messages" },
+                ignoreUsers: { name: "Utilisateurs ignorés", description: "ID séparés par des virgules" },
+                ignoreChannels: { name: "Salons ignorés", description: "ID séparés par des virgules" },
+                ignoreGuilds: { name: "Serveurs ignorés", description: "ID séparés par des virgules" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
