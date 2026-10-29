@@ -1,7 +1,16 @@
 /* ── Journal des messages (low-cord) ──────────────────────────────────── */
+
+/* border-box : la bordure ne s'ajoute pas aux 100 % de large (c'est ce qui
+   faisait apparaître la barre de défilement horizontale de la fenêtre). */
+.vc-mlj-root,
+.vc-mlj-root * {
+    box-sizing: border-box;
+}
+
 .vc-mlj-root {
     display: flex;
     width: 100%;
+    max-width: 100%;
     height: min(72vh, 760px);
     overflow: hidden;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
