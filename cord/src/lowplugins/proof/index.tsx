@@ -142,7 +142,8 @@ function installNotificationHook() {
         construct(target, args: [title: string, options?: NotificationOptions]) {
             if (!redactNotifs) return new target(...args);
             const [, options] = args;
-            const redactedOptions: NotificationOptions = { ...options, body: "Nouveau message", icon: undefined, image: undefined };
+            const redactedOptions: NotificationOptions = { ...options, body: "Nouveau message", icon: undefined };
+            delete (redactedOptions as any).image;
             return new target("Discord", redactedOptions);
         }
     });
