@@ -134,6 +134,15 @@ window.VencordNative = {
         openFolder: async () => Promise.reject("settings:openFolder is not supported on web"),
     },
 
+    // Plugins perso : uniquement sur l'application de bureau.
+    userPlugins: {
+        boot: () => ({ safeMode: false, plugins: [] }),
+        bootOk: async () => { },
+        list: async () => [],
+        import: async () => Promise.reject("userPlugins are not supported on web"),
+        delete: async () => { },
+        openFolder: async () => "",
+    },
     pluginHelpers: {} as any,
     csp: {} as any,
 };

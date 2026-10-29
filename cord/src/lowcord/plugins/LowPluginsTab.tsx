@@ -21,18 +21,23 @@ import { Button, Forms, Text, useMemo, useState } from "@webpack/common";
 import Plugins, { PluginMeta } from "~plugins";
 
 import { LowPluginCard } from "./LowPluginCard";
+import { PresetPanel } from "./PresetPanel";
+import { UserPluginsSection } from "./UserPluginsSection";
 
 const cl = classNameFactory("lc-");
 
 const isCore = (p: Plugin) => p.required || PluginMeta[p.name]?.folderName.startsWith("_core/");
 // Les plugins *API sont des briques internes, activées automatiquement par dépendance.
-const isListed = (p: Plugin) => !p.hidden && !p.name.endsWith("API");
+// Les plugins perso ont leur propre section (activation au redémarrage).
+const isListed = (p: Plugin) => !p.hidden && !p.name.endsWith("API") && !PluginMeta[p.name]?.userPlugin;
 
 function LowPluginsSettings() {
     useLang();
     useSettings();
 
     const [pendingRestart, setPendingRestart] = useState<string[]>([]);
+    const [userPluginsKey, setUserPluginsKey] = useState(0);
+    const refreshUserPlugins = () => setUserPluginsKey(k => k + 1);
     const onRestartNeeded = (name: string) =>
         setPendingRestart(list => (list.includes(name) ? list : [...list, name]));
 
@@ -57,6 +62,8 @@ function LowPluginsSettings() {
                 </div>
             )}
 
+            <PresetPanel onUserPluginAdded={refreshUserPlugins} />
+
             <div className={cl("section-head")}>
                 <Forms.FormTitle tag="h5">{t("plugins.section")}</Forms.FormTitle>
                 {mine.length > 0 && (
@@ -73,6 +80,8 @@ function LowPluginsSettings() {
                     </div>
                 )
                 : <div className={cl("empty")}>{t("plugins.empty")}</div>}
+
+            <UserPluginsSection refreshKey={userPluginsKey} onRestartNeeded={onRestartNeeded} onChanged={refreshUserPlugins} />
 
             <div className={cl("section-head", "core-head")}>
                 <Forms.FormTitle tag="h5">{t("plugins.core")}</Forms.FormTitle>

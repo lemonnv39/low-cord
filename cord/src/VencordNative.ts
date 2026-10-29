@@ -8,6 +8,7 @@ import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
 import type { UserThemeHeader } from "@main/themes";
+import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { IpcRes } from "@utils/types";
 import { ipcRenderer } from "electron/renderer";
@@ -88,6 +89,16 @@ export default {
 
             ipcRenderer.on(IpcEvents.RENDERER_CSS_UPDATE, (_e, newCss: string) => cb(newCss));
         }
+    },
+
+    /** low-cord : plugins perso (voir src/main/userPlugins.ts). */
+    userPlugins: {
+        boot: (enabledFiles: string[]) => sendSync<{ safeMode: boolean; plugins: { file: string; code: string; }[]; }>(IpcEvents.USER_PLUGINS_BOOT, enabledFiles),
+        bootOk: () => invoke<void>(IpcEvents.USER_PLUGINS_BOOT_OK),
+        list: () => invoke<UserPluginMeta[]>(IpcEvents.USER_PLUGINS_LIST),
+        import: (fileName: string, code: string) => invoke<UserPluginMeta>(IpcEvents.USER_PLUGINS_IMPORT, fileName, code),
+        delete: (fileName: string) => invoke<void>(IpcEvents.USER_PLUGINS_DELETE, fileName),
+        openFolder: () => invoke<string>(IpcEvents.USER_PLUGINS_OPEN_FOLDER),
     },
 
     csp: {

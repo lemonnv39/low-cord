@@ -57,4 +57,11 @@ export const enum IpcEvents {
     SUPPORTS_WINDOWS_MATERIAL = "VencordSupportsWindowsMaterial",
     /** low-cord : mémoire + processeur utilisés par tous les processus de Discord. */
     GET_APP_METRICS = "LowCordGetAppMetrics",
+    /** low-cord : plugins perso (voir src/main/userPlugins.ts). */
+    USER_PLUGINS_BOOT = "LowCordUserPluginsBoot",
+    USER_PLUGINS_BOOT_OK = "LowCordUserPluginsBootOk",
+    USER_PLUGINS_LIST = "LowCordUserPluginsList",
+    USER_PLUGINS_IMPORT = "LowCordUserPluginsImport",
+    USER_PLUGINS_DELETE = "LowCordUserPluginsDelete",
+    USER_PLUGINS_OPEN_FOLDER = "LowCordUserPluginsOpenFolder",
 }

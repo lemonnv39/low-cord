@@ -42,6 +42,7 @@ import { NotificationData, showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
+import { loadUserPlugins } from "./lowcord/userPlugins";
 import { relaunch } from "./utils/native";
 import { checkForUpdates, update, UpdateLogger } from "./utils/updater";
 import { onceReady } from "./webpack";
@@ -173,6 +174,9 @@ async function init() {
     }
 }
 
+// low-cord : plugins perso activés par l'utilisateur, avant le gestionnaire
+// de plugins pour que leurs patches soient pris en compte.
+loadUserPlugins();
 initPluginManager();
 initStyles();
 startAllPlugins(StartAt.Init);
