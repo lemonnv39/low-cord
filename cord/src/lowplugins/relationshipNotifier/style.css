@@ -1,0 +1,226 @@
+.lc-rn-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.lc-rn-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.lc-rn-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.lc-rn-btn:hover {
+    background: var(--background-modifier-hover);
+}
+
+.lc-rn-danger {
+    border-color: var(--status-danger);
+    color: var(--status-danger);
+}
+
+.lc-rn-more {
+    align-self: center;
+    margin-top: 6px;
+}
+
+.lc-rn-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.lc-rn-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.lc-rn-chip:hover {
+    color: var(--text-normal);
+}
+
+.lc-rn-active {
+    border-color: var(--text-normal);
+    color: var(--text-normal);
+}
+
+.lc-rn-count {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.lc-rn-search {
+    padding: 7px 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 4px;
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 14px;
+    outline: none;
+}
+
+.lc-rn-search:focus {
+    border-color: var(--text-muted);
+}
+
+.lc-rn-empty {
+    padding: 24px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.lc-rn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.lc-rn-day {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lc-rn-day-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 2px;
+    background: var(--modal-background, var(--background-primary));
+    color: var(--text-normal);
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--background-modifier-accent);
+}
+
+.lc-rn-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 4px;
+    border-radius: 4px;
+}
+
+.lc-rn-clickable {
+    cursor: pointer;
+}
+
+.lc-rn-row:hover {
+    background: var(--background-modifier-hover);
+}
+
+.lc-rn-avatar {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.lc-rn-square {
+    border-radius: 8px;
+}
+
+.lc-rn-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--background-modifier-accent);
+    color: var(--text-normal);
+    font-weight: 600;
+}
+
+.lc-rn-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.lc-rn-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.lc-rn-name {
+    overflow: hidden;
+    color: var(--text-normal);
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-rn-muted {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-rn-action {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.lc-rn-friend,
+.lc-rn-server {
+    color: var(--status-danger);
+}
+
+.lc-rn-tag {
+    padding: 0 5px;
+    border-radius: 3px;
+    background: var(--background-modifier-accent);
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.lc-rn-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.lc-rn-time {
+    color: var(--text-normal);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-rn-id {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    cursor: copy;
+}
+
+.lc-rn-id:hover {
+    color: var(--text-normal);
+}

@@ -31,6 +31,8 @@ function LowPluginModal({ plugin, onRestartNeeded, onClose, transitionState }: P
     useLang();
     const pluginSettings = useSettings([`plugins.${plugin.name}.*`]).plugins[plugin.name];
     const defined = plugin.settings;
+    // Panneau propre au plugin (ex : journal de RelationshipNotifier)
+    const About = plugin.settingsAboutComponent;
 
     const options = defined
         ? Object.entries(defined.def).map(([key, setting]) => {
@@ -61,7 +63,7 @@ function LowPluginModal({ plugin, onRestartNeeded, onClose, transitionState }: P
         <Modal
             transitionState={transitionState}
             onClose={onClose}
-            size="md"
+            size={About ? "lg" : "md"}
             title={<Text variant="heading-lg/semibold">{plugin.name}</Text>}
             subtitle={<Forms.FormText>{pluginDescription(plugin)}</Forms.FormText>}
         >
@@ -71,6 +73,11 @@ function LowPluginModal({ plugin, onRestartNeeded, onClose, transitionState }: P
                 {options.length
                     ? <div className={cl("settings")}>{options}</div>
                     : <Forms.FormText className={cl("muted")}>{t("modal.noSettings")}</Forms.FormText>}
+                {About && (
+                    <ErrorBoundary message={t("modal.panelError")}>
+                        <About />
+                    </ErrorBoundary>
+                )}
             </div>
         </Modal>
     );

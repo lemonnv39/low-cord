@@ -107,6 +107,17 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 },
             },
         },
+        RelationshipNotifier: {
+            description: "Te prévient quand un ami te retire, qu'une demande d'ami est annulée ou que tu perds un serveur / groupe. Journal daté dans les réglages",
+            settings: {
+                friends: { name: "Amis", description: "Pop-up quand un ami te retire (ou te bloque)" },
+                friendRequestCancels: { name: "Demandes d'ami", description: "Pop-up quand une demande d'ami reçue est annulée" },
+                servers: { name: "Serveurs", description: "Pop-up quand tu n'es plus sur un serveur" },
+                groups: { name: "Groupes", description: "Pop-up quand tu es retiré d'un groupe" },
+                offlineRemovals: { name: "Pendant ton absence", description: "Au démarrage, signaler ce qui s'est passé pendant que tu étais hors ligne" },
+                notices: { name: "Bandeau en plus", description: "Afficher aussi un bandeau en haut de Discord (pour ne rien rater)" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
