@@ -62,7 +62,7 @@ const realFiles = {
 const pluginsDir = resolve("src/lowplugins");
 const pluginNames = readdirSync(pluginsDir).filter(n => !n.startsWith("."));
 // Plugins du cœur propres à low-cord : leurs patches sont vérifiés aussi.
-const CORE_PLUGINS = [resolve("src/plugins/_core/lowcordOptimizer.ts").replaceAll("\\", "/")];
+const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
 const entry = `
 export { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 ${pluginNames.map((n, i) => `import p${i} from "@lowplugins/${n}"; export const plugin_${i} = p${i};`).join("\n")}
@@ -123,7 +123,12 @@ const plugins = Object.keys(bundle).filter(k => k.startsWith("plugin_")).map(k =
 const modules = new Map();
 for (const f of readdirSync(cacheDir)) {
     if (!f.startsWith("f_")) continue;
-    const src = readFileSync(join(cacheDir, f)).toString("utf8");
+    let src;
+    try {
+        src = readFileSync(join(cacheDir, f)).toString("utf8");
+    } catch {
+        continue; // fichier supprimé par Discord pendant la lecture
+    }
     if (!src.includes("(e,t,n){") || src.length < 100_000) continue;
     let ast;
     try {
