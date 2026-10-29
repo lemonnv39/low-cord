@@ -1,4 +1,4 @@
-// Vencord 26ba13d
+// Vencord e355886
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
