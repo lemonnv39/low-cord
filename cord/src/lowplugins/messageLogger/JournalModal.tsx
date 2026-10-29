@@ -59,6 +59,8 @@ export function formatBytes(n: number) {
 }
 
 const isImage = (a: LogAttachment) => a.contentType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(a.filename);
+/** Taille max lue dans la fenêtre (au-delà : ouverture dans le lecteur du PC). */
+const MAX_INLINE = 40 * 1024 * 1024;
 const isVideo = (a: LogAttachment) => a.contentType?.startsWith("video/") || /\.(mp4|webm|mov|mkv)$/i.test(a.filename);
 
 function Avatar({ src, fallback, square }: { src?: string; fallback: string; square?: boolean; }) {
@@ -136,7 +138,7 @@ function Attachment({ a, rel }: { a: LogAttachment; rel?: string; }) {
                 {rel
                     ? (
                         <>
-                            {video && !playVideo && <button className={cl("link")} onClick={() => setPlayVideo(true)}>{t("ml.j.play")}</button>}
+                            {video && !playVideo && a.size <= MAX_INLINE && <button className={cl("link")} onClick={() => setPlayVideo(true)}>{t("ml.j.play")}</button>}
                             <button className={cl("link")} onClick={() => Native?.openMedia(rel)}>{t("ml.j.open")}</button>
                             <button className={cl("link")} onClick={() => Native?.showMedia(rel)}>{t("ml.j.show")}</button>
                         </>
@@ -319,7 +321,7 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
     );
 
     return (
-        <Modal {...modalProps} size="lg" title={t("ml.j.title")} subtitle={t("ml.j.subtitle")}>
+        <Modal {...modalProps} size="xl" title={t("ml.j.title")} subtitle={t("ml.j.subtitle")}>
             <div className={cl("root")}>
                 <aside className={cl("side")}>
                     <button className={cl("conv", !channelId && "conv-active")} onClick={() => setChannelId(undefined)}>

@@ -114,7 +114,8 @@ const settings = definePluginSettings({
     maxMediaMB: {
         type: OptionType.NUMBER,
         description: "Maximum size of an archived file (MB)",
-        default: 100,
+        // 500 Mo : la taille max d'un envoi Discord, donc tout est archivé par défaut.
+        default: 500,
         onChange: () => configureNative(),
     },
     snapshotDays: {

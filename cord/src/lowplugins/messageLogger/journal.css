@@ -1,14 +1,16 @@
 /* ── Journal des messages (low-cord) ──────────────────────────────────── */
 .vc-mlj-root {
     display: flex;
+    width: 100%;
     height: min(72vh, 760px);
-    margin: 0 -16px -16px;
-    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    overflow: hidden;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
 }
 
 .vc-mlj-side {
     flex: none;
-    width: 250px;
+    width: 230px;
     padding: 8px;
     overflow-y: auto;
     border-right: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
@@ -145,8 +147,10 @@
     background: var(--border-subtle, rgb(255 255 255 / 10%));
 }
 
+/* Recherche sur sa propre ligne : jamais coincée entre les filtres. */
 .vc-mlj-search {
-    width: 220px;
+    flex: 1 1 100%;
+    min-width: 0;
     padding: 6px 10px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
     border-radius: 6px;
@@ -195,7 +199,7 @@
 .vc-mlj-list {
     flex: 1;
     padding: 0 14px 14px;
-    overflow-y: auto;
+    overflow: hidden auto;
 }
 
 .vc-mlj-empty {
@@ -358,7 +362,8 @@
 }
 
 .vc-mlj-file {
-    max-width: 320px;
+    max-width: min(320px, 100%);
+    min-width: 0;
     padding: 6px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
     border-radius: 8px;

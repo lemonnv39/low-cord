@@ -18,8 +18,10 @@
 
 import { DATA_DIR } from "@main/utils/constants";
 import { IpcMainInvokeEvent, shell } from "electron";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { join, resolve, sep } from "path";
+import { Readable, Transform } from "stream";
+import { pipeline } from "stream/promises";
 
 import type { ConversationSummary, LogEvent, LogQuery, LogQueryResult, LogStats, MediaJob, MessageSnapshot } from "./types";
 
@@ -35,7 +37,7 @@ const MAX_SNAPSHOTS = 100_000;
 const MAX_READ_BYTES = 40 * 1024 * 1024;
 
 let snapshotDays = 30;
-let maxMediaBytes = 100 * 1024 * 1024;
+let maxMediaBytes = 500 * 1024 * 1024;
 
 const log = (...a: any[]) => console.log("[low-cord MessageLogger]", ...a);
 const ensure = (dir: string) => mkdirSync(dir, { recursive: true });
@@ -276,21 +278,30 @@ async function download(job: MediaJob, attempt = 0): Promise<void> {
     const part = `${final}.part`;
 
     try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(180_000) });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Gros fichiers (vidéos jusqu'à 500 Mo) : écrits sur le disque au fil
+        // du téléchargement, jamais gardés en entier en mémoire.
+        const res = await fetch(url, { signal: AbortSignal.timeout(30 * 60_000) });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
         const length = Number(res.headers.get("content-length") ?? 0);
         if (length > maxMediaBytes) return;
-        const data = Buffer.from(await res.arrayBuffer());
-        if (data.length > maxMediaBytes) return;
+
+        let bytes = 0;
+        const limit = new Transform({
+            transform(chunk, _enc, done) {
+                bytes += chunk.length;
+                done(bytes > maxMediaBytes ? new Error("too-big") : null, chunk);
+            }
+        });
         ensure(dir);
-        writeFileSync(part, data);
+        await pipeline(Readable.fromWeb(res.body as any), limit, createWriteStream(part));
         renameSync(part, final);
-        mediaIndex().set(a.id, { rel: `${channelId}/${a.id}-${safeName(a.filename)}`, size: data.length });
+        mediaIndex().set(a.id, { rel: `${channelId}/${a.id}-${safeName(a.filename)}`, size: bytes });
     } catch (e) {
         try { if (existsSync(part)) unlinkSync(part); } catch { /* rien */ }
-        // 404 / 403 : le fichier n'existe plus, inutile d'insister.
+        // 404 / 403 : le fichier n'existe plus ; trop gros : inutile d'insister.
         const status = /HTTP (\d+)/.exec(String(e))?.[1];
-        if (attempt < 2 && status !== "404" && status !== "403") {
+        const tooBig = String(e).includes("too-big");
+        if (attempt < 2 && !tooBig && status !== "404" && status !== "403") {
             await new Promise(r => setTimeout(r, 4000 * (attempt + 1)));
             return download(job, attempt + 1);
         }
