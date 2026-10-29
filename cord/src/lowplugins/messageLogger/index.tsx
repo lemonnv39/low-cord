@@ -378,24 +378,15 @@ const patchChannelContextMenu: NavContextMenuPatchCallback = (children, props) =
     const user = props?.user;
     const group = findGroupChildrenByChildId("mark-channel-read", children) ?? children;
 
-    // Journal : du salon / MP, ou de la personne.
-    if (channel?.id) {
+    // Un seul accès au journal : la conversation si on en a une (MP, salon),
+    // sinon les messages de la personne.
+    if (channel?.id || user?.id) {
         group.push(
             <Menu.MenuItem
-                id="vc-ml-open-journal-channel"
-                label={t("ml.journalOfChannel")}
+                id="vc-ml-open-journal"
+                label={t("ml.journal")}
                 leadingAccessory={{ type: "icon", icon: LogIcon }}
-                action={() => openJournal({ channelId: channel.id })}
-            />
-        );
-    }
-    if (user?.id) {
-        group.push(
-            <Menu.MenuItem
-                id="vc-ml-open-journal-user"
-                label={t("ml.journalOfUser")}
-                leadingAccessory={{ type: "icon", icon: LogIcon }}
-                action={() => openJournal({ authorId: user.id })}
+                action={() => openJournal(channel?.id ? { channelId: channel.id } : { authorId: user.id })}
             />
         );
     }
