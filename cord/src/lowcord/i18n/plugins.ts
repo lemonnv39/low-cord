@@ -89,6 +89,24 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 showModView: { name: "Vue modération", description: "Afficher « vue modération » sur les membres de tous les serveurs" },
             },
         },
+        UserVoiceShow: {
+            description: "Affiche une icône quand un utilisateur est en vocal (salon, serveur, muet / sourd / live / caméra, nombre de connectés)",
+            settings: {
+                showInUserProfileModal: { name: "Dans les profils", description: "Afficher l'indicateur à côté du nom dans le profil" },
+                showInMemberList: { name: "Dans les listes", description: "Afficher l'indicateur dans la liste des membres, des MP et des amis" },
+                showInMessages: { name: "Dans les messages", description: "Afficher l'indicateur à côté du nom dans les messages" },
+            },
+        },
+        FollowUser: {
+            description: "Suit un utilisateur en vocal : quand il change de salon, tu le rejoins. Ajoute aussi le faux muet / faux sourd",
+            settings: {
+                inactivityMinutes: {
+                    name: "Arrêt automatique",
+                    description: "Arrêter le suivi après cette durée sans activité vocale de l'utilisateur suivi",
+                    options: { "5": "5 minutes", "15": "15 minutes", "30": "30 minutes", "60": "1 heure", "180": "3 heures", "0": "Jamais" },
+                },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
