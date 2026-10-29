@@ -22,11 +22,11 @@ import "./settings";
 
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
-import { BrowserWindow, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
 import monacoHtml from "file://monacoWin.html?minify&base64";
 import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile } from "fs/promises";
-import { release } from "os";
+import { cpus, release } from "os";
 import { join } from "path";
 
 import { registerCspIpcHandlers } from "./csp/manager";
@@ -179,6 +179,20 @@ if (IS_DISCORD_DESKTOP) {
         e.returnValue = readFileSync(join(__dirname, "renderer.js"), "utf-8");
     });
 }
+
+// low-cord — consommation réelle de Discord (tous ses processus réunis), pour
+// la jauge de la section Optimisation. Mémoire : octets privés (comme le
+// gestionnaire des tâches) quand Windows les fournit. Processeur : part de la
+// machine entière, depuis l'appel précédent.
+ipcMain.handle(IpcEvents.GET_APP_METRICS, () => {
+    let memoryKB = 0;
+    let cpu = 0;
+    for (const m of app.getAppMetrics()) {
+        memoryKB += m.memory.privateBytes ?? m.memory.workingSetSize;
+        cpu += m.cpu.percentCPUUsage;
+    }
+    return { memoryKB, cpuPercent: cpu / Math.max(cpus().length, 1) };
+});
 
 ipcMain.on(IpcEvents.SUPPORTS_WINDOWS_MATERIAL, e => {
     e.returnValue = process.platform === "win32" && Number(release().split(".")[2]) >= 22621;

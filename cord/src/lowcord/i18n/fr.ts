@@ -255,4 +255,22 @@ export const fr = {
     "rn.log.action.request": "A annulé sa demande d'ami",
     "rn.log.action.server": "Plus membre du serveur",
     "rn.log.action.group": "Retiré du groupe",
+
+    // Onglet low-cord — Optimisation
+    "opt.title": "Optimisation",
+    "opt.hint": "Allège Discord sans toucher aux appels, au son, à la vidéo ni aux messages.",
+    "opt.mode": "Mode optimisé",
+    "opt.modeDesc": "Active d'un coup les deux réglages recommandés ci-dessous.",
+    "opt.animations": "Animations au survol",
+    "opt.animations.desc": "Les GIF, emojis et stickers animés restent figés et s'animent quand ta souris passe dessus. Ne change rien sur ton téléphone.",
+    "opt.gameMode": "Mode jeu",
+    "opt.gameMode.desc": "Pendant que tu joues, Discord en arrière-plan coupe ses animations et dessine 10 images/s au lieu de 60. Tout revient dès que tu retournes sur Discord.",
+    "opt.reducedMotion": "Interface sans animations",
+    "opt.reducedMotion.desc": "Retire les fondus et glissements de l'interface (réglage « Animations réduites » de Discord).",
+    "opt.gain.gpu": "carte graphique",
+    "opt.gain.game": "FPS en jeu",
+    "opt.gain.cpu": "processeur",
+    "opt.extra": "optionnel",
+    "opt.usage": "Discord en ce moment : {mb} Mo · {cpu} % du processeur",
+    "opt.alreadyOn": "Déjà actif : blocage des statistiques envoyées à Discord.",
 } as const;

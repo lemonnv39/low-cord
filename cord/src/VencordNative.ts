@@ -80,6 +80,8 @@ export default {
         getVersions: () => process.versions as Partial<NodeJS.ProcessVersions>,
         supportsWindowsMaterial: () => sendSync<boolean>(IpcEvents.SUPPORTS_WINDOWS_MATERIAL),
         openExternal: (url: string) => invoke<void>(IpcEvents.OPEN_EXTERNAL, url),
+        /** low-cord : mémoire (Ko) et processeur (% de la machine) utilisés par Discord. */
+        getAppMetrics: () => invoke<{ memoryKB: number; cpuPercent: number; }>(IpcEvents.GET_APP_METRICS),
         getRendererCss: () => invoke<string>(IpcEvents.GET_RENDERER_CSS),
         onRendererCssUpdate: (cb: (newCss: string) => void) => {
             if (!IS_DEV) return;

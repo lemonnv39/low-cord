@@ -55,4 +55,6 @@ export const enum IpcEvents {
     PRELOAD_GET_RENDERER_JS = "VencordPreloadGetRendererJs",
 
     SUPPORTS_WINDOWS_MATERIAL = "VencordSupportsWindowsMaterial",
+    /** low-cord : mémoire + processeur utilisés par tous les processus de Discord. */
+    GET_APP_METRICS = "LowCordGetAppMetrics",
 }

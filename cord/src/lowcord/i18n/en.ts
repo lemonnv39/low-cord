@@ -251,4 +251,22 @@ export const en = {
     "rn.log.action.request": "Cancelled their friend request",
     "rn.log.action.server": "No longer a member of the server",
     "rn.log.action.group": "Removed from the group",
+
+    // Onglet low-cord — Optimisation
+    "opt.title": "Optimization",
+    "opt.hint": "Makes Discord lighter without touching calls, sound, video or messages.",
+    "opt.mode": "Optimized mode",
+    "opt.modeDesc": "Turns on both recommended settings below at once.",
+    "opt.animations": "Animate on hover",
+    "opt.animations.desc": "Animated GIFs, emojis and stickers stay still and play when your mouse is over them. Nothing changes on your phone.",
+    "opt.gameMode": "Game mode",
+    "opt.gameMode.desc": "While you play, Discord in the background stops its animations and draws 10 frames per second instead of 60. Everything comes back as soon as you return to Discord.",
+    "opt.reducedMotion": "Interface without animations",
+    "opt.reducedMotion.desc": "Removes fades and slides in the interface (Discord's “Reduced motion” setting).",
+    "opt.gain.gpu": "graphics card",
+    "opt.gain.game": "in-game FPS",
+    "opt.gain.cpu": "processor",
+    "opt.extra": "optional",
+    "opt.usage": "Discord right now: {mb} MB · {cpu} % of the processor",
+    "opt.alreadyOn": "Already on: blocking of usage statistics sent to Discord.",
 } satisfies Record<keyof typeof fr, string>;

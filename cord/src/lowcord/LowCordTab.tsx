@@ -22,6 +22,7 @@ import gitHash from "~git-hash";
 import { Banner } from "./Banner";
 import { LOWCORD_REPO_URL } from "./constants";
 import { LANGS, setLang, t, useLang } from "./i18n";
+import { OptimizeSection } from "./OptimizeSection";
 
 const cl = classNameFactory("lc-");
 
@@ -61,6 +62,12 @@ function LowCordSettings() {
                 </Forms.FormText>
                 <LanguagePicker />
             </section>
+
+            <Divider className={Margins.top16} />
+
+            <div className={Margins.top16}>
+                <OptimizeSection />
+            </div>
 
             <Divider className={Margins.top16} />
 
