@@ -8,6 +8,9 @@
  */
 
 pub const BUILD_BASE_URL: &str = "https://raw.githubusercontent.com/lemonnv39/low-cord/builds";
+/// Fichiers d'une build précise (adresse figée par le SHA : jamais servie en
+/// version périmée par le cache de GitHub, contrairement à la branche).
+pub const RAW_REPO_URL: &str = "https://raw.githubusercontent.com/lemonnv39/low-cord";
 pub const COMMITS_API_URL: &str = "https://api.github.com/repos/lemonnv39/low-cord/commits/builds";
 pub const RELEASES_API: &str = "https://api.github.com/repos/lemonnv39/low-cord/releases/latest";
 

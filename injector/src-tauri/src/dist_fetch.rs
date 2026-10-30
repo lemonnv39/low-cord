@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::config::{BUILD_BASE_URL, COMMITS_API_URL, USER_AGENT};
+use crate::config::{BUILD_BASE_URL, COMMITS_API_URL, RAW_REPO_URL, USER_AGENT};
 use crate::log::{self as ilog, Kind};
 const FILES: &[&str] = &["patcher.js", "preload.js", "renderer.js", "renderer.css"];
 
@@ -109,8 +109,8 @@ async fn fetch_latest_sha(client: &reqwest::Client) -> Result<String, String> {
     Ok(commit.sha)
 }
 
-async fn download_file(client: &reqwest::Client, filename: &str, dest_dir: &PathBuf) -> Result<(), String> {
-    let url = format!("{BUILD_BASE_URL}/{filename}");
+async fn download_file(client: &reqwest::Client, base: &str, filename: &str, dest_dir: &PathBuf) -> Result<(), String> {
+    let url = format!("{base}/{filename}");
     let resp = client
         .get(&url)
         .send()
@@ -148,8 +148,16 @@ pub async fn download_latest(app: &AppHandle) -> Result<PathBuf, String> {
         None => ilog::emit(Kind::Warn, "version de la build inconnue (API GitHub indisponible)"),
     }
 
+    // Par SHA quand on le connaît : l'adresse de la branche passe par un cache
+    // GitHub (~5 min) qui pouvait renvoyer les ANCIENS fichiers juste après une
+    // publication, alors que le SHA enregistré était déjà le nouveau — la build
+    // installée paraissait « à jour » sans l'être.
+    let base = match &sha {
+        Some(sha) => format!("{RAW_REPO_URL}/{sha}"),
+        None => BUILD_BASE_URL.to_string(),
+    };
     for filename in FILES {
-        download_file(&client, filename, &dir).await?;
+        download_file(&client, &base, filename, &dir).await?;
     }
 
     if let Some(sha) = sha {
