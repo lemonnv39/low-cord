@@ -173,10 +173,25 @@ export function eventFromSnapshot(type: LogEvent["type"], s: MessageSnapshot, ex
 }
 
 // ── Files d'envoi vers le disque ─────────────────────────────────────────────
-const events: LogEvent[] = [];
-const snaps: MessageSnapshot[] = [];
-const media: MediaJob[] = [];
+// Chaque élément garde le compte connecté AU MOMENT de la capture : chaque
+// compte a son propre journal (le dossier low-cord est commun à Discord,
+// Canary et PTB, et à tous les comptes).
+export const currentAccount = () => UserStore.getCurrentUser()?.id ?? null;
+
+type Tagged<T> = { account: string; item: T; };
+const events: Tagged<LogEvent>[] = [];
+const snaps: Tagged<MessageSnapshot>[] = [];
+const media: Tagged<MediaJob>[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
+
+function byAccount<T>(list: Tagged<T>[]) {
+    const map = new Map<string, T[]>();
+    for (const { account, item } of list.splice(0)) {
+        if (!map.has(account)) map.set(account, []);
+        map.get(account)!.push(item);
+    }
+    return map;
+}
 
 function schedule(soon = false) {
     if (timer && !soon) return;
@@ -187,9 +202,9 @@ function schedule(soon = false) {
 export function flush() {
     timer = null;
     if (!Native) return;
-    if (events.length) Native.appendEvents(events.splice(0)).catch(e => logger.error("Écriture du journal impossible", e));
-    if (snaps.length) Native.saveSnapshots(snaps.splice(0)).catch(e => logger.error("Copie des MP impossible", e));
-    if (media.length) Native.archiveMedia(media.splice(0)).catch(e => logger.error("Archivage des médias impossible", e));
+    for (const [account, list] of byAccount(events)) Native.appendEvents(account, list).catch(e => logger.error("Écriture du journal impossible", e));
+    for (const [account, list] of byAccount(snaps)) Native.saveSnapshots(account, list).catch(e => logger.error("Copie des MP impossible", e));
+    for (const [account, list] of byAccount(media)) Native.archiveMedia(account, list).catch(e => logger.error("Archivage des médias impossible", e));
 }
 
 export function pushEvent(ev: LogEvent) {
@@ -199,17 +214,22 @@ export function pushEvent(ev: LogEvent) {
         : ev.type === "edit"
             ? `e:${ev.messageId}:${ev.at}`
             : `a:${ev.messageId}:${ev.attachments.map(a => a.id).join(",")}`;
-    events.push(ev);
+    const account = currentAccount();
+    if (!account) return;
+    events.push({ account, item: ev });
     schedule(events.length >= 25);
 }
 
 export function pushSnapshot(s: MessageSnapshot | null) {
-    if (!s) return;
-    snaps.push(s);
+    const account = currentAccount();
+    if (!s || !account) return;
+    snaps.push({ account, item: s });
     schedule(snaps.length >= 100);
 }
 
 export function pushMedia(channelId: string, messageId: string, attachments: LogAttachment[]) {
-    for (const attachment of attachments) media.push({ channelId, messageId, attachment });
+    const account = currentAccount();
+    if (!account) return;
+    for (const attachment of attachments) media.push({ account, item: { channelId, messageId, attachment } });
     if (attachments.length) schedule();
 }

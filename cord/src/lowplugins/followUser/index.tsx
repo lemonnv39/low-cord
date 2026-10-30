@@ -24,7 +24,8 @@ const logger = new Logger("FollowUser");
 
 const ChannelActions = findByPropsLazy("selectVoiceChannel", "selectChannel");
 
-const DS_KEY = "followuser-v2";
+// Un suivi par compte (plusieurs comptes peuvent partager le même Discord).
+const dsKey = () => `followuser-v2-${UserStore.getCurrentUser()?.id ?? "?"}`;
 
 const settings = definePluginSettings({
     inactivityMinutes: {
@@ -61,7 +62,7 @@ function useFollowState() {
 }
 
 function persist() {
-    return DataStore.set(DS_KEY, followedId ? { id: followedId, name: followedName } : null)
+    return DataStore.set(dsKey(), followedId ? { id: followedId, name: followedName } : null)
         .catch(e => logger.error("Sauvegarde impossible", e));
 }
 
@@ -198,6 +199,33 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
     );
 };
 
+/** Reprend le suivi enregistré pour le compte connecté (au démarrage ou après un changement de compte). */
+async function restoreFollow() {
+    if (!UserStore.getCurrentUser()) return;
+    clearInactivityTimer();
+    followedId = null;
+    followedName = "";
+    followedChannel = null;
+
+    let saved = await DataStore.get<{ id: string; name: string; } | null>(dsKey()).catch(() => null);
+    // Ancienne version : un seul suivi pour tous les comptes. Repris une fois, puis effacé.
+    if (saved === undefined) {
+        const old = await DataStore.get<{ id: string; name: string; } | null>("followuser-v2").catch(() => null);
+        if (old?.id) {
+            saved = old;
+            await DataStore.set(dsKey(), old).catch(() => null);
+            await DataStore.del("followuser-v2").catch(() => null);
+        }
+    }
+    if (saved?.id) {
+        followedId = saved.id;
+        followedName = saved.name || saved.id;
+        followedChannel = getChannelOf(saved.id);
+        resetInactivityTimer();
+    }
+    notifyAll();
+}
+
 // ── Plugin ───────────────────────────────────────────────────────────────────
 export default definePlugin({
     name: "FollowUser",
@@ -213,6 +241,8 @@ export default definePlugin({
     },
 
     flux: {
+        // Connexion (ou changement de compte) : le suivi propre à ce compte.
+        CONNECTION_OPEN: () => { void restoreFollow(); },
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates?: { userId: string; channelId?: string | null; }[]; }) {
             if (!followedId || !Array.isArray(voiceStates)) return;
             for (const state of voiceStates) {
@@ -230,16 +260,9 @@ export default definePlugin({
         },
     },
 
-    async start() {
+    start() {
         addHeaderBarButton("FollowUser", FollowHeaderButton, 5);
-        const saved = await DataStore.get<{ id: string; name: string; } | null>(DS_KEY).catch(() => null);
-        if (saved?.id) {
-            followedId = saved.id;
-            followedName = saved.name || saved.id;
-            followedChannel = getChannelOf(saved.id);
-            resetInactivityTimer();
-            notifyAll();
-        }
+        void restoreFollow();
     },
 
     stop() {

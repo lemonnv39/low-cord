@@ -66,24 +66,32 @@ const listeners = new Set<() => void>();
 export const subscribe = (fn: () => void) => (listeners.add(fn), () => { listeners.delete(fn); });
 const emit = () => listeners.forEach(fn => fn());
 
-const HISTORY_KEY = "lowcord-cleaner-history";
+// Un historique par compte (plusieurs comptes peuvent partager le même Discord).
+let historyAccount: string | null = null;
+const historyKey = (account: string) => `lowcord-cleaner-history-${account}`;
 const MAX_HISTORY = 100;
 
 export async function loadHistory() {
+    const account = UserStore.getCurrentUser()?.id;
+    if (!account || account === historyAccount) return;
+    historyAccount = account;
     try {
-        const saved = await DataStore.get<RunRecord[]>(HISTORY_KEY);
+        const saved = await DataStore.get<RunRecord[]>(historyKey(account));
+        // Compte changé : on ne garde que le nettoyage en cours éventuel.
+        state.history = state.history.filter(r => r.status === "running");
         if (Array.isArray(saved)) {
             // Un nettoyage resté « en cours » vient d'une fermeture de Discord.
-            state.history = saved.map(r => (r.status === "running" ? { ...r, status: "stopped" as const } : r));
-            emit();
+            state.history.push(...saved.map(r => (r.status === "running" ? { ...r, status: "stopped" as const } : r)));
         }
+        emit();
     } catch (e) {
         logger.error("Historique illisible", e);
     }
 }
 
 function saveHistory() {
-    DataStore.set(HISTORY_KEY, state.history.slice(0, MAX_HISTORY)).catch(e => logger.error(e));
+    if (!historyAccount) return;
+    DataStore.set(historyKey(historyAccount), state.history.slice(0, MAX_HISTORY)).catch(e => logger.error(e));
 }
 
 export function clearHistory() {

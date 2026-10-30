@@ -35,7 +35,7 @@ import { Message, MessageAttachment } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
 import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
-import { attachmentsOf, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, snapshotOf } from "./capture";
+import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, snapshotOf } from "./capture";
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
 import { openHistoryModal } from "./HistoryModal";
@@ -165,6 +165,22 @@ function addDeleteStyle() {
     }
 }
 
+/**
+ * Anciens logs (avant la séparation par compte) : le compte connecté reprend
+ * tout ce qui concerne les conversations auxquelles il a accès.
+ */
+async function claimLegacyLogs() {
+    const account = currentAccount();
+    if (!account || !Native) return;
+    try {
+        const channels = await Native.legacyChannels();
+        const mine = channels.filter(id => ChannelStore.getChannel(id) != null);
+        if (mine.length) await Native.claimLegacy(account, mine);
+    } catch (e) {
+        logger.error("Répartition des anciens logs impossible", e);
+    }
+}
+
 function configureNative() {
     Native?.configure({ snapshotDays: settings.store.snapshotDays, maxMediaMB: settings.store.maxMediaMB }).catch(() => null);
 }
@@ -274,11 +290,12 @@ function capture(msg: any, guildIdHint?: string | null) {
 /** Suppression d'un message qui n'était pas affiché : on cherche sa copie. */
 async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
     const missing = ids.filter(id => !handledDeletes.has(id));
-    if (!missing.length || !settings.store.journal || !isPrivate(channelId) || !Native) return;
+    const account = currentAccount();
+    if (!missing.length || !account || !settings.store.journal || !isPrivate(channelId) || !Native) return;
     missing.forEach(id => remember(handledDeletes, id));
 
     try {
-        const found = await Native.getSnapshots(missing);
+        const found = await Native.getSnapshots(account, missing);
         const byId = new Map(found.map(s => [s.messageId, s]));
         for (const id of missing) {
             const snap = byId.get(id);
@@ -299,12 +316,13 @@ async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
 
 /** Modification d'un MP qui n'était pas affiché : comparaison avec sa copie. */
 async function rescueEdit(raw: any) {
-    if (!settings.store.journal || !settings.store.logEdits || !Native) return;
+    const account = currentAccount();
+    if (!account || !settings.store.journal || !settings.store.logEdits || !Native) return;
     const at = new Date(raw.edited_timestamp).getTime();
     if (!at || handledEdits.has(`${raw.id}:${at}`)) return;
     remember(handledEdits, `${raw.id}:${at}`);
     try {
-        const [snap] = await Native.getSnapshots([raw.id]);
+        const [snap] = await Native.getSnapshots(account, [raw.id]);
         if (!snap || snap.content === raw.content) return;
         if (shouldIgnore({ author: snap.author, channel_id: raw.channel_id }, true)) return;
         pushEvent(eventFromSnapshot("edit", snap, { key: `e:${raw.id}:${at}`, at, newContent: raw.content, attachments: [] }));
@@ -435,6 +453,7 @@ export default definePlugin({
     start() {
         addDeleteStyle();
         configureNative();
+        void claimLegacyLogs();
         // Fermeture de Discord : on écrit ce qui attend encore (au plus 1 s).
         window.addEventListener("beforeunload", flush);
     },
@@ -447,6 +466,12 @@ export default definePlugin({
     },
 
     flux: {
+        // Connexion (ou changement de compte) : on écrit ce qui attend, puis
+        // le compte reprend ses anciens logs.
+        CONNECTION_OPEN() {
+            flush();
+            void claimLegacyLogs();
+        },
         MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic?: boolean; }) {
             if (optimistic) return;
             capture(message, message?.guild_id);

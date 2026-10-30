@@ -18,10 +18,12 @@ import { copyWithToast, openUserProfile } from "@utils/discord";
 import { RenderModalProps } from "@vencord/discord-types";
 import { Alerts, Modal, openModal, Parser, showToast, Text, useEffect, useMemo, useRef, UserStore, useState } from "@webpack/common";
 
-import { Native } from "./capture";
+import { currentAccount, Native } from "./capture";
 import type { ConversationSummary, LogAttachment, LogEvent, LogEventType, LogQueryResult, LogStats } from "./types";
 
 const cl = classNameFactory("vc-mlj-");
+/** Compte connecté : chaque compte a son propre journal. */
+const acc = () => currentAccount() ?? "";
 const PAGE = 60;
 
 type Scope = "all" | "dm" | "guild";
@@ -92,7 +94,7 @@ function useBlob(rel: string | undefined, contentType: string | undefined, wante
     useEffect(() => {
         if (!rel || !wanted || url || !Native) return;
         let alive = true;
-        Native.readMedia(rel).then(data => {
+        Native.readMedia(acc(), rel).then(data => {
             if (!data || !alive) return;
             const blob = URL.createObjectURL(new Blob([data], { type: contentType || "application/octet-stream" }));
             blobs.set(rel, blob);
@@ -128,7 +130,7 @@ function Attachment({ a, rel }: { a: LogAttachment; rel?: string; }) {
     return (
         <div className={cl("file")} ref={ref}>
             {image && rel && (url
-                ? <img className={cl("thumb")} src={url} alt={a.filename} onClick={() => Native?.openMedia(rel)} title={t("ml.j.open")} />
+                ? <img className={cl("thumb")} src={url} alt={a.filename} onClick={() => Native?.openMedia(acc(), rel)} title={t("ml.j.open")} />
                 : <div className={cl("thumb", "thumb-loading")} />)}
             {video && rel && playVideo && url && <video className={cl("thumb")} src={url} controls autoPlay />}
 
@@ -139,8 +141,8 @@ function Attachment({ a, rel }: { a: LogAttachment; rel?: string; }) {
                     ? (
                         <>
                             {video && !playVideo && a.size <= MAX_INLINE && <button className={cl("link")} onClick={() => setPlayVideo(true)}>{t("ml.j.play")}</button>}
-                            <button className={cl("link")} onClick={() => Native?.openMedia(rel)}>{t("ml.j.open")}</button>
-                            <button className={cl("link")} onClick={() => Native?.showMedia(rel)}>{t("ml.j.show")}</button>
+                            <button className={cl("link")} onClick={() => Native?.openMedia(acc(), rel)}>{t("ml.j.open")}</button>
+                            <button className={cl("link")} onClick={() => Native?.showMedia(acc(), rel)}>{t("ml.j.show")}</button>
                         </>
                     )
                     : <span className={cl("badge", "badge-warn")} title={t("ml.j.notArchivedHint")}>{t("ml.j.notArchived")}</span>}
@@ -254,13 +256,13 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
     }, [search]);
 
     useEffect(() => {
-        Native?.conversations(selfId).then(setConvs).catch(() => setConvs([]));
+        Native?.conversations(acc()).then(setConvs).catch(() => setConvs([]));
     }, [refresh]);
 
     const kind = scope === "all" ? undefined : scope;
     useEffect(() => {
         let alive = true;
-        Native?.query({ channelId, authorId, type, kind, search: debounced, offset: 0, limit: PAGE })
+        Native?.query(acc(), { channelId, authorId, type, kind, search: debounced, offset: 0, limit: PAGE })
             .then(r => alive && setResult(r))
             .catch(() => alive && setResult({ items: [], total: 0, media: {} }));
         return () => { alive = false; };
@@ -269,7 +271,7 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
     function loadMore() {
         if (!result || !Native) return;
         setLoadingMore(true);
-        Native.query({ channelId, authorId, type, kind, search: debounced, offset: result.items.length, limit: PAGE })
+        Native.query(acc(), { channelId, authorId, type, kind, search: debounced, offset: result.items.length, limit: PAGE })
             .then(r => setResult(prev => prev && { items: [...prev.items, ...r.items], total: r.total, media: { ...prev.media, ...r.media } }))
             .finally(() => setLoadingMore(false));
     }
@@ -304,7 +306,7 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
             cancelText: t("ml.j.cancel"),
             confirmColor: "red",
             async onConfirm() {
-                await Native?.clearConversation(channelId);
+                await Native?.clearConversation(acc(), channelId);
                 releaseBlobs();
                 setChannelId(undefined);
                 setRefresh(n => n + 1);
@@ -396,7 +398,7 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
                     </div>
 
                     <div className={cl("footer")}>
-                        <button className={cl("link")} onClick={() => Native?.openFolder()}><FolderIcon width={14} height={14} /> {t("ml.j.openFolder")}</button>
+                        <button className={cl("link")} onClick={() => Native?.openFolder(acc())}><FolderIcon width={14} height={14} /> {t("ml.j.openFolder")}</button>
                         {current && <button className={cl("link", "link-danger")} onClick={clearCurrent}><DeleteIcon width={14} height={14} /> {t("ml.j.clearConv")}</button>}
                     </div>
                 </section>
@@ -421,7 +423,7 @@ export function JournalPanel() {
     useEffect(() => {
         if (!Native) return;
         let alive = true;
-        const load = () => Native!.stats().then(s => alive && setStats(s)).catch(() => null);
+        const load = () => Native!.stats(acc()).then(s => alive && setStats(s)).catch(() => null);
         load();
         const timer = setInterval(load, 3000);
         return () => { alive = false; clearInterval(timer); };
@@ -435,8 +437,8 @@ export function JournalPanel() {
             cancelText: t("ml.j.cancel"),
             confirmColor: "red",
             async onConfirm() {
-                await Native?.clearAll();
-                setStats(await Native!.stats());
+                await Native?.clearAll(acc());
+                setStats(await Native!.stats(acc()));
                 showToast({ text: t("ml.j.cleared"), variant: "success" });
             },
         });
@@ -457,7 +459,7 @@ export function JournalPanel() {
             {!!stats?.queue && <div className={cl("muted")}>{t("ml.j.queue", { count: stats.queue })}</div>}
             <div className={cl("panel-actions")}>
                 <button className={cl("btn", "btn-primary")} onClick={() => openJournal()}>{t("ml.j.openJournal")}</button>
-                <button className={cl("btn")} onClick={() => Native!.openFolder()}>{t("ml.j.openFolder")}</button>
+                <button className={cl("btn")} onClick={() => Native!.openFolder(acc())}>{t("ml.j.openFolder")}</button>
                 <button className={cl("btn", "btn-danger")} onClick={clearAll}>{t("ml.j.clearAll")}</button>
             </div>
         </div>

@@ -121,6 +121,11 @@ export default definePlugin({
         "message": messageMenu,
     },
 
+    flux: {
+        // Changement de compte : son propre historique.
+        CONNECTION_OPEN: () => { loadHistory(); },
+    },
+
     start() {
         setBaseDelay(settings.store.delayMs);
         loadHistory();
