@@ -28,6 +28,8 @@ export function useEngine() {
 // ── Cibles possibles ─────────────────────────────────────────────────────────
 interface Row extends Target {
     sub?: string;
+    /** autres ID qui retrouvent cette ligne à la recherche (personne, membres du groupe) */
+    alias?: string[];
 }
 
 const avatarOf = (u: any) => u?.getAvatarURL?.(undefined, 64, false) ?? (u?.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.webp?size=64` : undefined);
@@ -42,7 +44,7 @@ function privateRows(): Row[] {
             if (!userId) continue;
             const u = UserStore.getUser(userId);
             withDm.add(userId);
-            rows.push({ kind: "dm", id: c.id, name: u?.globalName || u?.username || userId, sub: u?.username ? `@${u.username}` : undefined, icon: avatarOf(u) });
+            rows.push({ kind: "dm", id: c.id, name: u?.globalName || u?.username || userId, sub: u?.username ? `@${u.username}` : undefined, icon: avatarOf(u), alias: [userId] });
         } else if (c.isMultiUserDM()) {
             const names = c.recipients.map(id => UserStore.getUser(id)?.username).filter(Boolean);
             rows.push({
@@ -51,6 +53,7 @@ function privateRows(): Row[] {
                 name: c.name || names.join(", ") || c.id,
                 sub: t("mc.groupMembers", { count: c.recipients.length + 1 }),
                 icon: c.icon ? `https://cdn.discordapp.com/channel-icons/${c.id}/${c.icon}.webp?size=64` : undefined,
+                alias: c.recipients,
             });
         }
     }
@@ -184,14 +187,32 @@ function Speed({ delay, onChange }: { delay: number; onChange(ms: number): void;
     );
 }
 
-function Picker({ rows, empty, selected, setSelected }: { rows: Row[]; empty: I18nKey; selected: Set<string>; setSelected(s: Set<string>): void; }) {
+function Picker({ rows, empty, selected, setSelected, fallback, onExtra }: {
+    rows: Row[];
+    empty: I18nKey;
+    selected: Set<string>;
+    setSelected(s: Set<string>): void;
+    /** ID inconnu tapé dans la recherche : ligne proposée à la place de « aucun résultat » */
+    fallback?(id: string): Row;
+    /** la ligne proposée a été choisie : la garder dans la liste */
+    onExtra?(row: Row): void;
+}) {
     const [search, setSearch] = useState("");
     const q = search.trim().toLowerCase();
-    const visible = q ? rows.filter(r => r.name.toLowerCase().includes(q) || r.sub?.toLowerCase().includes(q) || r.id.includes(q)) : rows;
+    // Recherche : nom, @pseudo, ID de la conversation, ID de la personne ou des membres du groupe.
+    const visible = q
+        ? rows.filter(r => r.name.toLowerCase().includes(q)
+            || r.sub?.toLowerCase().includes(q)
+            || r.id.includes(q)
+            || r.alias?.some(id => id.includes(q)))
+        : rows;
+    const extra = fallback && /^\d{15,25}$/.test(q) && !visible.length ? fallback(q) : null;
+    if (extra) visible.push(extra);
     const keyOf = (r: Row) => `${r.kind}:${r.id}`;
     const allOn = visible.length > 0 && visible.every(r => selected.has(keyOf(r)));
 
     function toggle(r: Row) {
+        if (r === extra) onExtra?.(r);
         const next = new Set(selected);
         if (next.has(keyOf(r))) next.delete(keyOf(r));
         else next.add(keyOf(r));
@@ -212,6 +233,7 @@ function Picker({ rows, empty, selected, setSelected }: { rows: Row[]; empty: I1
             </div>
             <div className={cl("list")}>
                 {!visible.length && <div className={cl("empty")}>{t(q ? "mc.noMatch" : empty)}</div>}
+                {extra && <div className={cl("hint")}>{t("mc.unknownIdHint")}</div>}
                 {visible.map(r => {
                     const on = selected.has(keyOf(r));
                     return (
@@ -289,7 +311,14 @@ function CleanerModal({ modalProps, delay, setDelay }: { modalProps: RenderModal
     const [ids, setIds] = useState("");
     const [speed, setSpeed] = useState(delay);
 
-    const priv = useMemo(privateRows, []);
+    // ID tapés à la main (personne sans MP ni amitié) : gardés pour la sélection.
+    const [extraRows, setExtraRows] = useState<Row[]>([]);
+    const priv = useMemo(() => [...extraRows, ...privateRows()], [extraRows]);
+    const userFallback = (id: string): Row => {
+        const u = UserStore.getUser(id);
+        return { kind: "user", id, name: u ? (u.globalName || u.username) : t("mc.userId", { id }), sub: t("mc.friendNoDm"), icon: avatarOf(u) };
+    };
+    const keepExtra = (row: Row) => setExtraRows(list => (list.some(r => r.id === row.id) ? list : [...list, row]));
     const servers = useMemo(serverRows, []);
 
     function changeSpeed(ms: number) {
@@ -335,7 +364,7 @@ function CleanerModal({ modalProps, delay, setDelay }: { modalProps: RenderModal
                 </div>
 
                 <div className={cl("body")}>
-                    {tab === "private" && <Picker rows={priv} empty="mc.noPrivate" selected={selected} setSelected={setSelected} />}
+                    {tab === "private" && <Picker rows={priv} empty="mc.noPrivate" selected={selected} setSelected={setSelected} fallback={userFallback} onExtra={keepExtra} />}
                     {tab === "servers" && <Picker rows={servers} empty="mc.noServers" selected={selected} setSelected={setSelected} />}
                     {tab === "channels" && (
                         <div className={cl("ids")}>

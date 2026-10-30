@@ -400,6 +400,8 @@ export const en = {
     "mc.idsLabel": "Channel, DM or group IDs",
     "mc.idsHint": "{count} valid ID(s). Separate them with commas, spaces or new lines.",
     "mc.channelId": "Channel {id}",
+    "mc.userId": "User {id}",
+    "mc.unknownIdHint": "This ID matches no DM or friend: select it to clean your DM with this person (opened if needed). For a channel, use the “Channels by ID” tab.",
     "mc.speed": "Speed",
     "mc.speed.safe": "Safe",
     "mc.speed.normal": "Normal",

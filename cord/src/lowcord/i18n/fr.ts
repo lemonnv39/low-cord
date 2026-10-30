@@ -404,6 +404,8 @@ export const fr = {
     "mc.idsLabel": "ID des salons, MP ou groupes",
     "mc.idsHint": "{count} ID valide(s). Sépare-les par des virgules, des espaces ou des retours à la ligne.",
     "mc.channelId": "Salon {id}",
+    "mc.userId": "Utilisateur {id}",
+    "mc.unknownIdHint": "Cet ID ne correspond à aucun MP ni ami : sélectionne-le pour nettoyer le MP avec cette personne (il sera ouvert au besoin). Pour un salon, utilise l'onglet « Salons par ID ».",
     "mc.speed": "Vitesse",
     "mc.speed.safe": "Prudent",
     "mc.speed.normal": "Normal",

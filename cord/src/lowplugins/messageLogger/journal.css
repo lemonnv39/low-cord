@@ -520,3 +520,32 @@
     border-color: var(--status-danger, #f23f43);
     color: var(--status-danger, #f23f43);
 }
+
+/* Barres de défilement fines, dans le style de Discord */
+.vc-mlj-side,
+.vc-mlj-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) transparent;
+}
+
+.vc-mlj-side::-webkit-scrollbar,
+.vc-mlj-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.vc-mlj-side::-webkit-scrollbar-track,
+.vc-mlj-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.vc-mlj-side::-webkit-scrollbar-thumb,
+.vc-mlj-list::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) padding-box;
+}
+
+.vc-mlj-side::-webkit-scrollbar-button,
+.vc-mlj-list::-webkit-scrollbar-button {
+    display: none;
+}

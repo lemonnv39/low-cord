@@ -144,6 +144,8 @@
     flex: 1;
     min-height: 0;
     overflow: hidden auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) transparent;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
     border-radius: 8px;
 }
@@ -465,4 +467,29 @@
     .lc-mc-progress {
         animation: none;
     }
+}
+
+.lc-mc-hint {
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Barres de défilement fines, dans le style de Discord */
+.lc-mc-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.lc-mc-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.lc-mc-list::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) padding-box;
+}
+
+.lc-mc-list::-webkit-scrollbar-button {
+    display: none;
 }
