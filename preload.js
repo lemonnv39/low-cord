@@ -1,4 +1,4 @@
-// Vencord e355886
+// Vencord 17bd480
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
