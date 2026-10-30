@@ -163,6 +163,13 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 delayMs: { name: "Pause entre deux retraits (ms)", description: "Plus bas = plus rapide ; low-cord ralentit tout seul si Discord le demande" },
             },
         },
+        WhosWatching: {
+            description: "Montre qui regarde ton live : liste au survol de l'icône et barre des spectateurs sous ton stream",
+            settings: {
+                showPanel: { name: "Barre des spectateurs", description: "Afficher les spectateurs sous le panneau de ton stream" },
+                notify: { name: "Arrivées / départs", description: "Pop-up quand quelqu'un rejoint ou quitte ton live" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {

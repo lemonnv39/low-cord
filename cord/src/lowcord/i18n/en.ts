@@ -474,4 +474,11 @@ export const en = {
     "cf.failed": "{count} failed",
     "cf.slowed": "slowed down by Discord",
     "cf.headerRunning": "Removing friends · {done} / {total}",
+
+    // WhosWatching
+    "ww.viewers": "{count} viewer(s)",
+    "ww.noViewers": "Nobody is watching yet",
+    "ww.unknown": "+{count} more",
+    "ww.joined": "{name} is watching your stream",
+    "ww.left": "{name} left your stream",
 } satisfies Record<keyof typeof fr, string>;

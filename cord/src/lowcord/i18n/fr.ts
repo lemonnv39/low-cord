@@ -478,4 +478,11 @@ export const fr = {
     "cf.failed": "{count} échec(s)",
     "cf.slowed": "ralenti par Discord",
     "cf.headerRunning": "Retrait d'amis · {done} / {total}",
+
+    // WhosWatching
+    "ww.viewers": "{count} spectateur(s)",
+    "ww.noViewers": "Personne ne regarde pour l'instant",
+    "ww.unknown": "+{count} autre(s)",
+    "ww.joined": "{name} regarde ton live",
+    "ww.left": "{name} a quitté ton live",
 } as const;

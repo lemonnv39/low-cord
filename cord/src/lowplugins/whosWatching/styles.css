@@ -1,0 +1,142 @@
+/* ── WhosWatching (low-cord) ──────────────────────────────────────────── */
+
+/* Point « en direct » */
+.lc-ww-live {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-danger, #f23f43);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-danger, #f23f43) 60%, transparent);
+    animation: lc-ww-pulse 1.8s ease-out infinite;
+}
+
+/* Barre sous le panneau du stream */
+.lc-ww-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-ww-bar-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.lc-ww-bar-title {
+    overflow: hidden;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-ww-stack {
+    display: flex;
+    flex: none;
+    align-items: center;
+}
+
+.lc-ww-face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: -6px;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid var(--background-base-lower, var(--background-secondary-alt, #232428));
+    border-radius: 50%;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    cursor: pointer;
+    transition: transform 140ms ease;
+}
+
+.lc-ww-face:first-child {
+    margin-left: 0;
+}
+
+.lc-ww-face:hover {
+    z-index: 1;
+    transform: translateY(-2px);
+}
+
+.lc-ww-face img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.lc-ww-face-more {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 10px;
+    font-weight: 700;
+    cursor: default;
+}
+
+/* Infobulle : liste des spectateurs */
+.lc-ww-tip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 160px;
+    max-width: 260px;
+}
+
+.lc-ww-tip-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.lc-ww-tip-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.lc-ww-tip-avatar {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.lc-ww-tip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-ww-tip-user,
+.lc-ww-tip-more {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes lc-ww-pulse {
+    70% { box-shadow: 0 0 0 6px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lc-ww-live {
+        animation: none;
+    }
+}
