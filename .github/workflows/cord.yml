@@ -56,6 +56,11 @@ jobs:
       - name: Lint
         run: pnpm lint && pnpm lint-styles
 
+      # Un plugin qui plante au chargement fait tomber TOUT low-cord au
+      # démarrage de Discord : on bloque la publication avant.
+      - name: Chargement des plugins low-cord
+        run: node scripts/lowcord/check-startup.mjs
+
       - name: Build (standalone, updater interne désactivé)
         env:
           VENCORD_REMOTE: ${{ github.repository }}

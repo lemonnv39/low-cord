@@ -128,14 +128,19 @@ function SpectatorsBar() {
  * spectateurs. La référence (ref) que Discord pose sur cette div est
  * transmise telle quelle.
  */
-const StreamPanelWrapper = React.forwardRef<HTMLDivElement, PropsWithChildren<Record<string, any>>>((props, ref) => (
-    <>
-        <div {...props} ref={ref}>{props.children}</div>
-        <ErrorBoundary noop>
-            <SpectatorsBar />
-        </ErrorBoundary>
-    </>
-));
+// Créé au premier affichage, jamais au chargement du fichier : à ce
+// moment-là React n'existe pas encore (tout low-cord planterait).
+let streamPanelWrapper: ComponentType<any> | null = null;
+function getStreamPanelWrapper() {
+    return streamPanelWrapper ??= React.forwardRef<HTMLDivElement, PropsWithChildren<Record<string, any>>>((props, ref) => (
+        <>
+            <div {...props} ref={ref}>{props.children}</div>
+            <ErrorBoundary noop>
+                <SpectatorsBar />
+            </ErrorBoundary>
+        </>
+    ));
+}
 
 // Icône du live avec la liste au survol. Une seule version par composant
 // d'origine : en recréer une à chaque affichage faisait recharger l'icône
@@ -211,7 +216,9 @@ export default definePlugin({
     ],
 
     wrapStreamIcon,
-    StreamPanelWrapper,
+    get StreamPanelWrapper() {
+        return getStreamPanelWrapper();
+    },
 
     start() {
         lastViewers = null;
