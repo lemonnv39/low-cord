@@ -1,4 +1,4 @@
-// Vencord 17bd480
+// Vencord e75bd81
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
