@@ -13,18 +13,16 @@
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
-import ErrorBoundary from "@components/ErrorBoundary";
+import { addHeaderBarButton, HeaderBarIcon, removeHeaderBarButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
+import { findByPropsLazy } from "@webpack";
 import { ChannelStore, Menu, PermissionsBits, PermissionStore, SelectedChannelStore, showToast, useEffect, UserStore, useState, VoiceStateStore } from "@webpack/common";
-import type { PropsWithChildren } from "react";
 
 const logger = new Logger("FollowUser");
 
 const ChannelActions = findByPropsLazy("selectVoiceChannel", "selectChannel");
-const HeaderBarIcon = findComponentByCodeLazy(".HEADER_BAR_BADGE_BOTTOM,", 'position:"bottom"');
 
 const DS_KEY = "followuser-v2";
 
@@ -208,17 +206,6 @@ export default definePlugin({
     authors: [{ name: "0ctane", id: 0n }],
     settings,
 
-    patches: [
-        // Boutons à droite de la barre du haut
-        {
-            find: '?"BACK_FORWARD_NAVIGATION":',
-            replacement: {
-                match: /(trailing:.{0,50}?)\i\.Fragment,(?=\{children:\[)/,
-                replace: "$1$self.TrailingWrapper,"
-            }
-        }
-    ],
-
     contextMenus: {
         "user-context": userContextPatch,
         "user-profile-actions": userContextPatch,
@@ -243,18 +230,8 @@ export default definePlugin({
         },
     },
 
-    TrailingWrapper({ children }: PropsWithChildren) {
-        return (
-            <>
-                {children}
-                <ErrorBoundary key="vc-follow-user" noop>
-                    <FollowHeaderButton />
-                </ErrorBoundary>
-            </>
-        );
-    },
-
     async start() {
+        addHeaderBarButton("FollowUser", FollowHeaderButton, 5);
         const saved = await DataStore.get<{ id: string; name: string; } | null>(DS_KEY).catch(() => null);
         if (saved?.id) {
             followedId = saved.id;
@@ -266,6 +243,7 @@ export default definePlugin({
     },
 
     stop() {
+        removeHeaderBarButton("FollowUser");
         clearInactivityTimer();
         followedId = null;
         followedName = "";

@@ -151,6 +151,12 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 ignoreGuilds: { name: "Serveurs ignorés", description: "ID séparés par des virgules" },
             },
         },
+        MessageCleaner: {
+            description: "Supprime tes propres messages en masse : MP, groupes, serveurs, salons. Bouton dans la barre du haut et clic droit",
+            settings: {
+                delayMs: { name: "Pause entre deux suppressions (ms)", description: "Plus bas = plus rapide. Si c'est trop rapide, Discord ralentit et low-cord s'adapte tout seul" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {

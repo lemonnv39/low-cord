@@ -62,7 +62,7 @@ const realFiles = {
 const pluginsDir = resolve("src/lowplugins");
 const pluginNames = readdirSync(pluginsDir).filter(n => !n.startsWith("."));
 // Plugins du cœur propres à low-cord : leurs patches sont vérifiés aussi.
-const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
+const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts", "lowcordHeaderBar.ts"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
 const entry = `
 export { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 ${pluginNames.map((n, i) => `import p${i} from "@lowplugins/${n}"; export const plugin_${i} = p${i};`).join("\n")}
