@@ -157,6 +157,12 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 delayMs: { name: "Pause entre deux suppressions (ms)", description: "Plus bas = plus rapide. Si c'est trop rapide, Discord ralentit et low-cord s'adapte tout seul" },
             },
         },
+        ClearFriends: {
+            description: "Retire plusieurs amis d'un coup, depuis une liste à cocher dans la barre du haut",
+            settings: {
+                delayMs: { name: "Pause entre deux retraits (ms)", description: "Plus bas = plus rapide ; low-cord ralentit tout seul si Discord le demande" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
