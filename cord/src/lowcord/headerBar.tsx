@@ -37,6 +37,17 @@ export function removeHeaderBarButton(id: string) {
     if (entries.delete(id)) emit();
 }
 
+// Même trait que celui qui sépare les boutons de la fenêtre (réduire, fermer).
+const DIVIDER: React.CSSProperties = {
+    flex: "none",
+    alignSelf: "center",
+    width: 1,
+    height: 20,
+    margin: "0 6px",
+    borderRadius: 1,
+    background: "var(--border-subtle, var(--background-modifier-accent, rgb(255 255 255 / 12%)))",
+};
+
 function Buttons() {
     const [, tick] = useState(0);
     useEffect(() => {
@@ -45,8 +56,11 @@ function Buttons() {
         return () => { listeners.delete(fn); };
     }, []);
 
+    if (!entries.size) return null;
     return (
         <>
+            {/* Sépare les boutons de Discord (boîte de réception, aide) de ceux de low-cord. */}
+            <div style={DIVIDER} aria-hidden="true" />
             {[...entries.values()].sort((a, b) => a.priority - b.priority).map(({ id, Component }) => (
                 <ErrorBoundary key={id} noop>
                     <Component />
