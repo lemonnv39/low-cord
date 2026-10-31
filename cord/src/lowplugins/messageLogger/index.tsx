@@ -32,7 +32,7 @@ import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, MessageAttachment } from "@vencord/discord-types";
-import { findCssClassesLazy } from "@webpack";
+import { findByCodeLazy, findCssClassesLazy } from "@webpack";
 import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
 import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, snapshotOf } from "./capture";
@@ -40,6 +40,7 @@ import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
 import { openHistoryModal } from "./HistoryModal";
 import { JournalPanel, openJournal } from "./JournalModal";
+import type { LogEvent } from "./types";
 
 interface MLMessage extends Message {
     deleted?: boolean;
@@ -53,6 +54,7 @@ interface MLAttachment extends MessageAttachment {
 }
 
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
+const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
 const EPHEMERAL = 64;
 
 const settings = definePluginSettings({
@@ -248,6 +250,7 @@ function logDeleted(msg: any, bulk: boolean) {
     try {
         const ev = eventFromMessage("delete", msg, bulk ? { bulk: true } : {});
         pushEvent(ev);
+        rememberDelete(ev);
         // Sauvetage : on tente aussitôt de télécharger ses pièces jointes.
         if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
     } catch (e) {
@@ -303,6 +306,7 @@ async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
                 if (shouldIgnore({ author: snap.author, channel_id: channelId })) continue;
                 const ev = eventFromSnapshot("delete", snap, bulk ? { bulk: true } : {});
                 pushEvent(ev);
+                rememberDelete(ev);
                 if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
             } else {
                 // Jamais vu par low-cord (reçu avant son installation, ou expiré).
@@ -331,9 +335,117 @@ async function rescueEdit(raw: any) {
     }
 }
 
+// ── Suppressions du journal réaffichées dans le chat ─────────────────────────
+// Un message supprimé n'est affiché en rouge que si la conversation était
+// chargée au moment de la suppression. Sinon (conversation pas ouverte,
+// redémarrage, autre compte), Discord ne le renvoie plus : on le reprend du
+// journal et on le remet à sa place, dans la partie déjà chargée.
+
+const JOURNAL_PAGES = 5;
+/** compte:salon -> suppressions du journal (lues une fois par session) */
+const journalDeletes = new Map<string, Promise<LogEvent[]>>();
+/** suppressions de la session (pas forcément encore écrites sur le disque) */
+const sessionDeletes = new Map<string, LogEvent[]>();
+/** messages retirés à la main (« Effacer l'historique ») : pas réaffichés */
+const dismissed = new Set<string>();
+
+function rememberDelete(ev: LogEvent) {
+    const account = currentAccount();
+    if (!account || ev.partial) return;
+    const key = `${account}:${ev.channelId}`;
+    const list = sessionDeletes.get(key) ?? [];
+    list.push(ev);
+    if (list.length > 500) list.shift();
+    sessionDeletes.set(key, list);
+}
+
+async function readJournalDeletes(account: string, channelId: string) {
+    const out: LogEvent[] = [];
+    try {
+        for (let page = 0; page < JOURNAL_PAGES; page++) {
+            const { items, total } = await Native!.query(account, { channelId, type: "delete", offset: out.length, limit: 200 });
+            out.push(...items);
+            if (!items.length || out.length >= total) break;
+        }
+    } catch (e) {
+        logger.error("Lecture du journal impossible", e);
+    }
+    return out;
+}
+
+const compareIds = (a: string, b: string) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+
+/** Hash d'avatar tiré de l'URL enregistrée (…/avatars/<id>/<hash>.png). */
+const avatarHash = (url?: string) => url?.match(/\/avatars\/\d+\/(\w+)\./)?.[1] ?? null;
+
+/** Message au format de l'API Discord, reconstruit depuis le journal. */
+function rawFromEvent(ev: LogEvent) {
+    const author = ev.author!;
+    const user = UserStore.getUser(author.id);
+    return {
+        id: ev.messageId,
+        channel_id: ev.channelId,
+        guild_id: ev.guildId ?? undefined,
+        type: 0,
+        flags: 0,
+        content: ev.content,
+        timestamp: new Date(ev.sentAt).toISOString(),
+        edited_timestamp: null,
+        author: {
+            id: author.id,
+            username: user?.username ?? author.username,
+            global_name: user?.globalName ?? author.name,
+            avatar: user ? user.avatar : avatarHash(author.avatar),
+            discriminator: "0",
+            bot: !!author.bot,
+        },
+        attachments: ev.attachments.map(a => ({
+            id: a.id,
+            filename: a.filename,
+            size: a.size,
+            url: a.url,
+            proxy_url: a.url,
+            content_type: a.contentType,
+            width: a.width,
+            height: a.height,
+        })),
+        embeds: [],
+        mentions: [],
+        mention_roles: [],
+        mention_everyone: false,
+        pinned: false,
+        tts: false,
+        message_reference: ev.replyTo ? { channel_id: ev.channelId, message_id: ev.replyTo } : undefined,
+    };
+}
+
+async function restoreDeleted(channelId: string | null | undefined) {
+    const account = currentAccount();
+    if (!channelId || !account || !Native || !settings.store.logDeletes || !inJournal(channelId)) return;
+
+    const key = `${account}:${channelId}`;
+    let stored = journalDeletes.get(key);
+    if (!stored) journalDeletes.set(key, stored = readJournalDeletes(account, channelId));
+
+    const seen = new Set<string>();
+    const raws = [...(sessionDeletes.get(key) ?? []), ...await stored]
+        .filter(ev => {
+            if (ev.partial || !ev.author || seen.has(ev.messageId) || dismissed.has(ev.messageId)) return false;
+            seen.add(ev.messageId);
+            return true;
+        })
+        .map(rawFromEvent);
+    // Compte changé entre-temps : ce n'est plus son journal.
+    if (!raws.length || currentAccount() !== account) return;
+
+    // En dehors du traitement en cours de Discord (pas de dispatch dans un dispatch).
+    setTimeout(() => FluxDispatcher.dispatch({ type: "LOWCORD_ML_INJECT", channelId, messages: raws }), 0);
+}
+
 // ── Historique dans le chat ──────────────────────────────────────────────────
 function clearMessageHistory(msg: MLMessage) {
     if (msg.deleted) {
+        dismissed.add(msg.id);
         FluxDispatcher.dispatch({
             type: "MESSAGE_DELETE",
             channelId: msg.channel_id,
@@ -454,6 +566,7 @@ export default definePlugin({
         addDeleteStyle();
         configureNative();
         void claimLegacyLogs();
+        void restoreDeleted(SelectedChannelStore.getChannelId());
         // Fermeture de Discord : on écrit ce qui attend encore (au plus 1 s).
         window.addEventListener("beforeunload", flush);
     },
@@ -470,6 +583,7 @@ export default definePlugin({
         // le compte reprend ses anciens logs.
         CONNECTION_OPEN() {
             flush();
+            journalDeletes.clear();
             void claimLegacyLogs();
         },
         MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic?: boolean; }) {
@@ -479,6 +593,10 @@ export default definePlugin({
         LOAD_MESSAGES_SUCCESS({ channelId, messages }: { channelId: string; messages: any[]; }) {
             if (!Array.isArray(messages)) return;
             for (const msg of messages) capture({ ...msg, channel_id: msg.channel_id ?? channelId });
+            void restoreDeleted(channelId);
+        },
+        LOAD_MESSAGES_SUCCESS_CACHED({ channelId }: { channelId: string; }) {
+            void restoreDeleted(channelId);
         },
         MESSAGE_UPDATE({ message }: { message: any; }) {
             if (!message?.id || !message.channel_id || !isPrivate(message.channel_id, message.guild_id)) return;
@@ -601,6 +719,38 @@ export default definePlugin({
         return cache;
     },
 
+    /**
+     * Ajoute à la conversation les suppressions du journal qui y manquent,
+     * uniquement dans la partie déjà chargée (pas de trou dans l'historique).
+     */
+    injectDeleted(cache: any, raws: any[]) {
+        try {
+            if (!cache?.ready || !cache.length || !Array.isArray(raws)) return cache;
+            const first = cache.first()?.id, last = cache.last()?.id;
+            if (!first || !last) return cache;
+
+            const records = raws
+                .filter(r => r?.id && !cache.has(r.id)
+                    && (!cache.hasMoreBefore || compareIds(r.id, first) > 0)
+                    && (!cache.hasMoreAfter || compareIds(r.id, last) < 0))
+                .map(r => {
+                    const rec = createMessageRecord(r);
+                    return rec
+                        .set("deleted", true)
+                        .set("attachments", (rec.attachments ?? []).map((a: any) => ({ ...a, deleted: true })));
+                });
+            if (!records.length) return cache;
+
+            return cache.mutate((c: any) => {
+                for (const rec of records) c._map[rec.id] = rec;
+                c._array = [...c._array, ...records].sort((a: any, b: any) => compareIds(a.id, b.id));
+            }, true);
+        } catch (e) {
+            logger.error("Réaffichage des messages supprimés impossible", e);
+            return cache;
+        }
+    },
+
     // Remplacer un message en renvoyant un message avec le même « nonce » ne
     // compte pas comme une modification : on casse ce contournement.
     normalizeNonce(msg: Message) {
@@ -664,6 +814,12 @@ export default definePlugin({
                         $2.commit(cache);
                         return;
                     `
+                },
+                {
+                    // Action low-cord : remet dans la conversation chargée les
+                    // messages supprimés retrouvés dans le journal
+                    match: /LOAD_MESSAGES_SUCCESS:function\((\i)\)\{(?=let\{channelId:\i.{0,300}?(\i\.\i)\.getOrCreate)/,
+                    replace: "LOWCORD_ML_INJECT:function($1){let c=$2.get($1.channelId),n=$self.injectDeleted(c,$1.messages);if(n===c)return!1;$2.commit(n)},$&"
                 },
                 {
                     // MESSAGE_UPDATE : ancien texte ajouté à l'historique des modifications.
