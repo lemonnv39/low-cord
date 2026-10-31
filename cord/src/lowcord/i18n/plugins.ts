@@ -170,6 +170,12 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 notify: { name: "Arrivées / départs", description: "Pop-up quand quelqu'un rejoint ou quitte ton live" },
             },
         },
+        AntiMoveDeco: {
+            description: "Verrouille ton salon vocal : si quelqu'un te déplace ou te déconnecte, tu y reviens. Tes propres changements sont respectés",
+            settings: {
+                notify: { name: "Pop-ups", description: "Prévenir quand tu es ramené dans ton salon" },
+            },
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {

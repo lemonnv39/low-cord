@@ -485,4 +485,17 @@ export const fr = {
     "ww.unknown": "+{count} autre(s)",
     "ww.joined": "{name} regarde ton live",
     "ww.left": "{name} a quitté ton live",
+
+    // AntiMoveDeco
+    "amd.on": "Verrou activé sur {channel} : si on te déplace ou te déconnecte, tu y reviens.",
+    "amd.off": "Verrou désactivé.",
+    "amd.offLeft": "Tu as quitté le vocal : verrou désactivé.",
+    "amd.followed": "Tu as changé de salon : verrou déplacé sur {channel}.",
+    "amd.joinFirst": "Rejoins d'abord un salon vocal.",
+    "amd.backMoved": "On t'a déplacé : retour dans {channel}.",
+    "amd.backDisconnected": "On t'a déconnecté : retour dans {channel}.",
+    "amd.gaveUp": "Impossible de revenir dans {channel} (salon supprimé, accès retiré ou trop de tentatives) : verrou désactivé.",
+    "amd.tooltipOn": "Verrou actif : {channel} · clic pour désactiver",
+    "amd.tooltipOff": "Verrouiller mon salon vocal",
+    "amd.unknownChannel": "le salon",
 } as const;

@@ -481,4 +481,17 @@ export const en = {
     "ww.unknown": "+{count} more",
     "ww.joined": "{name} is watching your stream",
     "ww.left": "{name} left your stream",
+
+    // AntiMoveDeco
+    "amd.on": "Lock on {channel}: if you are moved or disconnected, you come back.",
+    "amd.off": "Lock disabled.",
+    "amd.offLeft": "You left voice: lock disabled.",
+    "amd.followed": "You switched channels: lock moved to {channel}.",
+    "amd.joinFirst": "Join a voice channel first.",
+    "amd.backMoved": "You were moved: back to {channel}.",
+    "amd.backDisconnected": "You were disconnected: back to {channel}.",
+    "amd.gaveUp": "Could not get back to {channel} (channel deleted, access removed or too many attempts): lock disabled.",
+    "amd.tooltipOn": "Lock on: {channel} · click to disable",
+    "amd.tooltipOff": "Lock my voice channel",
+    "amd.unknownChannel": "the channel",
 } satisfies Record<keyof typeof fr, string>;

@@ -1,0 +1,4 @@
+/* Cadenas fermé : verrou actif */
+.lc-amd-on svg {
+    color: var(--status-positive, #23a55a);
+}
