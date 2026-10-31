@@ -90,16 +90,21 @@ export default definePlugin({
             ],
             predicate: () => settings.store.chatMentions
         },
-        // Slate
+        // Slate (zone de saisie). Discord affiche la mention d'une personne via
+        // un petit composant { id, name, targetRef } qui ne prend pas de couleur :
+        // on lui fait accepter « color » (comme la mention de rôle juste à
+        // côté), puis on la lui donne là où il est affiché.
         {
-            // Same find as FullUserInChatbox
             find: '"text":"locked"',
             replacement: [
                 {
-                    // Fenêtre bornée : sans limite, la recherche pouvait traverser
-                    // tout le module jusqu'à une autre mention (rôle).
-                    match: /let\{id:(\i),guildId:\i,channelId:(\i)[^}]*\}.{0,400}?\.\i,{(?=children)/,
-                    replace: "$&color:$self.getColorInt($1,$2),"
+                    match: /(function \i\(\i\)\{let\{id:\i,name:\i,targetRef:\i,popoutProps:\i\}=\i;return\(0,\i\.jsx\)\(\i\.\i,\{ref:\i,)/,
+                    replace: "$1color:arguments[0]?.color,"
+                },
+                {
+                    // uniquement les endroits où le composant est affiché, (0,x.jsx)(Comp,{…})
+                    match: /(\(0,\i\.jsx\)\(\i,)\{id:(\i),name:(\i),targetRef:(\i)(?=[,}])/g,
+                    replace: "$1{id:$2,name:$3,targetRef:$4,color:$self.getColorInt($2,arguments[0]?.channelId)"
                 }
             ],
             predicate: () => settings.store.chatMentions
