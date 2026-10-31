@@ -483,15 +483,15 @@ export const en = {
     "ww.left": "{name} left your stream",
 
     // AntiMoveDeco
-    "amd.on": "Lock on {channel}: if you are moved or disconnected, you come back.",
-    "amd.off": "Lock disabled.",
-    "amd.offLeft": "You left voice: lock disabled.",
-    "amd.followed": "You switched channels: lock moved to {channel}.",
+    "amd.on": "Voice Guard on {channel}: if you are moved or disconnected, you come back.",
+    "amd.off": "Voice Guard disabled.",
+    "amd.offLeft": "You left voice: Voice Guard disabled.",
+    "amd.followed": "You switched channels: Voice Guard moved to {channel}.",
     "amd.joinFirst": "Join a voice channel first.",
     "amd.backMoved": "You were moved: back to {channel}.",
     "amd.backDisconnected": "You were disconnected: back to {channel}.",
-    "amd.gaveUp": "Could not get back to {channel} (channel deleted, access removed or too many attempts): lock disabled.",
-    "amd.tooltipOn": "Lock on: {channel} · click to disable",
-    "amd.tooltipOff": "Lock my voice channel",
+    "amd.gaveUp": "Could not get back to {channel} (channel deleted, access removed or too many attempts): Voice Guard disabled.",
+    "amd.tooltipOn": "Voice Guard on: {channel} · click to disable",
+    "amd.tooltipOff": "Enable Voice Guard",
     "amd.unknownChannel": "the channel",
 } satisfies Record<keyof typeof fr, string>;

@@ -487,15 +487,15 @@ export const fr = {
     "ww.left": "{name} a quitté ton live",
 
     // AntiMoveDeco
-    "amd.on": "Verrou activé sur {channel} : si on te déplace ou te déconnecte, tu y reviens.",
-    "amd.off": "Verrou désactivé.",
-    "amd.offLeft": "Tu as quitté le vocal : verrou désactivé.",
-    "amd.followed": "Tu as changé de salon : verrou déplacé sur {channel}.",
+    "amd.on": "Garde vocale activée sur {channel} : si on te déplace ou te déconnecte, tu y reviens.",
+    "amd.off": "Garde vocale désactivée.",
+    "amd.offLeft": "Tu as quitté le vocal : garde vocale désactivée.",
+    "amd.followed": "Tu as changé de salon : garde vocale déplacée sur {channel}.",
     "amd.joinFirst": "Rejoins d'abord un salon vocal.",
     "amd.backMoved": "On t'a déplacé : retour dans {channel}.",
     "amd.backDisconnected": "On t'a déconnecté : retour dans {channel}.",
-    "amd.gaveUp": "Impossible de revenir dans {channel} (salon supprimé, accès retiré ou trop de tentatives) : verrou désactivé.",
-    "amd.tooltipOn": "Verrou actif : {channel} · clic pour désactiver",
-    "amd.tooltipOff": "Verrouiller mon salon vocal",
+    "amd.gaveUp": "Impossible de revenir dans {channel} (salon supprimé, accès retiré ou trop de tentatives) : garde vocale désactivée.",
+    "amd.tooltipOn": "Garde vocale active : {channel} · clic pour désactiver",
+    "amd.tooltipOff": "Activer la garde vocale",
     "amd.unknownChannel": "le salon",
 } as const;

@@ -171,7 +171,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             },
         },
         AntiMoveDeco: {
-            description: "Verrouille ton salon vocal : si quelqu'un te déplace ou te déconnecte, tu y reviens. Tes propres changements sont respectés",
+            description: "Garde vocale : si quelqu'un te déplace ou te déconnecte, tu y reviens. Tes propres changements sont respectés",
             settings: {
                 notify: { name: "Pop-ups", description: "Prévenir quand tu es ramené dans ton salon" },
             },
