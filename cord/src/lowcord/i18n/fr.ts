@@ -498,4 +498,22 @@ export const fr = {
     "amd.tooltipOn": "Garde vocale active : {channel} · clic pour désactiver",
     "amd.tooltipOff": "Activer la garde vocale",
     "amd.unknownChannel": "le salon",
+    // ViewIcons
+    "vi.avatar": "Voir l'avatar",
+    "vi.serverAvatar": "Voir l'avatar du serveur",
+    "vi.banner": "Voir la bannière",
+    "vi.decoration": "Voir la décoration d'avatar",
+    "vi.icon": "Voir l'icône",
+    // ImageToolkit
+    "it.menu": "Outils d'image",
+    "it.view": "Voir en grand",
+    "it.search": "Rechercher l'image",
+    "it.copy": "Copier l'image",
+    "it.save": "Enregistrer l'image",
+    "it.copyLink": "Copier le lien",
+    "it.openLink": "Ouvrir dans le navigateur",
+    "it.copied": "Image copiée.",
+    "it.copyFailed": "Impossible de copier l'image.",
+    "it.saveFailed": "Impossible d'enregistrer l'image.",
+    "it.linkCopied": "Lien copié.",
 } as const;

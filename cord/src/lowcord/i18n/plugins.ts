@@ -176,6 +176,16 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 notify: { name: "Pop-ups", description: "Prévenir quand tu es ramené dans ton salon" },
             },
         },
+        ViewIcons: {
+            description: "Clic sur l'avatar ou la bannière du profil de quelqu'un pour l'agrandir, et « Voir l'avatar / la bannière / l'icône » au clic droit sur une personne, un serveur ou un groupe",
+            settings: {
+                format: { name: "Format", description: "Format des images fixes (les images animées gardent le leur)" },
+                imgSize: { name: "Taille", description: "Taille de l'image agrandie" },
+            },
+        },
+        ImageToolkit: {
+            description: "Clic droit sur l'avatar ou la bannière du profil de quelqu'un : agrandir, rechercher l'image, copier, enregistrer, lien. « Rechercher l'image » sur les images des messages",
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {

@@ -494,4 +494,22 @@ export const en = {
     "amd.tooltipOn": "Voice Guard on: {channel} · click to disable",
     "amd.tooltipOff": "Enable Voice Guard",
     "amd.unknownChannel": "the channel",
+    // ViewIcons
+    "vi.avatar": "View avatar",
+    "vi.serverAvatar": "View server avatar",
+    "vi.banner": "View banner",
+    "vi.decoration": "View avatar decoration",
+    "vi.icon": "View icon",
+    // ImageToolkit
+    "it.menu": "Image tools",
+    "it.view": "View full size",
+    "it.search": "Search image",
+    "it.copy": "Copy image",
+    "it.save": "Save image",
+    "it.copyLink": "Copy link",
+    "it.openLink": "Open in browser",
+    "it.copied": "Image copied.",
+    "it.copyFailed": "Could not copy the image.",
+    "it.saveFailed": "Could not save the image.",
+    "it.linkCopied": "Link copied.",
 } satisfies Record<keyof typeof fr, string>;
