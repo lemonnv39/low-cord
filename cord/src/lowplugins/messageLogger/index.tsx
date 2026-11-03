@@ -660,8 +660,9 @@ export default definePlugin({
                 if (typeof message.content === "string") capture(message, message.guild_id);
             }, 50);
         },
-        MESSAGE_DELETE({ id, channelId, mlDeleted }: { id: string; channelId: string; mlDeleted?: boolean; }) {
-            if (mlDeleted || !id || !channelId) return;
+        MESSAGE_DELETE({ id, channelId, mlDeleted, local }: { id: string; channelId: string; mlDeleted?: boolean; local?: boolean; }) {
+            // local : retrait par Discord d'un message jamais envoyé
+            if (mlDeleted || local || !id || !channelId) return;
             setTimeout(() => rescueDeletes(channelId, [id], false), 50);
         },
         MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {
@@ -743,17 +744,36 @@ export default definePlugin({
         return merged;
     },
 
-    handleDelete(cache: any, data: { ids: string[], id: string; mlDeleted?: boolean; }, isBulk: boolean) {
+    /**
+     * Suppression : le message reste affiché, marqué supprimé. Renvoie null
+     * (suppression simple uniquement) quand Discord doit le retirer lui-même,
+     * avec son nettoyage habituel.
+     */
+    handleDelete(cache: any, data: { ids: string[], id: string; mlDeleted?: boolean; local?: boolean; }, isBulk: boolean) {
         try {
-            if (cache == null || (!isBulk && !cache.has(data.id))) return cache;
+            if (cache == null || (!isBulk && !cache.has(data.id))) return isBulk ? cache : null;
+
+            /** Pas un vrai message supprimé : à retirer normalement. */
+            const notReal = (msg: any) => data.mlDeleted
+                // Retrait local par Discord : envoi échoué ou annulé (une
+                // image qui n'est jamais partie), message automatique fermé…
+                || data.local === true
+                || (msg.state != null && msg.state !== "SENT")
+                || (msg.flags & EPHEMERAL) === EPHEMERAL
+                || shouldIgnore(msg);
+
+            if (!isBulk && notReal(cache.get(data.id))) {
+                // La capture de secours ne doit pas non plus l'enregistrer.
+                remember(handledDeletes, data.id);
+                return null;
+            }
 
             const mutate = (id: string) => {
                 const msg = cache.get(id);
                 if (!msg) return;
                 remember(handledDeletes, id);
 
-                const ignore = data.mlDeleted || (msg.flags & EPHEMERAL) === EPHEMERAL || shouldIgnore(msg);
-                if (ignore) {
+                if (notReal(msg)) {
                     cache = cache.remove(id);
                     return;
                 }
@@ -772,6 +792,7 @@ export default definePlugin({
             else mutate(data.id);
         } catch (e) {
             logger.error("Error during handleDelete", e);
+            return isBulk ? cache : null;
         }
         return cache;
     },
@@ -855,13 +876,15 @@ export default definePlugin({
             find: '"MessageStore"',
             replacement: [
                 {
-                    // MESSAGE_DELETE : le message est marqué supprimé au lieu d'être retiré
+                    // MESSAGE_DELETE : le message est marqué supprimé au lieu d'être
+                    // retiré (sinon le code de Discord continue normalement)
                     match: /(?<=MESSAGE_DELETE:function\((\i)\)\{)(?=let.{0,100}(\i\.\i)\.getOrCreate)/,
                     replace: `
-                        let cache = $2.getOrCreate($1.channelId);
-                        cache = $self.handleDelete(cache, $1, false);
-                        $2.commit(cache);
-                        return;
+                        const mlCache = $self.handleDelete($2.getOrCreate($1.channelId), $1, false);
+                        if (mlCache != null) {
+                            $2.commit(mlCache);
+                            return;
+                        }
                     `
                 },
                 {

@@ -123,30 +123,37 @@ const plugins = Object.keys(bundle).filter(k => k.startsWith("plugin_")).map(k =
 
 // ── 2. Extraire les modules webpack réels du cache ───────────────────────
 const modules = new Map();
-for (const f of readdirSync(cacheDir)) {
-    if (!f.startsWith("f_")) continue;
+// LC_CODE_DIR : dossiers de fichiers .js de Discord téléchargés à part (modules
+// chargés à la demande, absents du cache), séparés par « ; ».
+const extraDirs = (process.env.LC_CODE_DIR ?? "").split(";").filter(Boolean);
+const sources = [
+    ...readdirSync(cacheDir).filter(f => f.startsWith("f_")).map(f => ({ path: join(cacheDir, f), cache: true })),
+    ...extraDirs.flatMap(d => readdirSync(d).filter(f => f.endsWith(".js")).map(f => ({ path: join(d, f), cache: false }))),
+];
+for (const { path, cache } of sources) {
     let src;
     try {
-        src = readFileSync(join(cacheDir, f)).toString("utf8");
+        src = readFileSync(path).toString("utf8");
     } catch {
         continue; // fichier supprimé par Discord pendant la lecture
     }
-    if (!src.includes("(e,t,n){") || src.length < 100_000) continue;
+    if (cache && (!src.includes("(e,t,n){") || src.length < 100_000)) continue;
+    if (!cache && !src.includes("webpackChunkdiscord_app")) continue;
     let ast;
     try {
         ast = acorn.parse(src, { ecmaVersion: "latest", sourceType: "script" });
     } catch {
         continue;
     }
-    collectModules(ast, src);
+    collectModules(ast, src, cache ? 20 : 0);
 }
 
-function collectModules(node, src) {
+function collectModules(node, src, minProps) {
     const stack = [node];
     while (stack.length) {
         const n = stack.pop();
         if (!n || typeof n.type !== "string") continue;
-        if (n.type === "ObjectExpression" && n.properties.length > 20 &&
+        if (n.type === "ObjectExpression" && n.properties.length > minProps &&
             n.properties.every(p => p.type === "Property" && p.key && (p.key.type === "Literal" ? typeof p.key.value === "number" : /^\d+$/.test(p.key.name ?? "")))) {
             for (const p of n.properties) {
                 const id = String(p.key.value ?? p.key.name);
