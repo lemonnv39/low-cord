@@ -188,7 +188,7 @@ function LockButton() {
 
 export default definePlugin({
     name: "AntiMoveDeco",
-    description: "Voice Guard: if someone moves or disconnects you, you are brought back.",
+    description: "Anti move & disconnect: if someone moves or disconnects you, you are brought back.",
     tags: ["Voice", "Utility"],
     authors: [{ name: "0ctane", id: 0n }],
     settings,

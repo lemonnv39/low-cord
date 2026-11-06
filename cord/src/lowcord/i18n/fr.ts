@@ -487,16 +487,16 @@ export const fr = {
     "ww.left": "{name} a quitté ton live",
 
     // AntiMoveDeco
-    "amd.on": "Garde vocale activée sur {channel} : si on te déplace ou te déconnecte, tu y reviens.",
-    "amd.off": "Garde vocale désactivée.",
-    "amd.offLeft": "Tu as quitté le vocal : garde vocale désactivée.",
-    "amd.followed": "Tu as changé de salon : garde vocale déplacée sur {channel}.",
+    "amd.on": "Anti move & déco activé sur {channel} : si on te déplace ou te déconnecte, tu y reviens.",
+    "amd.off": "Anti move & déco désactivé.",
+    "amd.offLeft": "Tu as quitté le vocal : anti move & déco désactivé.",
+    "amd.followed": "Tu as changé de salon : anti move & déco déplacé sur {channel}.",
     "amd.joinFirst": "Rejoins d'abord un salon vocal.",
     "amd.backMoved": "On t'a déplacé : retour dans {channel}.",
     "amd.backDisconnected": "On t'a déconnecté : retour dans {channel}.",
-    "amd.gaveUp": "Impossible de revenir dans {channel} (salon supprimé, accès retiré ou trop de tentatives) : garde vocale désactivée.",
-    "amd.tooltipOn": "Garde vocale active : {channel} · clic pour désactiver",
-    "amd.tooltipOff": "Activer la garde vocale",
+    "amd.gaveUp": "Impossible de revenir dans {channel} (salon supprimé, accès retiré ou trop de tentatives) : anti move & déco désactivé.",
+    "amd.tooltipOn": "Anti move & déco actif : {channel} · clic pour désactiver",
+    "amd.tooltipOff": "Activer l'anti move & déco",
     "amd.unknownChannel": "le salon",
     // ViewIcons
     "vi.avatar": "Voir l'avatar",

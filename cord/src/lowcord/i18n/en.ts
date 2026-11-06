@@ -483,16 +483,16 @@ export const en = {
     "ww.left": "{name} left your stream",
 
     // AntiMoveDeco
-    "amd.on": "Voice Guard on {channel}: if you are moved or disconnected, you come back.",
-    "amd.off": "Voice Guard disabled.",
-    "amd.offLeft": "You left voice: Voice Guard disabled.",
-    "amd.followed": "You switched channels: Voice Guard moved to {channel}.",
+    "amd.on": "Anti move & disconnect on {channel}: if you are moved or disconnected, you come back.",
+    "amd.off": "Anti move & disconnect disabled.",
+    "amd.offLeft": "You left voice: Anti move & disconnect disabled.",
+    "amd.followed": "You switched channels: Anti move & disconnect moved to {channel}.",
     "amd.joinFirst": "Join a voice channel first.",
     "amd.backMoved": "You were moved: back to {channel}.",
     "amd.backDisconnected": "You were disconnected: back to {channel}.",
-    "amd.gaveUp": "Could not get back to {channel} (channel deleted, access removed or too many attempts): Voice Guard disabled.",
-    "amd.tooltipOn": "Voice Guard on: {channel} · click to disable",
-    "amd.tooltipOff": "Enable Voice Guard",
+    "amd.gaveUp": "Could not get back to {channel} (channel deleted, access removed or too many attempts): Anti move & disconnect disabled.",
+    "amd.tooltipOn": "Anti move & disconnect on: {channel} · click to disable",
+    "amd.tooltipOff": "Enable Anti move & disconnect",
     "amd.unknownChannel": "the channel",
     // ViewIcons
     "vi.avatar": "View avatar",
