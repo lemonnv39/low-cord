@@ -197,6 +197,14 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 maxMB: { name: "Taille max des médias (Mo)", description: "Au-delà, les médias restants gardent seulement leur lien" },
             },
         },
+        SmoothType: {
+            description: "Le curseur de la zone de texte glisse en douceur d'une position à l'autre au lieu de sauter",
+            settings: {
+                transitionDelay: { name: "Durée du glissement (ms)", description: "Temps que met le curseur pour rejoindre sa nouvelle position" },
+                animationType: { name: "Courbe", description: "Façon dont le curseur accélère et ralentit" },
+                caretColor: { name: "Couleur", description: "Couleur CSS (ex. #ffffff). Vide = couleur du texte du thème" },
+            },
+        },
         TokenImporter: {
             description: "Tes propres comptes Discord : ajoute-les avec un token que tu possèdes déjà, range-les en dossiers, bascule de l'un à l'autre ou ouvre-les chacun dans sa fenêtre. Aucun scan du disque, aucune autre application touchée",
         },
