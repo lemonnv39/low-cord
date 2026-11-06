@@ -504,6 +504,7 @@ export const fr = {
     "vi.banner": "Voir la bannière",
     "vi.decoration": "Voir la décoration d'avatar",
     "vi.icon": "Voir l'icône",
+    "vi.images": "Voir les images",
     // ImageToolkit
     "it.menu": "Outils d'image",
     "it.view": "Voir en grand",

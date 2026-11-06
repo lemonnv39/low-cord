@@ -500,6 +500,7 @@ export const en = {
     "vi.banner": "View banner",
     "vi.decoration": "View avatar decoration",
     "vi.icon": "View icon",
+    "vi.images": "View images",
     // ImageToolkit
     "it.menu": "Image tools",
     "it.view": "View full size",

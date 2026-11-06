@@ -13,6 +13,7 @@
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { addHeaderBarButton, HeaderBarIcon, removeHeaderBarButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
@@ -187,16 +188,15 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
     if (userId === UserStore.getCurrentUser()?.id) return;
 
     const isFollowed = followedId === userId;
-    children.push(
-        <Menu.MenuGroup>
-            <Menu.MenuCheckboxItem
-                id="vc-follow-user"
-                label={t("fu.follow")}
-                checked={isFollowed}
-                action={() => isFollowed ? unfollow() : follow(userId)}
-            />
-        </Menu.MenuGroup>
-    );
+    addLowCordMenuItem(children, "actions", (
+        <Menu.MenuCheckboxItem
+            id="vc-follow-user"
+            key="vc-follow-user"
+            label={t("fu.follow")}
+            checked={isFollowed}
+            action={() => isFollowed ? unfollow() : follow(userId)}
+        />
+    ), 10);
 };
 
 /** Reprend le suivi enregistré pour le compte connecté (au démarrage ou après un changement de compte). */

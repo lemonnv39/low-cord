@@ -16,12 +16,14 @@
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { ImageIcon } from "@components/Icons";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { t } from "@lowcord/i18n";
 import { openFullImage, ProfileImageKind, setProfileImageHandler } from "@lowcord/profileImages";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, Guild, User } from "@vencord/discord-types";
 import { GuildMemberStore, IconUtils, Menu, UserProfileStore } from "@webpack/common";
+import type { ReactElement } from "react";
 
 const settings = definePluginSettings({
     format: {
@@ -49,6 +51,20 @@ function item(id: string, label: string, action: () => void) {
     return <Menu.MenuItem id={id} key={id} label={label} action={action} leadingAccessory={{ type: "icon", icon: ImageIcon }} />;
 }
 
+/**
+ * En haut du menu avec les autres entrées low-cord. Plusieurs images : un
+ * sous-menu « Voir les images », pour ne pas allonger le menu.
+ */
+function addItems(children: any[], items: (ReactElement | string | false | null | undefined)[]) {
+    const list = items.filter((x): x is ReactElement => !!x && typeof x === "object");
+    if (!list.length) return;
+    addLowCordMenuItem(children, "view", list.length === 1 ? list[0] : (
+        <Menu.MenuItem id="vc-view-images" key="vc-view-images" label={t("vi.images")} leadingAccessory={{ type: "icon", icon: ImageIcon }}>
+            {list}
+        </Menu.MenuItem>
+    ), 20);
+}
+
 const UserContext: NavContextMenuPatchCallback = (children, { user, guildId }: { user?: User; guildId?: string; }) => {
     if (!user) return;
     const memberAvatar = guildId ? GuildMemberStore.getMember(guildId, user.id)?.avatar : null;
@@ -56,45 +72,35 @@ const UserContext: NavContextMenuPatchCallback = (children, { user, guildId }: {
     // Bannière : connue seulement si le profil a déjà été chargé (ouvert une fois).
     const banner = UserProfileStore.getUserProfile(user.id)?.banner;
 
-    children.splice(-1, 0, (
-        <Menu.MenuGroup key="vc-view-icons">
-            {item("vc-view-avatar", t("vi.avatar"), () => open(IconUtils.getUserAvatarURL(user, true), "avatar"))}
-            {memberAvatar && item("vc-view-server-avatar", t("vi.serverAvatar"), () => open(IconUtils.getGuildMemberAvatarURLSimple({
-                userId: user.id,
-                avatar: memberAvatar,
-                guildId: guildId!,
-                canAnimate: true,
-            }), "avatar"))}
-            {banner && item("vc-view-banner", t("vi.banner"), () => open(IconUtils.getUserBannerURL({ id: user.id, banner, canAnimate: true, size: 1024 }), "banner"))}
-            {decoration && item("vc-view-decoration", t("vi.decoration"), () => open(IconUtils.getAvatarDecorationURL({
-                avatarDecoration: decoration,
-                size: 1024,
-                canAnimate: true,
-            }), "avatar"))}
-        </Menu.MenuGroup>
-    ));
+    addItems(children, [
+        item("vc-view-avatar", t("vi.avatar"), () => open(IconUtils.getUserAvatarURL(user, true), "avatar")),
+        memberAvatar && item("vc-view-server-avatar", t("vi.serverAvatar"), () => open(IconUtils.getGuildMemberAvatarURLSimple({
+            userId: user.id,
+            avatar: memberAvatar,
+            guildId: guildId!,
+            canAnimate: true,
+        }), "avatar")),
+        banner && item("vc-view-banner", t("vi.banner"), () => open(IconUtils.getUserBannerURL({ id: user.id, banner, canAnimate: true, size: 1024 }), "banner")),
+        decoration && item("vc-view-decoration", t("vi.decoration"), () => open(IconUtils.getAvatarDecorationURL({
+            avatarDecoration: decoration,
+            size: 1024,
+            canAnimate: true,
+        }), "avatar")),
+    ]);
 };
 
 const GuildContext: NavContextMenuPatchCallback = (children, { guild }: { guild?: Guild; }) => {
-    if (!guild || (!guild.icon && !guild.banner)) return;
-
-    children.splice(-1, 0, (
-        <Menu.MenuGroup key="vc-view-icons">
-            {guild.icon && item("vc-view-icon", t("vi.icon"), () => open(IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, canAnimate: true }), "avatar"))}
-            {guild.banner && item("vc-view-guild-banner", t("vi.banner"), () => open(IconUtils.getGuildBannerURL(guild, true), "banner"))}
-        </Menu.MenuGroup>
-    ));
+    if (!guild) return;
+    addItems(children, [
+        guild.icon && item("vc-view-icon", t("vi.icon"), () => open(IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, canAnimate: true }), "avatar")),
+        guild.banner && item("vc-view-guild-banner", t("vi.banner"), () => open(IconUtils.getGuildBannerURL(guild, true), "banner")),
+    ]);
 };
 
 const GroupDMContext: NavContextMenuPatchCallback = (children, { channel }: { channel?: Channel; }) => {
     // Groupe sans image : rien à voir.
     if (!channel?.icon) return;
-
-    children.splice(-1, 0, (
-        <Menu.MenuGroup key="vc-view-icons">
-            {item("vc-view-group-icon", t("vi.icon"), () => open(IconUtils.getChannelIconURL(channel), "avatar"))}
-        </Menu.MenuGroup>
-    ));
+    addItems(children, [item("vc-view-group-icon", t("vi.icon"), () => open(IconUtils.getChannelIconURL(channel), "avatar"))]);
 };
 
 export default definePlugin({

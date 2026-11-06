@@ -10,8 +10,9 @@
  * sécurité, boosts, fonctionnalités, et tes amis / bloqués / ignorés présents.
  */
 
-import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { InfoIcon } from "@components/Icons";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { t } from "@lowcord/i18n";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
@@ -24,15 +25,15 @@ const makePatch: (showIcon: boolean) => NavContextMenuPatchCallback = showIcon =
     const guild = props?.guild;
     if (!guild) return;
 
-    const group = findGroupChildrenByChildId("privacy", children);
-    group?.push(
+    addLowCordMenuItem(children, "view", (
         <Menu.MenuItem
             id="vc-server-info"
+            key="vc-server-info"
             label={t("si.menu")}
             leadingAccessory={showIcon ? { type: "icon", icon: InfoIcon } : undefined}
             action={() => openGuildInfoModal(guild)}
         />
-    );
+    ), 30);
 };
 
 export default definePlugin({

@@ -26,11 +26,12 @@
 
 import "./styles.css";
 
-import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { SafetyIcon } from "@components/Icons";
 import { TooltipContainer } from "@components/TooltipContainer";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { t } from "@lowcord/i18n";
 import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
@@ -116,6 +117,7 @@ function MenuItem(guildId: string, { id, type, withIcon }: { id?: string, type?:
     return (
         <Menu.MenuItem
             id="perm-viewer-permissions"
+            key="perm-viewer-permissions"
             label={t("perm.view")}
             leadingAccessory={withIcon ? { type: "icon", icon: SafetyIcon } : undefined}
             action={() => {
@@ -132,7 +134,7 @@ function MenuItem(guildId: string, { id, type, withIcon }: { id?: string, type?:
     );
 }
 
-function makeContextMenuPatch(childId: string | string[], type?: MenuItemParentType, withIcon = false): NavContextMenuPatchCallback {
+function makeContextMenuPatch(type?: MenuItemParentType, withIcon = false): NavContextMenuPatchCallback {
     return (children, props) => {
         if (
             !props ||
@@ -150,17 +152,7 @@ function makeContextMenuPatch(childId: string | string[], type?: MenuItemParentT
                 : MenuItem(props.guild.id, { withIcon });
 
         if (item == null) return;
-
-        const group = findGroupChildrenByChildId(childId, children);
-        if (group) {
-            group.push(item);
-            return;
-        }
-
-        // "roles" peut manquer si le membre n'a aucun rôle : on l'ajoute au-dessus de « Copier l'ID »
-        if (childId === "roles" && props.guildId) {
-            children.splice(-1, 0, <Menu.MenuGroup>{item}</Menu.MenuGroup>);
-        }
+        addLowCordMenuItem(children, "view", item, 40);
     };
 }
 
@@ -219,9 +211,9 @@ export default definePlugin({
     }, { noop: true }),
 
     contextMenus: {
-        "user-context": makeContextMenuPatch("roles", MenuItemParentType.User),
-        "channel-context": makeContextMenuPatch(["mute-channel", "unmute-channel"], MenuItemParentType.Channel),
-        "guild-context": makeContextMenuPatch("privacy", MenuItemParentType.Guild),
-        "guild-header-popout": makeContextMenuPatch("privacy", MenuItemParentType.Guild, true)
+        "user-context": makeContextMenuPatch(MenuItemParentType.User),
+        "channel-context": makeContextMenuPatch(MenuItemParentType.Channel),
+        "guild-context": makeContextMenuPatch(MenuItemParentType.Guild),
+        "guild-header-popout": makeContextMenuPatch(MenuItemParentType.Guild, true)
     }
 });

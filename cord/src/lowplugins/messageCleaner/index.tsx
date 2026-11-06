@@ -14,6 +14,7 @@
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { addHeaderBarButton, HeaderBarIcon, removeHeaderBarButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
 import definePlugin, { OptionType } from "@utils/types";
@@ -60,10 +61,10 @@ function HeaderButton() {
 // ── Clic droit ───────────────────────────────────────────────────────────────
 function menuItem(id: string, label: string, target: Target | null) {
     if (state.running) {
-        return <Menu.MenuItem id={`lc-mc-stop-${id}`} label={t("mc.stopCleaning")} color="danger" action={stop} />;
+        return <Menu.MenuItem id={`lc-mc-stop-${id}`} key={`lc-mc-stop-${id}`} label={t("mc.stopCleaning")} color="danger" action={stop} />;
     }
     if (!target) return null;
-    return <Menu.MenuItem id={`lc-mc-${id}`} label={label} color="danger" action={() => confirmClean([target])} />;
+    return <Menu.MenuItem id={`lc-mc-${id}`} key={`lc-mc-${id}`} label={label} color="danger" action={() => confirmClean([target])} />;
 }
 
 function channelTarget(channel: any): Target | null {
@@ -76,7 +77,11 @@ function channelTarget(channel: any): Target | null {
     return { kind: "channel", id: channel.id, name: `#${channel.name ?? channel.id}` };
 }
 
-const push = (children: any[], item: ReactElement | null) => {
+// Menus d'une personne / conversation / serveur : en haut, avec les autres
+// entrées low-cord. Menu d'un message : en bas, comme avant (le haut de ce
+// menu est réservé aux réactions rapides de Discord).
+const push = (children: any[], item: ReactElement | null) => addLowCordMenuItem(children, "danger", item, 20);
+const pushBottom = (children: any[], item: ReactElement | null) => {
     if (item) children.push(<Menu.MenuGroup key="lc-mc-group">{item}</Menu.MenuGroup>);
 };
 
@@ -102,7 +107,7 @@ const guildMenu: NavContextMenuPatchCallback = (children, { guild }: { guild?: a
 const messageMenu: NavContextMenuPatchCallback = (children, { channel, message }: { channel?: any; message?: any; }) => {
     const target = channelTarget(channel ?? ChannelStore.getChannel(message?.channel_id));
     if (!target) return;
-    push(children, menuItem("message", t(target.kind === "channel" ? "mc.menuChannel" : "mc.menuConversation", { name: target.name }), target));
+    pushBottom(children, menuItem("message", t(target.kind === "channel" ? "mc.menuChannel" : "mc.menuConversation", { name: target.name }), target));
 };
 
 export default definePlugin({

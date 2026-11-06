@@ -19,13 +19,14 @@
 
 import "./messageLogger.css";
 
-import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { updateMessage } from "@api/MessageUpdater";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EyeIcon, LogIcon } from "@components/Icons";
+import { addLowCordMenuItem } from "@lowcord/contextMenu";
 import { t } from "@lowcord/i18n";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
@@ -560,31 +561,31 @@ const patchMessageContextMenu: NavContextMenuPatchCallback = (children, props) =
 const patchChannelContextMenu: NavContextMenuPatchCallback = (children, props) => {
     const channel = props?.channel;
     const user = props?.user;
-    const group = findGroupChildrenByChildId("mark-channel-read", children) ?? children;
-
     // Un seul accès au journal : la conversation si on en a une (MP, salon),
     // sinon les messages de la personne.
     if (channel?.id || user?.id) {
-        group.push(
+        addLowCordMenuItem(children, "view", (
             <Menu.MenuItem
                 id="vc-ml-open-journal"
+                key="vc-ml-open-journal"
                 label={t("ml.journal")}
                 leadingAccessory={{ type: "icon", icon: LogIcon }}
                 action={() => openJournal(channel?.id ? { channelId: channel.id } : { authorId: user.id })}
             />
-        );
+        ), 10);
     }
 
     const messages = channel?.id ? MessageStore.getMessages(channel.id) : null;
     if (!messages?.some((msg: MLMessage) => doesMessageHaveHistory(msg))) return;
-    group.push(
+    addLowCordMenuItem(children, "danger", (
         <Menu.MenuItem
             id="vc-ml-clear-channel"
+            key="vc-ml-clear-channel"
             label={t("ml.clearChannel")}
             color="danger"
             action={() => messages.forEach((msg: MLMessage) => clearMessageHistory(msg))}
         />
-    );
+    ), 10);
 };
 
 export function parseEditContent(content: string, message: { channel_id: string; id: string; }) {
