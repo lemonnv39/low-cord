@@ -1,4 +1,4 @@
-// Vencord 83340e3
+// Vencord b44cd59
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
