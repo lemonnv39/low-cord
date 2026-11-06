@@ -138,15 +138,25 @@ const messageContextMenu: NavContextMenuPatchCallback = (children, props) => {
     group.push(SearchItem({ url }));
 };
 
+// Clic droit dans la visionneuse d'images de Discord (image ouverte en grand) :
+// « Rechercher l'image » après « Copier / Ouvrir le lien de l'image ».
+const imageContextMenu: NavContextMenuPatchCallback = (children, props) => {
+    const src = props?.src;
+    if (typeof src !== "string" || !/^https:\/\//.test(src)) return;
+    const group = findGroupChildrenByChildId("copy-native-link", children) ?? children;
+    group.push(SearchItem({ url: src }));
+};
+
 export default definePlugin({
     name: "ImageToolkit",
-    description: "Click the avatar or banner of someone's profile to enlarge it, right-click it to search, copy, save or open the image; also search message images from their menu.",
+    description: "Click the avatar or banner of someone's profile to enlarge it, right-click it to search, copy, save or open the image; also search images from the message menu and the image viewer.",
     tags: ["Media", "Utility"],
     authors: [{ name: "0ctane", id: 0n }],
     dependencies: ["DynamicImageModalAPI"],
 
     contextMenus: {
         "message": messageContextMenu,
+        "image-context": imageContextMenu,
     },
 
     start() {

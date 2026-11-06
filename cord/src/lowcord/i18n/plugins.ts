@@ -184,7 +184,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             },
         },
         ImageToolkit: {
-            description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet, la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages",
+            description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet, la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages et dans la visionneuse d'images",
         },
         TokenImporter: {
             description: "Tes propres comptes Discord : ajoute-les avec un token que tu possèdes déjà, range-les en dossiers, bascule de l'un à l'autre ou ouvre-les chacun dans sa fenêtre. Aucun scan du disque, aucune autre application touchée",
