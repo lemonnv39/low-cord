@@ -7,7 +7,7 @@
 import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
-import type { UpdateStatus } from "@main/lowcordUpdater";
+import type { Changes, UpdateStatus } from "@main/lowcordUpdater";
 import type { UserThemeHeader } from "@main/themes";
 import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
@@ -109,6 +109,8 @@ export default {
         check: () => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_CHECK),
         /** Installe la version prête et redémarre Discord. */
         restart: () => invoke<void>(IpcEvents.LOWCORD_UPDATE_RESTART),
+        /** Version installée + changements depuis `since` (version vue la dernière fois). */
+        changes: (since?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since),
     },
 
     csp: {

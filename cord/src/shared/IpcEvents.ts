@@ -68,4 +68,5 @@ export const enum IpcEvents {
     /** low-cord : mises à jour automatiques (voir src/main/lowcordUpdater.ts). */
     LOWCORD_UPDATE_CHECK = "LowCordUpdateCheck",
     LOWCORD_UPDATE_RESTART = "LowCordUpdateRestart",
+    LOWCORD_UPDATE_CHANGES = "LowCordUpdateChanges",
 }

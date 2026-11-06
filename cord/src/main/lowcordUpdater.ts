@@ -112,7 +112,49 @@ function applyPending() {
     return true;
 }
 
+// ── Quoi de neuf ─────────────────────────────────────────────────────────────
+// Chaque version publiée (branche builds) s'appelle « dist: low-cord@<sha> »,
+// le commit de main dont elle est faite. Les changements entre deux versions
+// = les commits de main entre ces deux sha.
+export interface ChangeEntry { sha: string; message: string; date: string; }
+export interface Changes { current?: string; commits: ChangeEntry[]; /** GitHub injoignable : on réessaiera */ error?: boolean; }
+
+async function github(path: string) {
+    const res = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}${path}`, { headers: HEADERS });
+    if (!res.ok) throw new Error(`GitHub : HTTP ${res.status}`);
+    return res.json();
+}
+
+async function sourceOf(buildSha: string) {
+    const message: string = (await github(`/commits/${buildSha}`))?.commit?.message ?? "";
+    const sha = /low-cord@([0-9a-f]{7,40})/.exec(message)?.[1];
+    if (!sha) throw new Error("version d'origine inconnue");
+    return sha;
+}
+
+async function changesSince(since: unknown): Promise<Changes> {
+    const current = readText(SHA_FILE) ?? undefined;
+    if (!current || typeof since !== "string" || !SHA.test(since) || since === current) return { current, commits: [] };
+    const [from, to] = await Promise.all([sourceOf(since), sourceOf(current)]);
+    const compare = await github(`/compare/${from}...${to}`);
+    const commits: ChangeEntry[] = (compare?.commits ?? []).map((c: any) => ({
+        sha: String(c.sha).slice(0, 7),
+        message: String(c.commit?.message ?? ""),
+        date: String(c.commit?.committer?.date ?? ""),
+    }));
+    return { current, commits };
+}
+
 ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHECK, () => checkForUpdate());
+
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHANGES, async (_, since: unknown) => {
+    try {
+        return await changesSince(since);
+    } catch (e) {
+        console.error("[low-cord] changements introuvables :", e);
+        return { current: readText(SHA_FILE) ?? undefined, commits: [], error: true };
+    }
+});
 
 ipcMain.handle(IpcEvents.LOWCORD_UPDATE_RESTART, () => {
     try {

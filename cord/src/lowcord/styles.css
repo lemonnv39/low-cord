@@ -738,3 +738,96 @@
 .lc-plugins-search-clear:hover {
     color: var(--header-primary, var(--text-strong));
 }
+
+/* Fenêtre « Quoi de neuf » */
+.lc-wn-root {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-bottom: 4px;
+}
+
+.lc-wn-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.lc-wn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.lc-wn-dot-new {
+    background: var(--status-positive, #23a55a);
+}
+
+.lc-wn-dot-fix {
+    background: var(--status-warning, #f0b232);
+}
+
+.lc-wn-dot-other {
+    background: var(--text-muted);
+}
+
+.lc-wn-count {
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.lc-wn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lc-wn-list > li {
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-wn-title {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.lc-wn-points {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.lc-wn-foot {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.lc-wn-btn {
+    padding: 7px 18px;
+    border: 1px solid var(--header-primary, var(--text-strong));
+    border-radius: 6px;
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}

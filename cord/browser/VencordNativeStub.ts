@@ -153,6 +153,7 @@ window.VencordNative = {
     lowcordUpdate: {
         check: async () => ({ enabled: false, ready: false }),
         restart: async () => { },
+        changes: async () => ({ commits: [] }),
     },
     pluginHelpers: {} as any,
     csp: {} as any,

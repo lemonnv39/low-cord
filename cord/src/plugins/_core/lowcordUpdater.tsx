@@ -10,8 +10,10 @@
 // barre du haut : un clic installe et redémarre Discord. Sans clic, la mise à
 // jour s'installe à la prochaine fermeture de Discord.
 
+import * as DataStore from "@api/DataStore";
 import { HeaderBarIcon, hideTempHeaderButton, showTempHeaderButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
+import { openWhatsNew } from "@lowcord/WhatsNew";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { showToast } from "@webpack/common";
@@ -74,6 +76,26 @@ async function check() {
     }
 }
 
+// ── Quoi de neuf ─────────────────────────────────────────────────────────────
+// Version vue la dernière fois : si celle installée est différente, c'est
+// qu'une mise à jour vient d'être installée → on montre ce qui a changé.
+const SEEN_KEY = "lowcord-last-seen-build";
+
+async function showWhatsNew() {
+    try {
+        const last = await DataStore.get<string>(SEEN_KEY);
+        const changes = await VencordNative.lowcordUpdate.changes(last);
+        if (!changes.current || changes.current === last) return;
+        // GitHub injoignable : on garde l'ancienne version vue, réessai au prochain démarrage.
+        if (changes.error) return;
+        // Première fois (pas de version vue) : rien à comparer, on retient juste la version.
+        if (last) openWhatsNew(changes);
+        await DataStore.set(SEEN_KEY, changes.current);
+    } catch (e) {
+        logger.error("Quoi de neuf impossible", e);
+    }
+}
+
 function stop() {
     if (timer) clearInterval(timer);
     if (firstTimer) clearTimeout(firstTimer);
@@ -90,6 +112,7 @@ export default definePlugin({
     start() {
         // Laisse Discord finir de démarrer avant la première vérification.
         firstTimer = setTimeout(check, FIRST_CHECK);
+        setTimeout(showWhatsNew, 5000);
         timer = setInterval(check, EVERY);
     },
 
