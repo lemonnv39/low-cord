@@ -20,13 +20,14 @@ import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { addLowCordMenuItem } from "@lowcord/contextMenu";
+import { HeaderBarIcon, hideTempHeaderButton, showTempHeaderButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { saveFile } from "@utils/web";
 import type { Channel, RenderModalProps, User } from "@vencord/discord-types";
-import { ChannelStore, Menu, Modal, openModal, showToast, useEffect, useRef, UserStore, useState } from "@webpack/common";
+import { ChannelStore, Menu, Modal, openModal, showToast, useEffect, UserStore, useState } from "@webpack/common";
 
 import { CanceledError, exportConversation, ExportProgress, MediaMode } from "./exporter";
 
@@ -50,39 +51,81 @@ const settings = definePluginSettings({
     },
 });
 
-/** Une seule exportation à la fois. */
-let running = false;
+// ── Export en cours (indépendant de la fenêtre) ─────────────────────────────
+// L'export vit ici, pas dans la fenêtre : la fermer (clic à côté, Échap) ne
+// l'arrête pas. Un bouton dans la barre du haut permet de la rouvrir, et le
+// clic droit sur la même conversation la rouvre aussi au lieu de recommencer.
+type JobState = "running" | "saving" | "done" | "error" | "canceled";
+
+interface Job {
+    channelId: string;
+    name: string;
+    state: JobState;
+    progress: ExportProgress | null;
+    result: { count: number; skipped: number; size: number; } | null;
+    cancel: { canceled: boolean; };
+}
+
+let job: Job | null = null;
+const listeners = new Set<() => void>();
+const emit = () => {
+    if (job && (job.state === "running" || job.state === "saving")) showTempHeaderButton("ExportMessages", HeaderButton);
+    else hideTempHeaderButton("ExportMessages");
+    listeners.forEach(fn => fn());
+};
+
+function useJob() {
+    const [, tick] = useState(0);
+    useEffect(() => {
+        const fn = () => tick(n => n + 1);
+        listeners.add(fn);
+        return () => { listeners.delete(fn); };
+    }, []);
+    return job;
+}
+
+function update(patch: Partial<Job>) {
+    if (!job) return;
+    Object.assign(job, patch);
+    emit();
+}
+
+function runJob(channelId: string, name: string) {
+    const current: Job = { channelId, name, state: "running", progress: null, result: null, cancel: { canceled: false } };
+    job = current;
+    emit();
+    exportConversation(channelId, { media: settings.store.media as MediaMode, maxMB: Number(settings.store.maxMB) || 0 }, current.cancel, progress => {
+        if (job === current) update({ progress });
+    })
+        .then(async res => {
+            if (job !== current) return;
+            update({ state: "saving" });
+            if (IS_DISCORD_DESKTOP) await DiscordNative.fileManager.saveWithDialog(res.data, res.filename);
+            else saveFile(new File([res.data as unknown as BlobPart], res.filename, { type: "text/html" }));
+            update({ state: "done", result: { count: res.count, skipped: res.skipped, size: res.data.length } });
+            showToast({ text: t("em.done", { count: res.count }), variant: "success" });
+        })
+        .catch(e => {
+            if (job !== current) return;
+            if (e instanceof CanceledError) {
+                update({ state: "canceled" });
+                return;
+            }
+            logger.error("Export impossible", e);
+            update({ state: "error" });
+            showToast({ text: t("em.error"), variant: "critical" });
+        });
+}
+
+const isActive = (j: Job | null) => !!j && (j.state === "running" || j.state === "saving");
 
 // ── Fenêtre de progression ───────────────────────────────────────────────────
-function ExportModal({ channelId, name, modalProps }: { channelId: string; name: string; modalProps: RenderModalProps; }) {
+function ExportModal({ modalProps }: { modalProps: RenderModalProps; }) {
     useLang();
-    const [p, setP] = useState<ExportProgress | null>(null);
-    const [state, setState] = useState<"running" | "saving" | "done" | "error" | "canceled">("running");
-    const [result, setResult] = useState<{ count: number; skipped: number; size: number; } | null>(null);
-    const cancel = useRef({ canceled: false });
-
-    useEffect(() => {
-        running = true;
-        exportConversation(channelId, { media: settings.store.media as MediaMode, maxMB: Number(settings.store.maxMB) || 0 }, cancel.current, setP)
-            .then(async res => {
-                setState("saving");
-                if (IS_DISCORD_DESKTOP) await DiscordNative.fileManager.saveWithDialog(res.data, res.filename);
-                else saveFile(new File([res.data as unknown as BlobPart], res.filename, { type: "text/html" }));
-                setResult({ count: res.count, skipped: res.skipped, size: res.data.length });
-                setState("done");
-            })
-            .catch(e => {
-                if (e instanceof CanceledError) {
-                    setState("canceled");
-                    return;
-                }
-                logger.error("Export impossible", e);
-                setState("error");
-            })
-            .finally(() => { running = false; });
-        // Fenêtre fermée en cours de route : on arrête proprement.
-        return () => { cancel.current.canceled = true; };
-    }, []);
+    const j = useJob();
+    if (!j) return null;
+    const p = j.progress;
+    const { state, result } = j;
 
     const pct = !p ? 0
         : p.phase === "messages" ? 5
@@ -100,10 +143,10 @@ function ExportModal({ channelId, name, modalProps }: { channelId: string; name:
                             : p.phase === "media" ? t("em.phaseMedia", { done: p.mediaDone, total: p.mediaTotal, mb: mb(p.bytes) })
                                 : t("em.phaseWriting");
 
-    const finished = state === "done" || state === "error" || state === "canceled";
+    const finished = !isActive(j);
 
     return (
-        <Modal {...modalProps} size="sm" title={t("em.title")} subtitle={name}>
+        <Modal {...modalProps} size="sm" title={t("em.title")} subtitle={j.name}>
             <div className={cl("root")}>
                 <div className={cl("status", state === "error" && "status-error")}>{status}</div>
                 <div className={cl("bar")}>
@@ -118,15 +161,30 @@ function ExportModal({ channelId, name, modalProps }: { channelId: string; name:
                 )}
                 {state === "done" && result && result.skipped > 0 && <div className={cl("hint")}>{t("em.skipped", { count: result.skipped })}</div>}
                 {state === "done" && result && <div className={cl("hint")}>{t("em.fileSize", { mb: mb(result.size) })}</div>}
-                {!finished && <div className={cl("hint")}>{t("em.keepOpen")}</div>}
+                {!finished && <div className={cl("hint")}>{t("em.background")}</div>}
                 <div className={cl("actions")}>
-                    {!finished
-                        ? <button className={cl("btn")} disabled={state === "saving"} onClick={() => { cancel.current.canceled = true; }}>{t("em.cancel")}</button>
-                        : <button className={cl("btn", "btn-primary")} onClick={modalProps.onClose}>{t("em.close")}</button>}
+                    {!finished && <button className={cl("btn")} disabled={state === "saving"} onClick={() => { j.cancel.canceled = true; }}>{t("em.cancel")}</button>}
+                    <button className={cl("btn", "btn-primary")} onClick={modalProps.onClose}>{t(finished ? "em.close" : "em.hide")}</button>
                 </div>
             </div>
         </Modal>
     );
+}
+
+const openProgress = () => openModal(props => (
+    <ErrorBoundary>
+        <ExportModal modalProps={props} />
+    </ErrorBoundary>
+));
+
+function HeaderButton() {
+    useLang();
+    const j = useJob();
+    const p = j?.progress;
+    const label = !p || p.phase === "messages" ? t("em.phaseMessages", { count: p?.messages ?? 0 })
+        : p.phase === "media" ? t("em.headerMedia", { done: p.mediaDone, total: p.mediaTotal })
+            : t("em.title");
+    return <HeaderBarIcon icon={() => <ExportIcon width={20} height={20} />} tooltip={`${j?.name ?? ""} — ${label}`} onClick={openProgress} />;
 }
 
 function startExport(channel: Channel | undefined, name: string) {
@@ -134,15 +192,14 @@ function startExport(channel: Channel | undefined, name: string) {
         showToast({ text: t("em.noConversation"), variant: "critical" });
         return;
     }
-    if (running) {
-        showToast({ text: t("em.alreadyRunning"), variant: "critical" });
+    if (isActive(job)) {
+        // Même conversation : on montre l'export en cours au lieu de recommencer.
+        if (job!.channelId !== channel.id) showToast({ text: t("em.alreadyRunning"), variant: "critical" });
+        openProgress();
         return;
     }
-    openModal(props => (
-        <ErrorBoundary>
-            <ExportModal channelId={channel.id} name={name} modalProps={props} />
-        </ErrorBoundary>
-    ));
+    runJob(channel.id, name);
+    openProgress();
 }
 
 // ── Clic droit ───────────────────────────────────────────────────────────────
@@ -196,5 +253,10 @@ export default definePlugin({
     contextMenus: {
         "user-context": userMenu,
         "gdm-context": groupMenu,
+    },
+
+    stop() {
+        if (job) job.cancel.canceled = true;
+        hideTempHeaderButton("ExportMessages");
     },
 });
