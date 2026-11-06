@@ -575,7 +575,6 @@ export const fr = {
     "ti.installFailed": "{name} n'a pas pu être lancé.",
     // ImageToolkit
     "it.menu": "Outils d'image",
-    "it.view": "Voir en grand",
     "it.search": "Rechercher l'image",
     "it.copy": "Copier l'image",
     "it.save": "Enregistrer l'image",

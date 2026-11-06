@@ -571,7 +571,6 @@ export const en = {
     "ti.installFailed": "{name} could not be started.",
     // ImageToolkit
     "it.menu": "Image tools",
-    "it.view": "View full size",
     "it.search": "Search image",
     "it.copy": "Copy image",
     "it.save": "Save image",

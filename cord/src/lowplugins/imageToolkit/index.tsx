@@ -5,10 +5,11 @@
  */
 
 /*
- * ImageToolkit — outils au clic droit sur les images :
- *  - avatar et bannière du profil de quelqu'un : agrandir, rechercher l'image
- *    (Google Lens, Yandex…), copier, enregistrer, copier / ouvrir le lien.
- *    Jamais sur ton propre profil ni dans l'éditeur de profil.
+ * ImageToolkit — l'avatar et la bannière du profil de quelqu'un :
+ *  - clic : l'image s'ouvre en grand ;
+ *  - clic droit : rechercher l'image (Google Lens, Yandex…), copier,
+ *    enregistrer, copier / ouvrir le lien.
+ *  Jamais sur ton propre profil ni dans l'éditeur de profil.
  *  - images des messages : « Rechercher l'image » dans le menu de Discord
  *    (copier / enregistrer y sont déjà).
  *
@@ -101,11 +102,10 @@ function ProfileImageMenu({ image }: { image: ProfileImage; }) {
     const link = resizeImage(image.url, 1024);
     return (
         <Menu.Menu navId="vc-image-toolkit" onClose={ContextMenuApi.closeContextMenu} aria-label={t("it.menu")}>
-            <Menu.MenuItem id="vc-it-view" label={t("it.view")} leadingAccessory={{ type: "icon", icon: ImageIcon }} action={() => openFullImage(image.url, image.kind)} />
             {SearchItem({ url: link })}
             <Menu.MenuSeparator />
             <Menu.MenuItem id="vc-it-copy" label={t("it.copy")} leadingAccessory={{ type: "icon", icon: CopyIcon }} action={() => copyImage(image.url)} />
-            <Menu.MenuItem id="vc-it-save" label={t("it.save")} action={() => saveImage(image)} />
+            <Menu.MenuItem id="vc-it-save" label={t("it.save")} leadingAccessory={{ type: "icon", icon: ImageIcon }} action={() => saveImage(image)} />
             <Menu.MenuSeparator />
             <Menu.MenuItem id="vc-it-copy-link" label={t("it.copyLink")} leadingAccessory={{ type: "icon", icon: LinkIcon }} action={() => copyToClipboard(link).then(() => showToast({ text: t("it.linkCopied"), variant: "success" }))} />
             <Menu.MenuItem id="vc-it-open-link" label={t("it.openLink")} leadingAccessory={{ type: "icon", icon: OpenExternalIcon }} action={() => openExternal(link)} />
@@ -140,7 +140,7 @@ const messageContextMenu: NavContextMenuPatchCallback = (children, props) => {
 
 export default definePlugin({
     name: "ImageToolkit",
-    description: "Right-click the avatar or banner of someone's profile for image tools (view, reverse search, copy, save, link), and search message images from their menu.",
+    description: "Click the avatar or banner of someone's profile to enlarge it, right-click it to search, copy, save or open the image; also search message images from their menu.",
     tags: ["Media", "Utility"],
     authors: [{ name: "0ctane", id: 0n }],
     dependencies: ["DynamicImageModalAPI"],
@@ -150,12 +150,15 @@ export default definePlugin({
     },
 
     start() {
+        // Clic simple : l'image en grand. Clic droit : les outils.
+        setProfileImageHandler("click", "ImageToolkit", image => openFullImage(image.url, image.kind));
         setProfileImageHandler("context", "ImageToolkit", (image, event) => {
             if (event) ContextMenuApi.openContextMenu(event as any, () => <ProfileImageMenu image={image} />);
         });
     },
 
     stop() {
+        setProfileImageHandler("click", "ImageToolkit", null);
         setProfileImageHandler("context", "ImageToolkit", null);
     },
 });
