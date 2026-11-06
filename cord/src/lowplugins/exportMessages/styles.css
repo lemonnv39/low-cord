@@ -1,0 +1,63 @@
+/* ── ExportMessages (low-cord) ────────────────────────────────────────── */
+.lc-em-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 10px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-em-title {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.lc-em-counts {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.lc-em-counts > div {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
+}
+
+.lc-em-counts b {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-em-counts span,
+.lc-em-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-em-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.lc-em-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 6%));
+    color: var(--header-primary, var(--text-strong));
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.lc-em-btn:hover {
+    border-color: var(--text-muted);
+}

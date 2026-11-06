@@ -186,6 +186,12 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ImageToolkit: {
             description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet, la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages et dans la visionneuse d'images",
         },
+        ExportMessages: {
+            description: "Exporte un message ou toute la conversation chargée (texte lisible ou JSON) depuis le clic droit d'un message, et ta liste de contacts depuis les réglages du plugin",
+            settings: {
+                format: { name: "Format", description: "Format des fichiers exportés", options: { txt: "Texte lisible (.txt)", json: "JSON (.json)" } },
+            },
+        },
         TokenImporter: {
             description: "Tes propres comptes Discord : ajoute-les avec un token que tu possèdes déjà, range-les en dossiers, bascule de l'un à l'autre ou ouvre-les chacun dans sa fenêtre. Aucun scan du disque, aucune autre application touchée",
         },
