@@ -414,7 +414,9 @@ export async function exportConversation(
     }
 
     const day = new Date().toISOString().slice(0, 10);
-    const safe = name.replace(/[\\/:*?"<>|\r\n]+/g, "_").replace(/\s+/g, " ").trim().slice(0, 60) || "conversation";
+    // La boîte « Enregistrer sous » de Discord refuse les espaces, accents et
+    // symboles (« fileName has invalid characters ») : lettres, chiffres, - et _ seulement.
+    const safe = name.normalize("NFD").replace(/\p{M}/gu, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "conversation";
     logger.info(`Export : ${messages.length} messages, ${assets.size}/${plan.jobs.length} médias, ${(total / 1048576).toFixed(1)} Mo`);
-    return { filename: `DM ${safe} ${day}.html`, data: out, skipped: progress.skipped, count: messages.length };
+    return { filename: `DM_${safe}_${day}.html`, data: out, skipped: progress.skipped, count: messages.length };
 }
