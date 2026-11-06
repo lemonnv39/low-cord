@@ -134,7 +134,8 @@ function MenuItem(guildId: string, { id, type, withIcon }: { id?: string, type?:
     );
 }
 
-function makeContextMenuPatch(type?: MenuItemParentType, withIcon = false): NavContextMenuPatchCallback {
+// Toujours avec icône : alignée sur les autres entrées low-cord en haut du menu.
+function makeContextMenuPatch(type?: MenuItemParentType, withIcon = true): NavContextMenuPatchCallback {
     return (children, props) => {
         if (
             !props ||
@@ -214,6 +215,6 @@ export default definePlugin({
         "user-context": makeContextMenuPatch(MenuItemParentType.User),
         "channel-context": makeContextMenuPatch(MenuItemParentType.Channel),
         "guild-context": makeContextMenuPatch(MenuItemParentType.Guild),
-        "guild-header-popout": makeContextMenuPatch(MenuItemParentType.Guild, true)
+        "guild-header-popout": makeContextMenuPatch(MenuItemParentType.Guild)
     }
 });

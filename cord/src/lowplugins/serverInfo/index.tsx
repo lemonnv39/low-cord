@@ -45,7 +45,7 @@ export default definePlugin({
     searchTerms: ["guild", "info", "ServerProfile"],
 
     contextMenus: {
-        "guild-context": makePatch(false),
+        "guild-context": makePatch(true),
         "guild-header-popout": makePatch(true)
     }
 });
