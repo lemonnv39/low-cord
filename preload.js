@@ -1,4 +1,4 @@
-// Vencord baebec8
+// Vencord 30eaf3d
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
