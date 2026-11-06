@@ -65,4 +65,7 @@ export const enum IpcEvents {
     USER_PLUGINS_PICK = "LowCordUserPluginsPick",
     USER_PLUGINS_DELETE = "LowCordUserPluginsDelete",
     USER_PLUGINS_OPEN_FOLDER = "LowCordUserPluginsOpenFolder",
+    /** low-cord : mises à jour automatiques (voir src/main/lowcordUpdater.ts). */
+    LOWCORD_UPDATE_CHECK = "LowCordUpdateCheck",
+    LOWCORD_UPDATE_RESTART = "LowCordUpdateRestart",
 }

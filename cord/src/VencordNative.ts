@@ -8,6 +8,7 @@ import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
 import type { UserThemeHeader } from "@main/themes";
+import type { UpdateStatus } from "@main/lowcordUpdater";
 import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { IpcRes } from "@utils/types";
@@ -101,6 +102,13 @@ export default {
         pick: (title: string) => invoke<UserPluginMeta | null>(IpcEvents.USER_PLUGINS_PICK, title),
         delete: (fileName: string) => invoke<void>(IpcEvents.USER_PLUGINS_DELETE, fileName),
         openFolder: () => invoke<string>(IpcEvents.USER_PLUGINS_OPEN_FOLDER),
+    },
+
+    /** low-cord : mises à jour automatiques (voir src/main/lowcordUpdater.ts). */
+    lowcordUpdate: {
+        check: () => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_CHECK),
+        /** Installe la version prête et redémarre Discord. */
+        restart: () => invoke<void>(IpcEvents.LOWCORD_UPDATE_RESTART),
     },
 
     csp: {

@@ -22,6 +22,11 @@ export const fr = {
     "tab.source": "Code source",
 
     // Onglet Plugins
+    // Mises à jour automatiques
+    "upd.tooltip": "Mise à jour low-cord prête — clic pour installer et redémarrer Discord",
+    "upd.ready": "Nouvelle version de low-cord prête : clique sur la flèche verte en haut pour l'installer (ou elle s'installera à la prochaine fermeture de Discord).",
+    "upd.restarting": "Installation de la mise à jour…",
+    "upd.failed": "Redémarrage impossible, réessaie.",
     "plugins.summary": "{active} actif(s) sur {total}",
     "plugins.title": "Plugins",
     "plugins.subtitle": "Active, règle ou ajoute tes plugins. Peu, mais efficaces.",

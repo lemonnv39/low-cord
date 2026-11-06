@@ -149,6 +149,11 @@ window.VencordNative = {
         delete: async () => { },
         openFolder: async () => "",
     },
+    // Mises à jour automatiques : uniquement sur l'application de bureau.
+    lowcordUpdate: {
+        check: async () => ({ enabled: false, ready: false }),
+        restart: async () => { },
+    },
     pluginHelpers: {} as any,
     csp: {} as any,
 };

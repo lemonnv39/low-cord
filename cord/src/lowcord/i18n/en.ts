@@ -20,6 +20,11 @@ export const en = {
     "tab.settingsFolder": "Settings folder",
     "tab.source": "Source code",
 
+    // Mises à jour automatiques
+    "upd.tooltip": "low-cord update ready — click to install and restart Discord",
+    "upd.ready": "New low-cord version ready: click the green arrow at the top to install it (or it will install next time Discord closes).",
+    "upd.restarting": "Installing the update…",
+    "upd.failed": "Could not restart, try again.",
     "plugins.summary": "{active} of {total} enabled",
     "plugins.title": "Plugins",
     "plugins.subtitle": "Enable, configure or add your plugins. Few, but effective.",
