@@ -1,42 +1,56 @@
 /* ── ExportMessages (low-cord) ────────────────────────────────────────── */
-.lc-em-panel {
+.lc-em-root {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 8px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
-    border-radius: 10px;
-    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+    padding-bottom: 4px;
 }
 
-.lc-em-title {
+.lc-em-status {
     color: var(--header-primary, var(--text-strong));
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 500;
 }
 
-.lc-em-counts {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+.lc-em-status-error {
+    color: var(--status-danger, #f23f43);
 }
 
-.lc-em-counts > div {
+.lc-em-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+}
+
+.lc-em-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--header-primary, var(--text-strong));
+    transition: width 300ms ease;
+}
+
+.lc-em-bar-done {
+    background: var(--status-positive, #23a55a);
+}
+
+.lc-em-bar-error {
+    background: var(--status-danger, #f23f43);
+}
+
+.lc-em-stats {
     display: flex;
-    flex-direction: column;
-    padding: 8px 10px;
-    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
-    border-radius: 8px;
+    flex-wrap: wrap;
+    gap: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
 }
 
-.lc-em-counts b {
-    color: var(--header-primary, var(--text-strong));
-    font-size: 18px;
+.lc-em-stats b {
+    color: var(--text-normal, var(--text-default));
     font-variant-numeric: tabular-nums;
 }
 
-.lc-em-counts span,
 .lc-em-hint {
     color: var(--text-muted);
     font-size: 12px;
@@ -44,11 +58,11 @@
 
 .lc-em-actions {
     display: flex;
-    gap: 8px;
+    justify-content: flex-end;
 }
 
 .lc-em-btn {
-    padding: 7px 14px;
+    padding: 7px 16px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
     border-radius: 6px;
     background: var(--background-mod-strong, rgb(255 255 255 / 6%));
@@ -58,6 +72,14 @@
     cursor: pointer;
 }
 
-.lc-em-btn:hover {
-    border-color: var(--text-muted);
+.lc-em-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.lc-em-btn-primary {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+    font-weight: 600;
 }

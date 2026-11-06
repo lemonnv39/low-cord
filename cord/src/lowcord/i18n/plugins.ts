@@ -187,9 +187,14 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet, la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages et dans la visionneuse d'images",
         },
         ExportMessages: {
-            description: "Exporte un message ou toute la conversation chargée (texte lisible ou JSON) depuis le clic droit d'un message, et ta liste de contacts depuis les réglages du plugin",
+            description: "Clic droit sur une personne ou un groupe → « Exporter la conversation » : tous les messages, du premier au dernier, dans un fichier .html soigné, avec les images, les profils cliquables (bannière, avatar, bio) et la recherche",
             settings: {
-                format: { name: "Format", description: "Format des fichiers exportés", options: { txt: "Texte lisible (.txt)", json: "JSON (.json)" } },
+                media: {
+                    name: "Médias enregistrés",
+                    description: "Ce qui est intégré dans le fichier exporté",
+                    options: { images: "Images (photos, GIF, avatars, bannières, émojis)", all: "Tout (aussi vidéos, sons et fichiers)", none: "Aucun (liens seulement)" },
+                },
+                maxMB: { name: "Taille max des médias (Mo)", description: "Au-delà, les médias restants gardent seulement leur lien" },
             },
         },
         TokenImporter: {
