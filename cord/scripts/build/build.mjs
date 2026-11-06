@@ -23,7 +23,7 @@ import { readdir } from "fs/promises";
 import { join, resolve } from "path";
 
 import { isPluginAllowed, LOWCORD_PLUGIN_DIR } from "./lowcord.mjs";
-import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_ANTI_CRASH_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues } from "./common.mjs";
+import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_ANTI_CRASH_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, getMonacoEditorCdnUrl } from "./common.mjs";
 
 const defines = stringifyValues({
     IS_STANDALONE,
@@ -35,7 +35,8 @@ const defines = stringifyValues({
     IS_EXTENSION: false,
     IS_USERSCRIPT: false,
     VERSION,
-    BUILD_TIMESTAMP
+    BUILD_TIMESTAMP,
+    DESKTOP_MONACO_EDITOR_URL: await getMonacoEditorCdnUrl(),
 });
 
 if (defines.IS_STANDALONE === "false") {
