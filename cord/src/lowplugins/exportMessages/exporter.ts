@@ -17,7 +17,7 @@
 
 import { getLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
-import { ChannelStore, RestAPI, UserStore } from "@webpack/common";
+import { ChannelStore, RestAPI, UserProfileStore, UserStore } from "@webpack/common";
 import template from "file://./template.html";
 
 const logger = new Logger("ExportMessages");
@@ -193,16 +193,96 @@ interface ExportUser {
     banner?: string;
     bannerUrl?: string;
     accent?: number;
+    /** couleurs du thème de profil (Nitro) : haut, bas */
+    theme?: [number, number];
     bio?: string;
     pronouns?: string;
     createdAt?: number;
+    legacy?: string;
+    premiumSince?: number;
+    /** tag de serveur affiché à côté du pseudo */
+    tag?: { text: string; k?: string; u?: string; };
+    badges?: { d: string; k?: string; u: string; }[];
+    deco?: string;
+    decoUrl?: string;
+    connections?: { type: string; name: string; verified: boolean; }[];
 }
+
+/** Ce que l'API (ou, à défaut, le cache de Discord) dit du profil complet. */
+interface RawProfile {
+    banner?: string | null;
+    accent?: number | null;
+    theme?: number[] | null;
+    bio?: string | null;
+    pronouns?: string | null;
+    legacy?: string | null;
+    premiumSince?: string | number | Date | null;
+    badges?: { description: string; icon: string; }[];
+    tag?: { tag?: string; badge?: string; identity_guild_id?: string; identityGuildId?: string; } | null;
+    decoration?: string | null;
+    connections?: { type: string; name: string; verified: boolean; }[];
+}
+
+function fromApi(p: any): RawProfile {
+    return {
+        banner: p?.user_profile?.banner ?? p?.user?.banner,
+        accent: p?.user_profile?.accent_color ?? p?.user?.accent_color,
+        theme: p?.user_profile?.theme_colors,
+        bio: p?.user_profile?.bio || p?.user?.bio,
+        pronouns: p?.user_profile?.pronouns,
+        legacy: p?.legacy_username,
+        premiumSince: p?.premium_since,
+        badges: p?.badges,
+        tag: p?.user?.primary_guild?.identity_enabled === false ? null : p?.user?.primary_guild,
+        decoration: p?.user?.avatar_decoration_data?.asset,
+        connections: p?.connected_accounts,
+    };
+}
+
+function fromCache(id: string): RawProfile | null {
+    const p: any = UserProfileStore.getUserProfile(id);
+    const u: any = UserStore.getUser(id);
+    if (!p && !u) return null;
+    return {
+        banner: p?.banner ?? u?.banner,
+        accent: p?.accentColor,
+        theme: p?.themeColors,
+        bio: p?.bio,
+        pronouns: p?.pronouns,
+        legacy: p?.legacyUsername,
+        premiumSince: p?.premiumSince,
+        badges: p?.badges,
+        tag: u?.primaryGuild,
+        decoration: u?.avatarDecorationData?.asset,
+        connections: p?.connectedAccounts,
+    };
+}
+
+function applyProfile(u: ExportUser, r: RawProfile) {
+    if (r.banner) u.bannerUrl = bannerUrl(u.id, r.banner);
+    if (typeof r.accent === "number") u.accent = r.accent;
+    if (Array.isArray(r.theme) && r.theme.length >= 2) u.theme = [r.theme[0], r.theme[1]];
+    if (r.bio) u.bio = r.bio;
+    if (r.pronouns) u.pronouns = r.pronouns;
+    if (r.legacy) u.legacy = r.legacy;
+    if (r.premiumSince) u.premiumSince = new Date(r.premiumSince).getTime() || undefined;
+    if (Array.isArray(r.badges) && r.badges.length) {
+        u.badges = r.badges.filter(b => b?.icon).map(b => ({ d: b.description, u: `https://cdn.discordapp.com/badge-icons/${b.icon}.png` }));
+    }
+    const guildId = r.tag?.identity_guild_id ?? r.tag?.identityGuildId;
+    if (r.tag?.tag) u.tag = { text: r.tag.tag, u: r.tag.badge && guildId ? `https://cdn.discordapp.com/guild-tag-badges/${guildId}/${r.tag.badge}.png` : undefined };
+    if (r.decoration) u.decoUrl = `https://cdn.discordapp.com/avatar-decoration-presets/${r.decoration}.png?size=240&passthrough=false`;
+    if (Array.isArray(r.connections) && r.connections.length) u.connections = r.connections.map(c => ({ type: c.type, name: c.name, verified: !!c.verified }));
+}
+
+/** Texte sans les caractères invisibles (certains noms n'en contiennent que). */
+const visible = (s?: string | null) => (s && s.replace(/[\s\u200B-\u200F\u2060\u3164\uFFA0\u115F\u1160\u2800]/g, "") ? s : "");
 
 function displayUser(raw: any): ExportUser {
     const live = UserStore.getUser(raw.id);
     return {
         id: raw.id,
-        name: raw.global_name || live?.globalName || raw.username || live?.username || raw.id,
+        name: visible(raw.global_name) || visible(live?.globalName) || raw.username || live?.username || raw.id,
         username: raw.username || live?.username || raw.id,
         bot: !!(raw.bot ?? live?.bot) || undefined,
         avatarUrl: avatarUrl(raw.id, raw.avatar ?? live?.avatar),
@@ -258,16 +338,14 @@ export async function exportConversation(
     for (const m of raw) counts.set(m.author?.id, (counts.get(m.author?.id) ?? 0) + 1);
     const members = [...users.keys()].filter(id => counts.has(id) || channel.recipients?.includes(id) || id === me.id).slice(0, 25);
     for (const id of members) {
+        const u = users.get(id)!;
         try {
-            const p = await api(`/users/${id}/profile`, { with_mutual_guilds: false, with_mutual_friends: false }, cancel);
-            const u = users.get(id)!;
-            const banner = p?.user_profile?.banner ?? p?.user?.banner;
-            if (banner) u.bannerUrl = bannerUrl(id, banner);
-            u.accent = p?.user_profile?.accent_color ?? p?.user?.accent_color ?? undefined;
-            u.bio = p?.user_profile?.bio || p?.user?.bio || undefined;
-            u.pronouns = p?.user_profile?.pronouns || undefined;
+            applyProfile(u, fromApi(await api(`/users/${id}/profile`, { with_mutual_guilds: false, with_mutual_friends: false }, cancel)));
         } catch (e) {
             if (e instanceof CanceledError) throw e;
+            // Profil non accessible : ce que Discord a déjà en mémoire.
+            const cached = fromCache(id);
+            if (cached) applyProfile(u, cached);
         }
         await sleep(PROFILE_DELAY);
     }
@@ -278,6 +356,9 @@ export async function exportConversation(
     for (const u of users.values()) {
         u.avatar = plan.add(u.avatarUrl, 8 * 1024 * 1024);
         if (u.bannerUrl) u.banner = plan.add(u.bannerUrl, 15 * 1024 * 1024);
+        if (u.decoUrl) u.deco = plan.add(u.decoUrl, 2 * 1024 * 1024);
+        for (const b of u.badges ?? []) b.k = plan.add(b.u, 512 * 1024);
+        if (u.tag?.u) u.tag.k = plan.add(u.tag.u, 512 * 1024);
     }
     const emojis: Record<string, string | undefined> = {};
     const addEmoji = (id: string, isAnimated?: boolean) => {

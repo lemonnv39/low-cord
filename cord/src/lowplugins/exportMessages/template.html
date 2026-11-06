@@ -183,22 +183,39 @@ mark { border-radius: 3px; background: var(--mark); color: inherit; }
 .reaction { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-elev); color: var(--muted); font-size: 13px; font-weight: 600; }
 .reaction .emoji { width: 16px; height: 16px; vertical-align: 0; }
 
-/* profil */
+/* profil (fidèle à la carte de Discord : thème de couleurs, bannière, badges) */
 .backdrop { position: fixed; inset: 0; z-index: 10; display: none; }
 .backdrop.open { display: block; }
-.profile { position: fixed; z-index: 11; width: 340px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-elev); box-shadow: var(--shadow); opacity: 0; transform: translateY(6px) scale(.98); transition: opacity .14s ease, transform .14s ease; pointer-events: none; }
+.profile { --p-bg: var(--bg-elev); --p-panel: var(--bg-soft); --p-text: var(--text); --p-strong: var(--text-strong); --p-muted: var(--muted);
+    position: fixed; z-index: 11; width: 340px; max-height: calc(100vh - 24px); overflow: hidden auto; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--p-bg); color: var(--p-text); box-shadow: var(--shadow); opacity: 0; transform: translateY(6px) scale(.98);
+    transition: opacity .14s ease, transform .14s ease; pointer-events: none; scrollbar-width: none; }
 .profile.open { opacity: 1; transform: none; pointer-events: auto; }
+.profile.themed { border-color: transparent; }
+.profile.theme-dark { --p-panel: rgba(0, 0, 0, .32); --p-text: #e9e9ec; --p-strong: #ffffff; --p-muted: rgba(255, 255, 255, .72); }
+.profile.theme-light { --p-panel: rgba(255, 255, 255, .45); --p-text: #1f2023; --p-strong: #060607; --p-muted: rgba(0, 0, 0, .62); }
 .p-banner { height: 120px; background: var(--bg-soft) center / cover no-repeat; }
-.p-avatar { position: absolute; top: 76px; left: 16px; width: 88px; height: 88px; border: 6px solid var(--bg-elev); border-radius: 50%; object-fit: cover; background: var(--bg-elev); cursor: zoom-in; }
-.p-body { padding: 52px 16px 16px; }
-.p-name { color: var(--text-strong); font-size: 20px; font-weight: 700; line-height: 1.2; word-break: break-word; }
-.p-user { margin-top: 2px; color: var(--text); font-size: 14px; }
-.p-pronouns { color: var(--muted); font-size: 13px; }
-.p-card { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--bg-soft); }
-.p-label { margin-bottom: 4px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.p-bio { max-height: 180px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-.p-row + .p-row { margin-top: 10px; }
-.p-id { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+.profile.themed .p-banner { height: 105px; margin: 4px 4px 0; border-radius: 10px 10px 0 0; }
+.p-avatar-wrap { position: absolute; top: 60px; left: 14px; width: 92px; height: 92px; cursor: zoom-in; }
+.p-avatar { width: 92px; height: 92px; border: 6px solid var(--p-bg); border-radius: 50%; object-fit: cover; background: var(--p-bg); }
+.p-deco { position: absolute; inset: -9px; width: 110px; height: 110px; pointer-events: none; }
+.p-body { display: grid; gap: 10px; padding: 46px 14px 14px; }
+.p-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; min-height: 22px; margin: -40px 0 6px auto; padding: 3px 6px; border-radius: 9px; background: var(--p-panel); width: max-content; max-width: 210px; }
+.p-badges img { width: 22px; height: 22px; object-fit: contain; }
+.p-badges:empty { display: none; }
+.p-head { display: grid; gap: 2px; }
+.p-name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--p-strong); font-size: 20px; font-weight: 700; line-height: 1.2; word-break: break-word; }
+.p-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 6px; background: var(--p-panel); color: var(--p-strong); font-size: 12px; font-weight: 700; }
+.p-tag img { width: 14px; height: 14px; }
+.p-user { color: var(--p-text); font-size: 14px; }
+.p-user span { color: var(--p-muted); }
+.p-card { display: grid; gap: 12px; padding: 12px; border-radius: 10px; background: var(--p-panel); }
+.p-label { margin-bottom: 4px; color: var(--p-muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.p-bio { max-height: 200px; overflow-y: auto; color: var(--p-text); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.p-conn { display: flex; flex-wrap: wrap; gap: 6px; }
+.p-conn span { padding: 3px 8px; border-radius: 6px; background: var(--p-panel); font-size: 12px; }
+.p-conn b { color: var(--p-muted); font-weight: 600; text-transform: capitalize; }
+.p-id { color: var(--p-muted); font-family: var(--mono); font-size: 12px; }
 
 /* visionneuse */
 .lightbox { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, .86); }
@@ -277,7 +294,7 @@ mark { border-radius: 3px; background: var(--mark); color: inherit; }
             notSaved: "Fichier non inclus dans l'export", openOriginal: "ouvrir l'original", download: "Enregistrer", close: "Fermer",
             call: "a lancé un appel", callMissed: "Appel manqué", pinMsg: "a épinglé un message", added: "a ajouté {x} au groupe",
             left: "a quitté le groupe", removed: "a retiré {x} du groupe", rename: "a renommé le groupe en « {x} »", icon: "a changé l'icône du groupe",
-            theme: "Thème clair / sombre", bot: "BOT", user: "Identifiant"
+            theme: "Thème clair / sombre", connections: "Connexions", bot: "BOT", user: "Identifiant"
         },
         en: {
             dm: "Direct message", group: "Group", messages: "Messages", members: "Participants", period: "Period",
@@ -288,7 +305,7 @@ mark { border-radius: 3px; background: var(--mark); color: inherit; }
             notSaved: "File not included in the export", openOriginal: "open original", download: "Save", close: "Close",
             call: "started a call", callMissed: "Missed call", pinMsg: "pinned a message", added: "added {x} to the group",
             left: "left the group", removed: "removed {x} from the group", rename: "renamed the group to “{x}”", icon: "changed the group icon",
-            theme: "Light / dark theme", bot: "BOT", user: "User ID"
+            theme: "Light / dark theme", connections: "Connections", bot: "BOT", user: "User ID"
         }
     }[D.lang] || null;
     if (!L) L = { };
@@ -509,29 +526,47 @@ mark { border-radius: 3px; background: var(--mark); color: inherit; }
 
     // Profil
     var profile = $("profile"), backdrop = $("backdrop");
+    var hex = function (n) { return "#" + ("000000" + (n >>> 0).toString(16)).slice(-6); };
+    // Texte clair ou foncé selon la luminosité du thème (comme Discord).
+    function isLight(n) { var r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6; }
     function openProfile(id, anchor) {
         var u = user(id);
         var banner = img(u.banner, u.bannerUrl);
-        var accent = typeof u.accent === "number" ? "#" + ("000000" + u.accent.toString(16)).slice(-6) : "";
+        var theme = u.theme && u.theme.length === 2 ? u.theme : null;
         var since = u.createdAt ? fmtLong.format(new Date(u.createdAt)) : "";
+        var nitro = u.premiumSince ? fmtLong.format(new Date(u.premiumSince)) : "";
+        profile.className = "profile" + (theme ? " themed " + (isLight(theme[0]) && isLight(theme[1]) ? "theme-light" : "theme-dark") : "");
+        profile.style.background = theme ? "linear-gradient(" + hex(theme[0]) + ", " + hex(theme[1]) + ")" : "";
+        profile.style.setProperty("--p-bg", theme ? hex(theme[0]) : "var(--bg-elev)");
+        var bannerStyle = banner ? "background-image:url('" + esc(banner).replace(/'/g, "%27") + "')"
+            : theme ? "background:" + hex(theme[0]) + ";filter:brightness(.82)"
+                : typeof u.accent === "number" ? "background:" + hex(u.accent) : "";
+        var badges = (u.badges || []).map(function (b) { var src = img(b.k, b.u); return src ? "<img src=\"" + esc(src) + "\" alt=\"\" title=\"" + esc(b.d) + "\">" : ""; }).join("");
+        var tag = u.tag ? "<span class=\"p-tag\" title=\"" + esc(u.tag.text) + "\">" + (u.tag.k || u.tag.u ? "<img src=\"" + esc(img(u.tag.k, u.tag.u)) + "\" alt=\"\">" : "") + esc(u.tag.text) + "</span>" : "";
+        var deco = u.deco || u.decoUrl ? "<img class=\"p-deco\" src=\"" + esc(img(u.deco, u.decoUrl)) + "\" alt=\"\">" : "";
+        var conns = (u.connections || []).map(function (c) { return "<span><b>" + esc(c.type) + "</b> " + esc(c.name) + (c.verified ? " ✓" : "") + "</span>"; }).join("");
         profile.innerHTML =
-            "<div class=\"p-banner\" style=\"" + (banner ? "background-image:url('" + esc(banner).replace(/'/g, "%27") + "')" : accent ? "background:" + accent : "") + "\"></div>" +
-            "<img class=\"p-avatar\" src=\"" + esc(avatarOf(id)) + "\" alt=\"\" data-zoom>" +
-            "<div class=\"p-body\"><div class=\"p-name\">" + esc(u.name) + (u.bot ? " <span class=\"badge\">" + esc(S("bot")) + "</span>" : "") + "</div>" +
-            "<div class=\"p-user\">@" + esc(u.username) + (u.pronouns ? " <span class=\"p-pronouns\">· " + esc(u.pronouns) + "</span>" : "") + "</div>" +
+            "<div class=\"p-banner\" style=\"" + bannerStyle + "\"></div>" +
+            "<div class=\"p-avatar-wrap\" data-zoom-src=\"" + esc(avatarOf(id)) + "\"><img class=\"p-avatar\" src=\"" + esc(avatarOf(id)) + "\" alt=\"\">" + deco + "</div>" +
+            "<div class=\"p-body\">" +
+            "<div class=\"p-badges\">" + badges + "</div>" +
+            "<div class=\"p-head\"><div class=\"p-name\">" + esc(u.name) + (u.bot ? " <span class=\"badge\">" + esc(S("bot")) + "</span>" : "") + tag + "</div>" +
+            "<div class=\"p-user\">" + esc(u.username) + (u.pronouns ? " <span>· " + esc(u.pronouns) + "</span>" : "") + (u.legacy ? " <span>· " + esc(u.legacy) + "</span>" : "") + "</div></div>" +
             "<div class=\"p-card\">" +
-            (u.bio ? "<div class=\"p-row\"><div class=\"p-label\">" + esc(S("about")) + "</div><div class=\"p-bio\">" + md(u.bio, false) + "</div></div>" : "") +
-            (since ? "<div class=\"p-row\"><div class=\"p-label\">" + esc(S("memberSince")) + "</div><div>" + esc(since) + "</div></div>" : "") +
-            "<div class=\"p-row\"><div class=\"p-label\">" + esc(S("inConv")) + "</div><div>" + esc(S("msgCount", (counts[id] || 0).toLocaleString(LOCALE))) + "</div></div>" +
-            "<div class=\"p-row\"><div class=\"p-label\">" + esc(S("user")) + "</div><div class=\"p-id\">" + esc(id) + "</div></div>" +
+            (u.bio ? "<div><div class=\"p-label\">" + esc(S("about")) + "</div><div class=\"p-bio\">" + md(u.bio, false) + "</div></div>" : "") +
+            (since ? "<div><div class=\"p-label\">" + esc(S("memberSince")) + "</div><div>" + esc(since) + (nitro ? " · Nitro " + esc(nitro) : "") + "</div></div>" : "") +
+            (conns ? "<div><div class=\"p-label\">" + esc(S("connections")) + "</div><div class=\"p-conn\">" + conns + "</div></div>" : "") +
+            "<div><div class=\"p-label\">" + esc(S("inConv")) + "</div><div>" + esc(S("msgCount", (counts[id] || 0).toLocaleString(LOCALE))) + "</div></div>" +
+            "<div><div class=\"p-label\">" + esc(S("user")) + "</div><div class=\"p-id\">" + esc(id) + "</div></div>" +
             "</div></div>";
         var r = anchor.getBoundingClientRect();
-        var w = 340, hgt = Math.min(560, profile.scrollHeight || 420);
+        var w = 340, hgt = Math.min(innerHeight - 24, profile.scrollHeight || 480);
         var left = r.right + 12, top = r.top - 20;
         if (left + w > innerWidth - 12) left = Math.max(12, r.left - w - 12);
         if (top + hgt > innerHeight - 12) top = Math.max(12, innerHeight - hgt - 12);
         profile.style.left = left + "px";
         profile.style.top = Math.max(12, top) + "px";
+        profile.scrollTop = 0;
         profile.classList.add("open");
         backdrop.classList.add("open");
     }
@@ -558,8 +593,8 @@ mark { border-radius: 3px; background: var(--mark); color: inherit; }
 
     document.addEventListener("click", function (e) {
         var t = e.target;
-        var zoom = t.closest("[data-zoom]");
-        if (zoom) { closeProfile(); openImage([{ src: zoom.src, name: "avatar" }], 0); return; }
+        var zoom = t.closest("[data-zoom-src]");
+        if (zoom) { closeProfile(); openImage([{ src: zoom.getAttribute("data-zoom-src"), name: "avatar" }], 0); return; }
         var u = t.closest("[data-user]");
         if (u && !t.closest(".profile")) { e.preventDefault(); openProfile(u.getAttribute("data-user"), u); return; }
         var im = t.closest("[data-img]");
