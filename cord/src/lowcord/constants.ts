@@ -6,6 +6,7 @@
 
 // low-cord — constantes de branding. Le owner GitHub est défini ici une seule fois
 // (et dans injector/src-tauri/src/config.rs).
+// Version publiée : vérifiée automatiquement par src/main/lowcordUpdater.ts.
 
 export const LOWCORD_NAME = "low-cord";
 export const LOWCORD_AUTHOR = "shitday";
