@@ -1,0 +1,344 @@
+/* ── TokenImporter (low-cord) ─────────────────────────────────────────── */
+.lc-ti-root,
+.lc-ti-root * {
+    box-sizing: border-box;
+}
+
+.lc-ti-root {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    height: min(64vh, 600px);
+}
+
+.lc-ti-tabs,
+.lc-ti-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.lc-ti-spacer {
+    flex: 1;
+}
+
+.lc-ti-muted,
+.lc-ti-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-ti-hint {
+    padding: 2px 2px 0;
+    line-height: 1.4;
+}
+
+.lc-ti-chip {
+    padding: 3px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 999px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.lc-ti-chip-on {
+    border-color: var(--header-primary, var(--text-strong));
+    color: var(--header-primary, var(--text-strong));
+}
+
+.lc-ti-banner {
+    padding: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--status-warning, #f0b232) 45%, transparent);
+    border-radius: 8px;
+    color: var(--status-warning, #f0b232);
+    font-size: 12px;
+}
+
+.lc-ti-btn {
+    flex: none;
+    padding: 6px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 6%));
+    color: var(--header-primary, var(--text-strong));
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.lc-ti-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.lc-ti-btn-primary {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+    font-weight: 600;
+}
+
+.lc-ti-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--interactive-normal, var(--text-muted));
+    cursor: pointer;
+}
+
+.lc-ti-icon-btn:hover {
+    background: var(--background-modifier-hover, rgb(255 255 255 / 6%));
+    color: var(--interactive-hover, var(--header-primary));
+}
+
+.lc-ti-icon-btn-danger:hover {
+    color: var(--status-danger, #f23f43);
+}
+
+.lc-ti-icon-btn:disabled {
+    opacity: 0.35;
+    background: none;
+    cursor: default;
+}
+
+.lc-ti-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden auto;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) transparent;
+}
+
+.lc-ti-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.lc-ti-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.lc-ti-list::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) padding-box;
+}
+
+.lc-ti-list::-webkit-scrollbar-button {
+    display: none;
+}
+
+.lc-ti-empty {
+    padding: 40px 16px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.lc-ti-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+}
+
+.lc-ti-row + .lc-ti-row {
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 4%));
+}
+
+.lc-ti-row:hover {
+    background: var(--background-modifier-hover, rgb(255 255 255 / 4%));
+}
+
+.lc-ti-avatar {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.lc-ti-avatar-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 600;
+}
+
+.lc-ti-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.lc-ti-name {
+    overflow: hidden;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-ti-sub,
+.lc-ti-warn {
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-ti-sub {
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
+
+.lc-ti-warn {
+    color: var(--status-warning, #f0b232);
+}
+
+.lc-ti-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+}
+
+.lc-ti-actions .lc-ti-btn {
+    margin-right: 6px;
+}
+
+.lc-ti-input {
+    width: 100%;
+    min-width: 0;
+    padding: 3px 6px;
+    border: 1px solid var(--text-muted);
+    border-radius: 4px;
+    background: var(--background-secondary, rgb(0 0 0 / 15%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+    outline: none;
+}
+
+.lc-ti-folder + .lc-ti-folder {
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-ti-folder-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    color: var(--header-primary, var(--text-strong));
+    cursor: pointer;
+    user-select: none;
+}
+
+.lc-ti-folder-head:hover {
+    background: var(--background-modifier-hover, rgb(255 255 255 / 4%));
+}
+
+.lc-ti-chevron {
+    width: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: transform 120ms ease;
+}
+
+.lc-ti-chevron-closed {
+    transform: rotate(-90deg);
+}
+
+.lc-ti-folder-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.lc-ti-count {
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.lc-ti-folder-body {
+    margin-left: 18px;
+    border-left: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+}
+
+.lc-ti-folder-body > .lc-ti-hint {
+    padding: 8px 12px;
+}
+
+.lc-ti-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 8px;
+    background: var(--background-secondary, rgb(0 0 0 / 15%));
+    color: var(--text-normal, var(--text-default));
+    font-family: var(--font-code);
+    font-size: 13px;
+    resize: vertical;
+    outline: none;
+}
+
+.lc-ti-textarea:focus {
+    border-color: var(--text-muted);
+}
+
+.lc-ti-results {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden auto;
+}
+
+.lc-ti-result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+}
+
+.lc-ti-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.lc-ti-result-bad {
+    color: var(--status-danger, #f23f43);
+}
+
+.lc-ti-result-bad .lc-ti-dot {
+    background: var(--status-danger, #f23f43);
+}

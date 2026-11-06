@@ -186,6 +186,12 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ImageToolkit: {
             description: "Clic droit sur l'avatar ou la bannière du profil de quelqu'un : agrandir, rechercher l'image, copier, enregistrer, lien. « Rechercher l'image » sur les images des messages",
         },
+        TokenImporter: {
+            description: "Tes propres comptes Discord : ajoute-les avec un token que tu possèdes déjà, range-les en dossiers, bascule de l'un à l'autre ou ouvre-les chacun dans sa fenêtre. Aucun scan du disque, aucune autre application touchée",
+        },
+        MultiInstance: {
+            description: "Ouvre un compte enregistré dans TokenImporter dans sa propre fenêtre, avec sa propre session. Utilisé par TokenImporter",
+        },
         PermissionsViewer: {
             description: "Voir les permissions d'un membre, d'un salon ou de tous les rôles d'un serveur, avec le rôle qui accorde chaque permission",
             settings: {
