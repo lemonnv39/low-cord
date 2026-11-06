@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-cord — onglet Plugins. Pas de recherche ni de filtres : low-cord n'aura
-// que peu de plugins, tous utiles. Deux blocs : nos plugins (activables) et
-// le cœur (toujours actif, replié dans un bloc discret).
+// low-cord — onglet Plugins. En-tête (titre, compteurs) + une ligne de
+// recherche, sans filtres : low-cord n'a que peu de plugins, tous utiles.
+// Deux blocs : nos plugins (activables) et le cœur (toujours actif, discret).
 
 import "@lowcord/styles.css";
 
 import { isPluginEnabled } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
-import { t, useLang } from "@lowcord/i18n";
+import { pluginDescription, t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { Plugin } from "@utils/types";
 import { Button, Forms, Text, useMemo, useState } from "@webpack/common";
@@ -30,6 +30,27 @@ const isCore = (p: Plugin) => p.required || PluginMeta[p.name]?.folderName.start
 // Les plugins *API sont des briques internes, activées automatiquement par dépendance.
 // Les plugins perso ont leur propre section (activation au redémarrage).
 const isListed = (p: Plugin) => !p.hidden && !p.name.endsWith("API") && !PluginMeta[p.name]?.userPlugin;
+
+// Recherche sans tenir compte des majuscules ni des accents (« deco » trouve « déco »).
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const matches = (p: Plugin, q: string) => !q || fold(`${p.name} ${pluginDescription(p)}`).includes(q);
+
+function PuzzleIcon() {
+    return (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M10 2a3 3 0 0 0-3 3v1H4a2 2 0 0 0-2 2v3h1.5a2.5 2.5 0 0 1 0 5H2v3a2 2 0 0 0 2 2h3v-1.5a2.5 2.5 0 0 1 5 0V22h3a2 2 0 0 0 2-2v-3h1a3 3 0 1 0 0-6h-1V8a2 2 0 0 0-2-2h-3V5a3 3 0 0 0-3-3Z" />
+        </svg>
+    );
+}
+
+function SearchIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+        </svg>
+    );
+}
 
 function LowPluginsSettings() {
     useLang();
@@ -48,8 +69,40 @@ function LowPluginsSettings() {
 
     const active = mine.filter(p => isPluginEnabled(p.name)).length;
 
+    const [query, setQuery] = useState("");
+    const q = fold(query.trim());
+    const shownMine = mine.filter(p => matches(p, q));
+    const shownCore = core.filter(p => matches(p, q));
+
     return (
         <SettingsTab>
+            <div className={cl("plugins-header")}>
+                <div className={cl("plugins-header-icon")}><PuzzleIcon /></div>
+                <div className={cl("plugins-header-text")}>
+                    <h2 className={cl("plugins-header-title")}>{t("plugins.title")}</h2>
+                    <span className={cl("plugins-header-sub")}>{t("plugins.subtitle")}</span>
+                </div>
+                <div className={cl("plugins-header-stats")}>
+                    <div><b>{active}</b><span>{t("plugins.statActive")}</span></div>
+                    <div><b>{mine.length}</b><span>{t("plugins.statTotal")}</span></div>
+                </div>
+            </div>
+
+            <div className={cl("plugins-search")}>
+                <SearchIcon />
+                <input
+                    value={query}
+                    onChange={e => setQuery(e.currentTarget.value)}
+                    onKeyDown={e => { if (e.key === "Escape") setQuery(""); }}
+                    placeholder={t("plugins.search")}
+                    aria-label={t("plugins.search")}
+                    spellCheck={false}
+                />
+                {query && (
+                    <button className={cl("plugins-search-clear")} onClick={() => setQuery("")} aria-label={t("plugins.clearSearch")} title={t("plugins.clearSearch")}>×</button>
+                )}
+            </div>
+
             {pendingRestart.length > 0 && (
                 <div className={cl("restart")}>
                     <div>
@@ -66,30 +119,36 @@ function LowPluginsSettings() {
 
             <div className={cl("section-head")}>
                 <Forms.FormTitle tag="h5">{t("plugins.section")}</Forms.FormTitle>
-                {mine.length > 0 && (
+                {q && mine.length > 0 && (
                     <Text variant="text-sm/normal" className={cl("muted")}>
-                        {t("plugins.summary", { active, total: mine.length })}
+                        {t("plugins.results", { count: shownMine.length })}
                     </Text>
                 )}
             </div>
 
-            {mine.length > 0
-                ? (
-                    <div className={cl("grid")}>
-                        {mine.map(p => <LowPluginCard key={p.name} plugin={p} onRestartNeeded={onRestartNeeded} />)}
-                    </div>
-                )
-                : <div className={cl("empty")}>{t("plugins.empty")}</div>}
+            {mine.length === 0
+                ? <div className={cl("empty")}>{t("plugins.empty")}</div>
+                : shownMine.length > 0
+                    ? (
+                        <div className={cl("grid")}>
+                            {shownMine.map(p => <LowPluginCard key={p.name} plugin={p} onRestartNeeded={onRestartNeeded} />)}
+                        </div>
+                    )
+                    : <div className={cl("empty")}>{t("plugins.noMatch", { query: query.trim() })}</div>}
 
             <UserPluginsSection refreshKey={userPluginsKey} onRestartNeeded={onRestartNeeded} onChanged={refreshUserPlugins} />
 
-            <div className={cl("section-head", "core-head")}>
-                <Forms.FormTitle tag="h5">{t("plugins.core")}</Forms.FormTitle>
-                <Text variant="text-sm/normal" className={cl("muted")}>{t("plugins.coreHint")}</Text>
-            </div>
-            <div className={cl("grid", "grid-core")}>
-                {core.map(p => <LowPluginCard key={p.name} plugin={p} onRestartNeeded={onRestartNeeded} />)}
-            </div>
+            {shownCore.length > 0 && (
+                <>
+                    <div className={cl("section-head", "core-head")}>
+                        <Forms.FormTitle tag="h5">{t("plugins.core")}</Forms.FormTitle>
+                        <Text variant="text-sm/normal" className={cl("muted")}>{t("plugins.coreHint")}</Text>
+                    </div>
+                    <div className={cl("grid", "grid-core")}>
+                        {shownCore.map(p => <LowPluginCard key={p.name} plugin={p} onRestartNeeded={onRestartNeeded} />)}
+                    </div>
+                </>
+            )}
         </SettingsTab>
     );
 }

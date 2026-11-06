@@ -629,3 +629,112 @@
 .lc-up-icon-danger:hover {
     color: var(--status-danger, #f23f43);
 }
+
+/* Onglet Plugins : en-tête et recherche */
+.lc-plugins-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 18px 20px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    border-radius: 10px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-plugins-header-icon {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--header-primary, var(--text-strong));
+}
+
+.lc-plugins-header-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.lc-plugins-header-title {
+    margin: 0;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.lc-plugins-header-sub {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.lc-plugins-header-stats {
+    display: flex;
+    flex: none;
+    gap: 18px;
+}
+
+.lc-plugins-header-stats > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.lc-plugins-header-stats b {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-plugins-header-stats span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-plugins-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 0 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 8px;
+    background: var(--background-secondary, rgb(0 0 0 / 15%));
+    color: var(--text-muted);
+}
+
+.lc-plugins-search:focus-within {
+    border-color: var(--text-muted);
+}
+
+.lc-plugins-search input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 0;
+    border: 0;
+    background: none;
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+    outline: none;
+}
+
+.lc-plugins-search-clear {
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lc-plugins-search-clear:hover {
+    color: var(--header-primary, var(--text-strong));
+}

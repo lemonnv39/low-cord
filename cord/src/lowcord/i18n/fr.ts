@@ -23,6 +23,14 @@ export const fr = {
 
     // Onglet Plugins
     "plugins.summary": "{active} actif(s) sur {total}",
+    "plugins.title": "Plugins",
+    "plugins.subtitle": "Active, règle ou ajoute tes plugins. Peu, mais efficaces.",
+    "plugins.statActive": "actifs",
+    "plugins.statTotal": "plugins",
+    "plugins.search": "Rechercher un plugin…",
+    "plugins.clearSearch": "Effacer la recherche",
+    "plugins.noMatch": "Aucun plugin ne correspond à « {query} ».",
+    "plugins.results": "{count} résultat(s)",
     "plugins.section": "Plugins",
     "plugins.empty": "Aucun plugin pour l'instant. Les plugins low-cord arriveront ici, un par un : peu, mais efficaces.",
     "plugins.core": "Cœur",
