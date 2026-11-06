@@ -25,23 +25,33 @@ import { copyToClipboard } from "@utils/clipboard";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { ContextMenuApi, Menu, showToast } from "@webpack/common";
+import bingLogo from "file://./logos/bing.png?base64";
+import googleLogo from "file://./logos/google.png?base64";
+import iqdbLogo from "file://./logos/iqdb.png?base64";
+import lensLogo from "file://./logos/lens.png?base64";
+import saucenaoLogo from "file://./logos/saucenao.png?base64";
+import tineyeLogo from "file://./logos/tineye.png?base64";
+import yandexLogo from "file://./logos/yandex.png?base64";
 
 const logger = new Logger("ImageToolkit");
 
-const ENGINES: Record<string, string> = {
-    "Google Lens": "https://lens.google.com/uploadbyurl?url=",
-    "Google Images": "https://www.google.com/searchbyimage?sbisrc=cr_1&image_url=",
-    Yandex: "https://yandex.com/images/search?rpt=imageview&url=",
-    Bing: "https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:",
-    TinEye: "https://www.tineye.com/search?url=",
-    SauceNAO: "https://saucenao.com/search.php?url=",
-    IQDB: "https://iqdb.org/?url=",
+// Logos des moteurs (importés plus haut) : embarqués dans le plugin, rien
+// n'est chargé depuis ces sites à l'ouverture du menu.
+
+const ENGINES: Record<string, { url: string; logo: string; }> = {
+    "Google Lens": { url: "https://lens.google.com/uploadbyurl?url=", logo: lensLogo },
+    "Google Images": { url: "https://www.google.com/searchbyimage?sbisrc=cr_1&image_url=", logo: googleLogo },
+    Yandex: { url: "https://yandex.com/images/search?rpt=imageview&url=", logo: yandexLogo },
+    Bing: { url: "https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:", logo: bingLogo },
+    TinEye: { url: "https://www.tineye.com/search?url=", logo: tineyeLogo },
+    SauceNAO: { url: "https://saucenao.com/search.php?url=", logo: saucenaoLogo },
+    IQDB: { url: "https://iqdb.org/?url=", logo: iqdbLogo },
 };
 
 const openExternal = (url: string) => VencordNative.native.openExternal(url);
 
 function search(url: string, engine: string) {
-    openExternal(ENGINES[engine] + encodeURIComponent(url));
+    openExternal(ENGINES[engine].url + encodeURIComponent(url));
 }
 
 /** Image en pleine taille, seulement depuis les serveurs de Discord. */
@@ -87,11 +97,29 @@ async function saveImage(image: ProfileImage) {
     }
 }
 
+function MagnifierIcon({ width = 24, height = 24, className }: { width?: number | string; height?: number | string; className?: string; }) {
+    return (
+        <svg className={className} width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m20 20-4.6-4.6" />
+        </svg>
+    );
+}
+
+function EngineLabel({ name }: { name: string; }) {
+    return (
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <img src={`data:image/png;base64,${ENGINES[name].logo}`} width={16} height={16} alt="" style={{ borderRadius: 3, flex: "none" }} />
+            {name}
+        </span>
+    );
+}
+
 function SearchItem({ url }: { url: string; }) {
     return (
-        <Menu.MenuItem id="vc-it-search" label={t("it.search")} leadingAccessory={{ type: "icon", icon: OpenExternalIcon }}>
+        <Menu.MenuItem id="vc-it-search" label={t("it.search")} leadingAccessory={{ type: "icon", icon: MagnifierIcon }}>
             {Object.keys(ENGINES).map(name => (
-                <Menu.MenuItem key={name} id={`vc-it-search-${name.replace(/\s/g, "-").toLowerCase()}`} label={name} action={() => search(url, name)} />
+                <Menu.MenuItem key={name} id={`vc-it-search-${name.replace(/\s/g, "-").toLowerCase()}`} label={<EngineLabel name={name} />} action={() => search(url, name)} />
             ))}
         </Menu.MenuItem>
     );
