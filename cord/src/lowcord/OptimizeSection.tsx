@@ -8,8 +8,9 @@
 // principal, le détail de chaque réglage, et la consommation de Discord en
 // direct pour voir l'effet.
 
+import { Forms } from "@lowcord/compat";
 import { classNameFactory } from "@utils/css";
-import { Forms, useEffect, useState } from "@webpack/common";
+import { useEffect, useState } from "@webpack/common";
 
 import { I18nKey, t } from "./i18n";
 import { MODE_KEYS, OptimizeKey, setMode, setOptimize, useOptimize } from "./optimize";

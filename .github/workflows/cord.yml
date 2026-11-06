@@ -51,7 +51,7 @@ jobs:
 
       # esbuild ne type-check pas : tsc + lint à part, ils bloquent la publication.
       - name: Type-check
-        run: pnpm testTsc
+        run: pnpm test:ts
 
       - name: Lint
         run: pnpm lint && pnpm lint-styles

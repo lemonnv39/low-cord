@@ -12,11 +12,12 @@ import "./journal.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { CopyIcon, DeleteIcon, FolderIcon } from "@components/Icons";
+import { Text } from "@lowcord/compat";
 import { getLang, I18nKey, t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openUserProfile } from "@utils/discord";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, Modal, openModal, Parser, showToast, Text, useEffect, useMemo, useRef, UserStore, useState } from "@webpack/common";
+import { Alerts, Modal, openModal, Parser, showToast, useEffect, useMemo, useRef, UserStore, useState } from "@webpack/common";
 
 import { currentAccount, Native } from "./capture";
 import type { ConversationSummary, LogAttachment, LogEvent, LogEventType, LogQueryResult, LogStats } from "./types";

@@ -7,10 +7,11 @@
 // Journal affiché dans la fenêtre de réglages du plugin : filtres par type,
 // recherche, regroupement par jour, heure exacte de chaque événement.
 
+import { Text } from "@lowcord/compat";
 import { getLang, I18nKey, t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openUserProfile } from "@utils/discord";
-import { Text, useMemo, useState } from "@webpack/common";
+import { useMemo, useState } from "@webpack/common";
 
 import { clearLog, useLogEntries } from "./log";
 import { LogEntry, LogKind } from "./types";

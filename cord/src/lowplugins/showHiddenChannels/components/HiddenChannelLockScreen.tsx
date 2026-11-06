@@ -18,6 +18,7 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Text } from "@lowcord/compat";
 import { I18nKey, t, useLang } from "@lowcord/i18n";
 import PermissionsViewerPlugin from "@lowplugins/permissionsViewer";
 import openRolesAndUsersPermissionsModal from "@lowplugins/permissionsViewer/components/RolesAndUsersPermissions";
@@ -26,7 +27,7 @@ import { openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
 import type { Channel, RoleOrUserPermission } from "@vencord/discord-types";
 import { findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { ChannelStore, EmojiStore, FluxDispatcher, GuildMemberStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Text, Timestamp, Tooltip, useEffect, UserStore, useState, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { ChannelStore, EmojiStore, FluxDispatcher, GuildMemberStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, useEffect, UserStore, useState, useStateFromStores, VoiceStateStore } from "@webpack/common";
 import { ComponentType, ReactNode } from "react";
 
 import { cl, settings } from "..";

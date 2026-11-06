@@ -46,7 +46,8 @@ export default definePlugin({
             // Affichage de la bannière : clic / clic droit sur l'image elle-même
             find: '"--custom-cutout-radius":',
             replacement: {
-                match: /(?<=function \i\((\i)\)\{let\{bannerSrc:.{0,600}?)style:\{(?=\.\.\.\i,backgroundImage:)/,
+                // « function x(e){ » ou « A:function(e){ » (nouvelle compilation rspack)
+                match: /(?<=function(?: \i)?\((\i)\)\{let\{bannerSrc:.{0,600}?)style:\{(?=\.\.\.\i,backgroundImage:)/,
                 replace: 'onClick:$1.vcOnClick,onContextMenu:$1.vcOnContextMenu,style:{cursor:$1.vcOnClick!=null?"pointer":void 0,'
             }
         }

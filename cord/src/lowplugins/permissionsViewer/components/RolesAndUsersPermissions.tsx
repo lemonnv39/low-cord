@@ -19,6 +19,7 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { CopyIdIcon, ImageIcon, InfoIcon, OwnerCrownIcon } from "@components/Icons";
+import { Text } from "@lowcord/compat";
 import { t } from "@lowcord/i18n";
 import { cl, getPermissionSpecMap, hasAdministrator, loadGetGuildPermissionSpecMap, logger, permissionDescription, permissionTitle, roleManagedBy } from "@lowplugins/permissionsViewer/utils";
 import { copyToClipboard } from "@utils/clipboard";
@@ -26,7 +27,7 @@ import { getUniqueUsername, openImageModal } from "@utils/discord";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, ScrollerThin, showToast, Text, Tooltip, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, ScrollerThin, showToast, Tooltip, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { PermissionAllowedIcon, PermissionDeniedIcon } from "./icons";
 

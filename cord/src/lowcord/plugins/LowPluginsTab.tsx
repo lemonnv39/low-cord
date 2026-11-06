@@ -13,10 +13,11 @@ import "@lowcord/styles.css";
 import { isPluginEnabled } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
+import { Button, Forms, Text } from "@lowcord/compat";
 import { pluginDescription, t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { Plugin } from "@utils/types";
-import { Button, Forms, Text, useMemo, useState } from "@webpack/common";
+import { useMemo, useState } from "@webpack/common";
 
 import Plugins, { PluginMeta } from "~plugins";
 

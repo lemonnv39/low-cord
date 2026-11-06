@@ -6,12 +6,13 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Text } from "@lowcord/compat";
 import { t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
 import { Channel } from "@vencord/discord-types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { ChannelRouter, ChannelStore, GuildStore, Parser, PermissionsBits, PermissionStore, React, showToast, Text, Tooltip, useMemo, UserStore, UserSummaryItem, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { ChannelRouter, ChannelStore, GuildStore, Parser, PermissionsBits, PermissionStore, React, showToast, Tooltip, useMemo, UserStore, UserSummaryItem, useStateFromStores, VoiceStateStore } from "@webpack/common";
 import { PropsWithChildren } from "react";
 
 const cl = classNameFactory("vc-uvs-");

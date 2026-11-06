@@ -9,6 +9,7 @@
 
 import { hasAnyVisibleSettings } from "@api/PluginManager";
 import { CogWheel, DeleteIcon, FolderIcon } from "@components/Icons";
+import { Forms, Text } from "@lowcord/compat";
 import { I18nKey, t, useLang } from "@lowcord/i18n";
 import {
     acceptWarning, getEnabledUserPlugins, isSafeMode, isWarningAccepted, leaveSafeMode,
@@ -17,7 +18,7 @@ import {
 import type { UserPluginMeta } from "@main/userPlugins";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
-import { Alerts, Forms, showToast, Text, useEffect, useState } from "@webpack/common";
+import { Alerts, showToast, useEffect, useState } from "@webpack/common";
 
 import Plugins from "~plugins";
 

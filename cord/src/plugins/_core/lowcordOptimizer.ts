@@ -24,7 +24,8 @@ export default definePlugin({
         {
             find: '"2026-08-game-mode"',
             replacement: {
-                match: /(function \i\(\i\){let{location:\i}=\i;return )(\i\.getConfig\({location:\i}\))/,
+                // « function x(e){ » ou « v:function(e){ » (nouvelle compilation rspack)
+                match: /(function(?: \i)?\(\i\){let{location:\i}=\i;return )(\i\.getConfig\({location:\i}\))/,
                 replace: "$1$self.gameModeOn()?{enabled:!0}:$2"
             }
         }

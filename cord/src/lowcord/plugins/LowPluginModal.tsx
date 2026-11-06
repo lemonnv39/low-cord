@@ -13,12 +13,13 @@ import { isSettingHidden } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { OptionComponentMap } from "@components/settings/tabs/plugins/components";
+import { Forms, Text } from "@lowcord/compat";
 import { localizeSetting, pluginDescription, t, useLang } from "@lowcord/i18n";
 import { debounce } from "@shared/debounce";
 import { classNameFactory } from "@utils/css";
 import { OptionType, Plugin } from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Forms, Modal, openModal, Text } from "@webpack/common";
+import { Modal, openModal } from "@webpack/common";
 
 const cl = classNameFactory("lc-");
 

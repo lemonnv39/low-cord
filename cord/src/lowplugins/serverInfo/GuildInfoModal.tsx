@@ -7,6 +7,7 @@
 import "./styles.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Forms, Text } from "@lowcord/compat";
 import { I18nKey, t, useLang } from "@lowcord/i18n";
 import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
@@ -15,7 +16,7 @@ import { Logger } from "@utils/Logger";
 import { useAwaiter } from "@utils/react";
 import { Guild, RenderModalProps, User } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
-import { EmojiStore, FluxDispatcher, Forms, GuildChannelStore, GuildMemberCountStore, GuildMemberStore, GuildRoleStore, IconUtils, Modal, openModal, Parser, PresenceStore, RelationshipStore, ScrollerThin, showToast, SnowflakeUtils, StickersStore, TabBar, Text, Timestamp, useEffect, useMemo, useRef, UserStore, UserUtils, useState, useStateFromStores } from "@webpack/common";
+import { EmojiStore, FluxDispatcher, GuildChannelStore, GuildMemberCountStore, GuildMemberStore, GuildRoleStore, IconUtils, Modal, openModal, Parser, PresenceStore, RelationshipStore, ScrollerThin, showToast, SnowflakeUtils, StickersStore, TabBar, Timestamp, useEffect, useMemo, useRef, UserStore, UserUtils, useState, useStateFromStores } from "@webpack/common";
 import type { ReactNode } from "react";
 
 const cl = classNameFactory("vc-gp-");

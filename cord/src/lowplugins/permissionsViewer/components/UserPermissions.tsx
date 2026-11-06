@@ -17,7 +17,7 @@
 */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { HeadingTertiary } from "@components/Heading";
+import { HeadingTertiary, Text } from "@lowcord/compat";
 import { t } from "@lowcord/i18n";
 import { ALL_PERMISSIONS, cl, getPermissionSpecMap, getSortedRolesForMember, hasAdministrator, permissionTitle, sortUserRoles } from "@lowplugins/permissionsViewer/utils";
 import { getIntlMessage } from "@utils/discord";
@@ -25,7 +25,7 @@ import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { PermissionsBits, Text, Tooltip, useMemo, UserStore } from "@webpack/common";
+import { PermissionsBits, Tooltip, useMemo, UserStore } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from "..";
 import openRolesAndUsersPermissionsModal from "./RolesAndUsersPermissions";

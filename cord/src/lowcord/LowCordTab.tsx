@@ -12,10 +12,10 @@ import { Divider } from "@components/Divider";
 import { FolderIcon, GithubIcon, RestartIcon } from "@components/Icons";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
+import { Forms } from "@lowcord/compat";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { relaunch } from "@utils/native";
-import { Forms } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
