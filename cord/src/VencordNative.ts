@@ -7,8 +7,8 @@
 import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
-import type { UserThemeHeader } from "@main/themes";
 import type { UpdateStatus } from "@main/lowcordUpdater";
+import type { UserThemeHeader } from "@main/themes";
 import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { IpcRes } from "@utils/types";
