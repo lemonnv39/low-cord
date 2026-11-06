@@ -14,7 +14,7 @@ import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
 import { addLowCordMenuItem } from "@lowcord/contextMenu";
-import { addHeaderBarButton, HeaderBarIcon, removeHeaderBarButton } from "@lowcord/headerBar";
+import { HeaderBarIcon, hideTempHeaderButton, showTempHeaderButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
@@ -50,7 +50,12 @@ let followedChannel: string | null = null;
 let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 
 const listeners = new Set<() => void>();
-function notifyAll() { listeners.forEach(fn => fn()); }
+function notifyAll() {
+    // Le bouton n'existe (avec sa zone et ses traits) que pendant un suivi.
+    if (followedId) showTempHeaderButton("FollowUser", FollowHeaderButton);
+    else hideTempHeaderButton("FollowUser");
+    listeners.forEach(fn => fn());
+}
 
 function useFollowState() {
     const [, tick] = useState(0);
@@ -152,10 +157,12 @@ function joinFollowed() {
 }
 
 // ── Icône ────────────────────────────────────────────────────────────────────
-function HeartIcon() {
+// Chaîne verte : le suivi est actif (le bouton n'existe que dans ce cas).
+function ChainIcon() {
     return (
-        <svg width="18" height="18" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--status-positive, #23a55a)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
     );
 }
@@ -170,10 +177,9 @@ function FollowHeaderButton() {
         // Le bouton de Discord ne gère pas le clic droit : on l'attrape autour.
         <div style={{ display: "contents" }} onContextMenu={e => { e.preventDefault(); unfollow(); }}>
             <HeaderBarIcon
-                icon={HeartIcon}
+                icon={ChainIcon}
                 tooltip={t("fu.headerTooltip", { name: followedName })}
                 onClick={joinFollowed}
-                selected={true}
             />
         </div>
     );
@@ -261,12 +267,11 @@ export default definePlugin({
     },
 
     start() {
-        addHeaderBarButton("FollowUser", FollowHeaderButton, 5);
         void restoreFollow();
     },
 
     stop() {
-        removeHeaderBarButton("FollowUser");
+        hideTempHeaderButton("FollowUser");
         clearInactivityTimer();
         followedId = null;
         followedName = "";

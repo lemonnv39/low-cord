@@ -8,6 +8,11 @@
 // entre plugins. Un seul patch (plugin du cœur LowCordHeaderBar) ; chaque
 // plugin ajoute / retire son bouton ici. Sans ça, deux plugins qui patchent
 // le même endroit se marcheraient dessus.
+//
+// Deux zones, chacune encadrée de traits gris :
+//   [Discord] | [temporaire] | [boutons low-cord]
+// La zone temporaire n'existe que tant qu'un plugin y montre un bouton (ex. le
+// suivi en cours de FollowUser) ; vide, elle disparaît avec ses traits.
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { findComponentByCodeLazy } from "@webpack";
@@ -37,6 +42,20 @@ export function removeHeaderBarButton(id: string) {
     if (entries.delete(id)) emit();
 }
 
+const tempEntries = new Map<string, Entry>();
+
+/** Bouton temporaire, dans sa propre zone (entre deux traits) tant qu'il est affiché. */
+export function showTempHeaderButton(id: string, Component: ComponentType, priority = 10) {
+    const current = tempEntries.get(id);
+    if (current?.Component === Component && current.priority === priority) return;
+    tempEntries.set(id, { id, Component, priority });
+    emit();
+}
+
+export function hideTempHeaderButton(id: string) {
+    if (tempEntries.delete(id)) emit();
+}
+
 // Même trait que celui qui sépare les boutons de la fenêtre (réduire, fermer).
 const DIVIDER: React.CSSProperties = {
     flex: "none",
@@ -56,18 +75,33 @@ function Buttons() {
         return () => { listeners.delete(fn); };
     }, []);
 
-    if (!entries.size) return null;
+    if (!entries.size && !tempEntries.size) return null;
     return (
         <>
-            {/* Sépare les boutons de Discord (boîte de réception, aide) de ceux de low-cord. */}
-            <div style={DIVIDER} aria-hidden="true" />
-            {[...entries.values()].sort((a, b) => a.priority - b.priority).map(({ id, Component }) => (
-                <ErrorBoundary key={id} noop>
-                    <Component />
-                </ErrorBoundary>
-            ))}
+            {tempEntries.size > 0 && (
+                <>
+                    {/* Zone temporaire, séparée de Discord et des boutons low-cord. */}
+                    <div style={DIVIDER} aria-hidden="true" />
+                    {renderEntries(tempEntries)}
+                </>
+            )}
+            {entries.size > 0 && (
+                <>
+                    {/* Sépare ce qui précède (Discord ou zone temporaire) des boutons low-cord. */}
+                    <div style={DIVIDER} aria-hidden="true" />
+                    {renderEntries(entries)}
+                </>
+            )}
         </>
     );
+}
+
+function renderEntries(map: Map<string, Entry>) {
+    return [...map.values()].sort((a, b) => a.priority - b.priority).map(({ id, Component }) => (
+        <ErrorBoundary key={id} noop>
+            <Component />
+        </ErrorBoundary>
+    ));
 }
 
 /** Remplace le Fragment des boutons de droite de la barre du haut (voir le patch). */
