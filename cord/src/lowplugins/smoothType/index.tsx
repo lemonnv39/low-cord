@@ -55,6 +55,7 @@ let rafId: number | null = null;
 let blinkTimeout: ReturnType<typeof setTimeout> | null = null;
 let observer: MutationObserver | null = null;
 let observed: Element | null = null;
+let active: Listener[] = [];
 
 const editorOf = (el: Element | null) => el?.closest(EDITOR) ?? null;
 
@@ -220,7 +221,11 @@ function onVisibilityChange() {
     else scheduleUpdate();
 }
 
-const LISTENERS: [EventTarget, string, EventListener, boolean | AddEventListenerOptions][] = [
+type Listener = [EventTarget, string, EventListener, boolean | AddEventListenerOptions];
+
+// Créée au démarrage : au chargement du fichier, `document` n'existe pas
+// encore partout (et tout low-cord planterait).
+const makeListeners = (): Listener[] => [
     [document, "selectionchange", scheduleUpdate, false],
     [document, "focusin", onFocusIn, true],
     [document, "focusout", onFocusOut, true],
@@ -247,12 +252,14 @@ export default definePlugin({
     start() {
         getCaret();
         applyCSS();
-        for (const [target, type, fn, opts] of LISTENERS) target.addEventListener(type, fn, opts);
+        active = makeListeners();
+        for (const [target, type, fn, opts] of active) target.addEventListener(type, fn, opts);
         onFocusIn();
     },
 
     stop() {
-        for (const [target, type, fn, opts] of LISTENERS) target.removeEventListener(type, fn, opts);
+        for (const [target, type, fn, opts] of active) target.removeEventListener(type, fn, opts);
+        active = [];
         observer?.disconnect();
         observer = null;
         observed = null;
