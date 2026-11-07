@@ -15,7 +15,8 @@ import { useEffect, useMemo, useRef, useState } from "@webpack/common";
 import { APO_EXAMPLE, APO_FREQS as FREQS, apoResponse, type ApoStage, parseApo, removeLine, toggleFilterLine } from "./apo";
 import { cl, Dropdown, Toggle } from "./controls";
 import {
-    deleteApoSet, deleteIr, getApoError, getIrResponse, getPrefs, importIrs, loadApoSet, saveApoSet, setApoOn, setApoText, useMusical,
+    deleteApoSet, deleteIr, getApoError, getApoVst, getIrResponse, getPrefs, getVstFiles, importIrs, loadApoSet, openVstFolder,
+    refreshVstFiles, saveApoSet, setApoOn, setApoText, setVstParam, useMusical, type VstInfo,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -121,7 +122,15 @@ const ADD_LINES = [
 export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
     useMusical();
     const p = getPrefs();
-    const parsed = useMemo(() => parseApo(p.apoText, p.apoIrs), [p.apoText, p.apoIrs]);
+    const music = useMusical();
+    const vstFiles = getVstFiles();
+    const parsed = useMemo(() => parseApo(p.apoText, p.apoIrs, vstFiles), [p.apoText, p.apoIrs, vstFiles]);
+    // Le dossier VST est relu régulièrement : un plugin déposé apparaît tout seul.
+    useEffect(() => {
+        refreshVstFiles();
+        const timer = setInterval(refreshVstFiles, 3000);
+        return () => clearInterval(timer);
+    }, []);
     const engineError = getApoError();
     const fileRef = useRef<HTMLInputElement>(null);
     const irRef = useRef<HTMLInputElement>(null);
@@ -171,6 +180,9 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                 <button type="button" className={cl("icon-btn", "icon-btn-glass", saving && "icon-btn-on")} onClick={() => { setSaving(!saving); setName(p.apoName); }} title="Enregistrer ce set" aria-label="Enregistrer">
                     {icon("M5 3h11l3 3v15H5zM8 3v6h8V3M8 21v-7h8v7")}
                 </button>
+                <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => act(openVstFolder)} title="Ouvrir le dossier des plugins VST de low-musical (dépose tes .dll ici)" aria-label="Dossier VST">
+                    {icon("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5 12 16l2.5-2.5")}
+                </button>
                 <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => fileRef.current?.click()} title="Importer un fichier .txt d'Equalizer APO" aria-label="Importer">
                     {icon("M12 3v12M7 10l5 5 5-5M5 21h14")}
                 </button>
@@ -219,6 +231,9 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                     placeholder={"Colle ici un set Equalizer APO\nPreamp: -6 dB\nFilter: ON PK Fc 100 Hz Gain 3 dB Q 1.41"}
                 />
             </div>
+
+            {/* Plugins VST */}
+            <VstSection act={act} files={vstFiles} stages={parsed.stages} append={append} error={music.vstError} />
 
             {/* Réponses impulsionnelles (Convolution) */}
             <div className={cl("apo-irs")}>
@@ -289,5 +304,68 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                 {!parsed.lines.length && <p className={cl("hint")}>Rien à lire pour l'instant.</p>}
             </div>
         </aside>
+    );
+}
+
+/** Plugins VST : ceux du dossier (clic = ajout au set) et les réglages de ceux du set. */
+function VstSection({ act, files, stages, append, error }: {
+    act: Act; files: string[]; stages: ApoStage[]; append(line: string): void; error?: string | null;
+}) {
+    const p = getPrefs();
+    const infos = getApoVst();
+    const inSet = stages.filter(s => s.t === "vst");
+    const [open, setOpen] = useState<number | null>(0);
+
+    return (
+        <div className={cl("apo-irs")}>
+            <div className={cl("apo-editor-head")}>
+                <span className={cl("group-title")}>Plugins VST <span className={cl("count")}>{files.length}</span></span>
+                <button type="button" className={cl("link")} onClick={() => act(openVstFolder)}>Ouvrir le dossier</button>
+            </div>
+            {files.length ? (
+                <div className={cl("apo-ir-list")}>
+                    {files.map(f => (
+                        <span key={f} className={cl("apo-ir")}>
+                            <button type="button" className={cl("apo-ir-name")} onClick={() => append(`VSTPlugin: Library ${/\s/.test(f) ? `"${f}"` : f}`)} title={`Ajouter « ${f} » au set`}>{f.replace(/\.dll$/i, "")}</button>
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <p className={cl("hint")}>Dépose tes plugins VST2 64 bits (.dll) dans le dossier, ils apparaissent ici. Chaque plugin tourne à part : s'il plante, la diffusion continue sans lui.</p>
+            )}
+            {error && p.apoOn && <p className={cl("error-line")}>{error}</p>}
+            {p.apoOn && inSet.map((s, slot) => {
+                const info: VstInfo | undefined = infos[slot];
+                if (s.t !== "vst") return null;
+                return (
+                    <div key={`${s.line}-${s.lib}`} className={cl("apo-vst")}>
+                        <button type="button" className={cl("apo-vst-head")} onClick={() => setOpen(open === slot ? null : slot)} aria-expanded={open === slot}>
+                            <span className={cl("apo-vst-name")}>{info?.name || s.lib}</span>
+                            {info?.vendor && <span className={cl("apo-vst-vendor")}>{info.vendor}</span>}
+                            <span className={cl("apo-vst-count")}>{info?.error ? "erreur" : `${info?.params?.length ?? 0} réglages`}</span>
+                        </button>
+                        {info?.error && <p className={cl("error-line")}>{info.error}</p>}
+                        {open === slot && !info?.error && (
+                            <div className={cl("apo-vst-params", "scroll")}>
+                                {(info?.params ?? []).map((param, index) => (
+                                    <label key={index} className={cl("apo-vst-param")}>
+                                        <span className={cl("apo-vst-pname")} title={param.name}>{param.name || `#${index + 1}`}</span>
+                                        <input
+                                            type="range" min={0} max={1} step={0.001} value={param.value}
+                                            onChange={e => {
+                                                const v = Number(e.currentTarget.value);
+                                                act(() => setVstParam(slot, index, v));
+                                            }}
+                                        />
+                                        <span className={cl("apo-vst-pval")}>{param.display}</span>
+                                    </label>
+                                ))}
+                                {!info?.params?.length && <p className={cl("hint")}>Ce plugin n'a pas de réglage exposé.</p>}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
     );
 }

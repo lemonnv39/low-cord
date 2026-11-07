@@ -16,7 +16,7 @@ import type { SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, SelectedChannelStore, useEffect, UserStore, useState } from "@webpack/common";
 
-import { APO_EXAMPLE, type ApoIr, irMagnitude, parseApo } from "./apo";
+import { APO_EXAMPLE, type ApoIr, irMagnitude, parseApo, replaceLine, vstLine } from "./apo";
 
 export interface VoiceChannel { id: string; name: string; }
 export interface MusicalGuild { id: string; name: string; icon?: string | null; channels: VoiceChannel[]; }
@@ -48,6 +48,8 @@ export interface MusicalState {
     exitReason?: string;
     /** les comptes suivent ton compte (bouton « Rejoindre ma vocale ») */
     following?: boolean;
+    /** un plugin VST du Mini APO s'est arrêté (message du moteur) */
+    vstError?: string | null;
 }
 
 /** Réglages gardés d'une session à l'autre et renvoyés au moteur à chaque connexion. */
@@ -162,7 +164,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.11.0";
+export const MIN_ENGINE = "0.12.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -876,13 +878,42 @@ export const readSound = (pad: SoundPad) => VencordNative.lowMusical.readSound(p
 let apoError: string | null = null;
 export const getApoError = () => apoError;
 
+/** État des plugins VST du set (nom, paramètres, erreur), dans l'ordre. */
+export interface VstInfo {
+    name?: string;
+    vendor?: string;
+    file?: string;
+    error?: string | null;
+    chunks?: boolean;
+    params?: { name: string; value: number; display: string; }[];
+}
+let apoVst: VstInfo[] = [];
+export const getApoVst = () => apoVst;
+
+/** Plugins déposés dans le dossier VST (relu à l'ouverture du volet). */
+let vstFiles: string[] = [];
+export const getVstFiles = () => vstFiles;
+export async function refreshVstFiles() {
+    const list = await VencordNative.lowMusical.listVst().catch(() => [] as string[]);
+    if (list.join("|") !== vstFiles.join("|")) {
+        vstFiles = list;
+        emit();
+        live(sendApo);
+    }
+}
+export const openVstFolder = () => VencordNative.lowMusical.openVstFolder();
+
+const apoStages = () => parseApo(prefs.apoText, prefs.apoIrs, vstFiles).stages;
+
 /** Envoie le set au moteur (ou le coupe). Renvoie le nombre d'étapes jouées. */
 async function sendApo() {
-    const stages = prefs.apoOn ? parseApo(prefs.apoText, prefs.apoIrs).stages : [];
+    const stages = prefs.apoOn ? apoStages() : [];
     try {
-        const n = await call<number>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
-        if (apoError) { apoError = null; emit(); }
-        return n;
+        const res = await call<{ stages: number; vst?: VstInfo[]; }>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
+        apoVst = Array.isArray(res?.vst) ? res.vst : [];
+        apoError = null;
+        emit();
+        return res?.stages ?? 0;
     } catch (e) {
         // Le moteur garde le set d'avant : on dit pourquoi.
         apoError = errorText(e);
@@ -968,4 +999,19 @@ export function getIrResponse(file: string): [number[], number[]] | undefined {
         })().catch(() => irResponses.set(file, "error"));
     }
     return undefined;
+}
+
+/**
+ * Réglage d'un paramètre du n-ième plugin du set. Le nouvel état est réécrit
+ * dans le set (ChunkData ou paramètres), comme APO : il est donc gardé.
+ */
+export async function setVstParam(slot: number, index: number, value: number) {
+    const state = await call<VstInfo & { chunk?: string | null; }>("vst_param", { slot, index, value });
+    apoVst = apoVst.map((v, i) => (i === slot ? { ...v, params: state.params } : v));
+    const stage = apoStages().filter(s => s.t === "vst")[slot];
+    if (stage?.t === "vst") {
+        const line = vstLine(stage.lib, state.chunks ? state.chunk ?? null : null, state.chunks ? null : state.params ?? []);
+        savePrefs({ apoText: replaceLine(prefs.apoText, stage.line, line) });
+    }
+    emit();
 }

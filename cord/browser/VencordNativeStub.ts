@@ -174,6 +174,8 @@ window.VencordNative = {
         importIr: async () => { throw new Error("Disponible seulement dans Discord sur PC"); },
         deleteIr: async () => { },
         readIr: async () => new Uint8Array(),
+        listVst: async () => [],
+        openVstFolder: async () => "",
         stop: async () => { },
         onEvent: () => { },
     },

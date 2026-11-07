@@ -143,6 +143,9 @@ export default {
         importIr: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_IR_IMPORT, name, data),
         deleteIr: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_IR_DELETE, file),
         readIr: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_IR_READ, file),
+        /** Mini APO : plugins VST déposés dans le dossier de low-musical */
+        listVst: () => invoke<string[]>(IpcEvents.LOWMUSICAL_VST_LIST),
+        openVstFolder: () => invoke<string>(IpcEvents.LOWMUSICAL_VST_FOLDER),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

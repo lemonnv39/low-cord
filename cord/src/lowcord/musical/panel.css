@@ -2210,3 +2210,75 @@
     background: rgb(242 84 91 / 12%);
     color: var(--mp-bad);
 }
+
+.lc-mp-apo-vst {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--mp-line);
+    border-radius: 10px;
+    background: rgb(0 0 0 / 22%);
+}
+
+.lc-mp-apo-vst-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mp-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.lc-mp-apo-vst-name {
+    color: var(--mp-strong);
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.lc-mp-apo-vst-vendor {
+    color: var(--mp-faint);
+    font-size: 11px;
+}
+
+.lc-mp-apo-vst-count {
+    margin-left: auto;
+    color: var(--mp-muted);
+    font-family: var(--mp-mono);
+    font-size: 10px;
+}
+
+.lc-mp-apo-vst-params {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+}
+
+.lc-mp-apo-vst-param {
+    display: grid;
+    grid-template-columns: 110px 1fr 74px;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+}
+
+.lc-mp-apo-vst-pname {
+    overflow: hidden;
+    color: var(--mp-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-mp-apo-vst-pval {
+    overflow: hidden;
+    color: var(--mp-text);
+    font-family: var(--mp-mono);
+    font-size: 10.5px;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

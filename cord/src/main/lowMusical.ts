@@ -164,7 +164,7 @@ const ENGINE_COMMANDS = new Set([
     "version", "status", "devices",
     "connect", "disconnect", "leave", "set_follow", "set_fake_deafen", "set_bitrate", "set_volume",
     "set_input", "set_gain", "set_latency", "set_space", "set_eq", "set_processing", "set_meter",
-    "join", "set_apo", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
+    "join", "set_apo", "vst_param", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
 ]);
 const CALL_TIMEOUT = 15_000;
 
@@ -253,9 +253,16 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown
     if (cmd === "set_apo" && Array.isArray(plain.stages)) {
         // Convolution : seulement les IR importées, chemin résolu ici.
         plain.stages = plain.stages.map((s: any) => {
-            if (s?.t !== "conv") return s;
-            const { ir, ...rest } = s;
-            return { ...rest, path: irPath(ir) };
+            if (s?.t === "conv") {
+                const { ir, ...rest } = s;
+                return { ...rest, path: irPath(ir) };
+            }
+            if (s?.t === "vst") {
+                // Plugins VST : seulement ceux déposés dans le dossier VST de low-musical.
+                const { lib, ...rest } = s;
+                return { ...rest, path: vstPath(lib) };
+            }
+            return s;
         });
     }
     return callEngine(cmd, plain);
@@ -367,6 +374,29 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_IR_IMPORT, (_, name: unknown, data: unknown)
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_IR_DELETE, (_, file: unknown) => { rmSync(irPath(file), { force: true }); });
 ipcMain.handle(IpcEvents.LOWMUSICAL_IR_READ, (_, file: unknown) => readFileSync(irPath(file)));
+
+// ── Mini APO : dossier des plugins VST ──────────────────────────────────────
+// L'utilisateur y dépose ses plugins (.dll VST2 64 bits). Rien n'est chargé
+// tant qu'un set ne le demande pas, et chaque plugin tourne à part.
+const VST_DIR = join(DATA_DIR, "low-musical-vst");
+const VST_NAME = /^[^\\/:*?"<>|]{1,120}\.dll$/i;
+
+function vstPath(name: unknown) {
+    if (typeof name !== "string" || !VST_NAME.test(name)) throw new Error("plugin VST invalide");
+    return join(VST_DIR, name);
+}
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_VST_LIST, () => {
+    try {
+        return readdirSync(VST_DIR).filter(f => VST_NAME.test(f) && statSync(join(VST_DIR, f)).isFile());
+    } catch {
+        return [];
+    }
+});
+ipcMain.handle(IpcEvents.LOWMUSICAL_VST_FOLDER, () => {
+    mkdirSync(VST_DIR, { recursive: true });
+    return shell.openPath(VST_DIR);
+});
 /** Sons encore présents sur le disque (les autres ont été effacés à la main). */
 ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
     try {

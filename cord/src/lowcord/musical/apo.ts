@@ -14,6 +14,7 @@
 //  - Copy: L=R R=0.5*L+-6dB*R …
 //  - Delay: 10 ms | 480 samples
 //  - Convolution: salle.wav  (réponse impulsionnelle importée dans le volet)
+//  - VSTPlugin: Library Wider.dll ChunkData "…"  (plugin VST2 du dossier VST)
 // Formules des filtres : celles d'APO (RBJ), valeurs par défaut comprises
 // (Q 0,707 ; pente des shelfs 0,9 ; notch Q 30 ; fréquence de coin des LS/HS).
 // Les coefficients sont calculés ici pour 48 kHz : la courbe affichée est
@@ -32,7 +33,8 @@ export type ApoStage =
     | { t: "graphic"; ch: Ch; points: [number, number][]; }
     | { t: "copy"; m: [number, number, number, number]; c: [number, number]; }
     | { t: "delay"; ch: Ch; samples: number; }
-    | { t: "conv"; ch: Ch; ir: string; name: string; };
+    | { t: "conv"; ch: Ch; ir: string; name: string; }
+    | { t: "vst"; ch: Ch; lib: string; chunk?: string; params?: Record<string, number>; line: number; };
 
 /** Réponse impulsionnelle importée : nom d'origine et fichier rangé par low-cord. */
 export interface ApoIr { name: string; file: string; }
@@ -253,12 +255,11 @@ const IGNORED: Record<string, string> = {
     ELSE: "conditions : non prises en charge",
     ENDIF: "conditions : non prises en charge",
     EVAL: "expressions (Eval) : non prises en charge",
-    VSTPLUGIN: "plugins VST : pas encore",
     LOUDNESSCORRECTION: "Loudness correction : pas encore",
 };
 
 /** Lit un set Equalizer APO. */
-export function parseApo(text: string, irs: ApoIr[] = []): ApoParse {
+export function parseApo(text: string, irs: ApoIr[] = [], vsts: string[] = []): ApoParse {
     const stages: ApoStage[] = [];
     const lines: ApoLine[] = [];
     let sel: Ch = [true, true];
@@ -342,6 +343,22 @@ export function parseApo(text: string, irs: ApoIr[] = []): ApoParse {
                 }
                 stages.push({ t: "delay", ch: [...sel], samples: Math.round(samples) });
                 lines.push({ line: at, kind: "Delay", summary: `${+(samples / APO_RATE * 1000).toFixed(2)} ms` });
+                return;
+            }
+            case "VSTPLUGIN": {
+                const v = parseVst(params);
+                if (!v.lib) {
+                    lines.push({ line: at, kind: "VSTPlugin", summary: params.trim(), warning: "« Library x.dll » manquant" });
+                    return;
+                }
+                const found = vsts.find(f => f.toLowerCase() === v.lib!.toLowerCase());
+                if (!found) {
+                    lines.push({ line: at, kind: "VSTPlugin", summary: v.lib, warning: `dépose « ${v.lib} » dans le dossier VST (bouton dossier en haut)` });
+                    return;
+                }
+                stages.push({ t: "vst", ch: [...sel], lib: found, chunk: v.chunk, params: v.params, line: at });
+                const detail = v.chunk ? "état enregistré" : v.params ? `${Object.keys(v.params).length} réglage(s)` : "réglages d'origine";
+                lines.push({ line: at, kind: "VSTPlugin", summary: `${found} · ${detail}` });
                 return;
             }
             case "CONVOLUTION": {
@@ -518,4 +535,42 @@ export function irMagnitude(samples: Float32Array): number[] {
         for (let k = lo; k <= hi; k++) sum += power[k];
         return 10 * Math.log10(Math.max(1e-12, sum / (hi - lo + 1)));
     });
+}
+
+// ── VSTPlugin ───────────────────────────────────────────────────────────────
+
+/** Mots séparés par des espaces, « entre guillemets » gardés entiers. */
+function splitQuoted(text: string) {
+    return [...text.matchAll(/"([^"]*)"|(\S+)/g)].map(m => m[1] ?? m[2]);
+}
+
+/** « Library x.dll ChunkData "…" Nom valeur … » (comme APO). */
+export function parseVst(params: string) {
+    const tokens = splitQuoted(params.trim());
+    let lib: string | undefined, chunk: string | undefined;
+    const named: Record<string, number> = {};
+    for (let i = 0; i + 1 < tokens.length; i += 2) {
+        const [key, value] = [tokens[i], tokens[i + 1]];
+        if (key === "Library") lib = value.split(/[\\/]/).pop();
+        else if (key === "ChunkData") chunk = value;
+        else named[key] = Number(value.replace(",", ".")) || 0;
+    }
+    return { lib, chunk, params: Object.keys(named).length ? named : undefined };
+}
+
+const quote = (s: string) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, "")}"` : s);
+
+/** Ligne VSTPlugin réécrite avec le nouvel état du plugin. */
+export function vstLine(lib: string, chunk: string | null, params: { name: string; value: number; }[] | null) {
+    let line = `VSTPlugin: Library ${quote(lib)}`;
+    if (chunk) line += ` ChunkData "${chunk}"`;
+    else if (params) for (const p of params) if (p.name) line += ` ${quote(p.name)} ${+p.value.toFixed(6)}`;
+    return line;
+}
+
+/** Remplace une ligne du set (numéro de ligne, 1 = première). */
+export function replaceLine(text: string, line: number, content: string) {
+    const rows = text.split(/\r?\n/);
+    if (line >= 1 && line <= rows.length) rows[line - 1] = content;
+    return rows.join("\n");
 }

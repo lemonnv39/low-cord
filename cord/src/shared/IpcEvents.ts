@@ -89,4 +89,6 @@ export const enum IpcEvents {
     LOWMUSICAL_IR_IMPORT = "LowMusicalIrImport",
     LOWMUSICAL_IR_DELETE = "LowMusicalIrDelete",
     LOWMUSICAL_IR_READ = "LowMusicalIrRead",
+    LOWMUSICAL_VST_LIST = "LowMusicalVstList",
+    LOWMUSICAL_VST_FOLDER = "LowMusicalVstFolder",
 }
