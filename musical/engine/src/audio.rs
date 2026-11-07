@@ -68,6 +68,8 @@ global!(saturation: AtomicU32 = f32_atomic(0.0));
 global!(comp_on: AtomicBool = AtomicBool::new(false));
 global!(comp_amount: AtomicU32 = f32_atomic(0.5));
 global!(limiter_on: AtomicBool = AtomicBool::new(false));
+// Mesures du son envoyées au panneau (seulement quand il est ouvert).
+global!(meter_on: AtomicBool = AtomicBool::new(false));
 
 /// Réglages audio courants, pour un panneau qui se (re)monte.
 pub fn snapshot(map: &mut Map<String, Value>) {
@@ -104,6 +106,11 @@ pub fn snapshot(map: &mut Map<String, Value>) {
 
 pub fn set_gain(db: f32) {
     store_f32(gain(), 10f32.powf(db.clamp(-64.0, 64.0) / 20.0));
+}
+
+/// Active ou coupe l'envoi des mesures du son (niveau, spectre) au panneau.
+pub fn set_meter(on: bool) {
+    meter_on().store(on, Ordering::Relaxed);
 }
 
 /// Volume général (0 à 2, soit 0 à 200 %), commun à tous les comptes.
@@ -331,6 +338,17 @@ impl Biquad {
         self.a1 = (-2.0 * cw) / a0;
         self.a2 = (1.0 - alpha / a) / a0;
     }
+    /// Passe-bande à gain unitaire au centre (formules RBJ), pour les mesures.
+    fn set_bandpass(&mut self, f0: f32, fs: f32, q: f32) {
+        let w0 = std::f32::consts::TAU * f0 / fs;
+        let alpha = w0.sin() / (2.0 * q);
+        let a0 = 1.0 + alpha;
+        self.b0 = alpha / a0;
+        self.b1 = 0.0;
+        self.b2 = -alpha / a0;
+        self.a1 = (-2.0 * w0.cos()) / a0;
+        self.a2 = (1.0 - alpha) / a0;
+    }
     /// Passe-haut (coupe-bas) d'ordre 2, Q = 0,707 (formules RBJ).
     fn set_highpass(&mut self, f0: f32, fs: f32) {
         let w0 = std::f32::consts::TAU * f0 / fs;
@@ -530,6 +548,96 @@ impl Dsp {
     }
 }
 
+// ── Mesures du son ──────────────────────────────────────────────────────────
+// Toutes les 50 ms, le niveau (efficace et crête) et 24 bandes de 40 Hz à
+// 16 kHz (échelle logarithmique, comme l'oreille), mesurés sur le son TRAITÉ :
+// le panneau montre ce que les comptes diffusent. Valeurs ramenées à 0..1
+// sur une échelle de −60 à 0 dB.
+
+pub const METER_BANDS: usize = 24;
+const METER_EVERY: usize = OUT_RATE as usize / 20;
+
+pub struct Meter {
+    filters: Vec<Biquad>,
+    energy: [f32; METER_BANDS],
+    sum_sq: f32,
+    peak: f32,
+    frames: usize,
+}
+
+pub struct Reading {
+    pub level: f32,
+    pub peak: f32,
+    pub bands: [f32; METER_BANDS],
+}
+
+fn to_unit(x: f32) -> f32 {
+    ((20.0 * x.max(1e-9).log10() + 60.0) / 60.0).clamp(0.0, 1.0)
+}
+
+impl Meter {
+    pub fn new() -> Self {
+        let filters = (0..METER_BANDS)
+            .map(|i| {
+                let f = 40.0 * (16000.0f32 / 40.0).powf(i as f32 / (METER_BANDS - 1) as f32);
+                let mut b = Biquad::default();
+                b.set_bandpass(f, OUT_RATE as f32, 3.0);
+                b
+            })
+            .collect();
+        Meter {
+            filters,
+            energy: [0.0; METER_BANDS],
+            sum_sq: 0.0,
+            peak: 0.0,
+            frames: 0,
+        }
+    }
+
+    /// Ajoute un bloc stéréo entrelacé ; renvoie une mesure toutes les 50 ms.
+    pub fn feed(&mut self, buf: &[f32]) -> Vec<Reading> {
+        let mut out = Vec::new();
+        for [l, r] in buf.as_chunks::<2>().0 {
+            let mono = (l + r) * 0.5;
+            self.sum_sq += mono * mono;
+            self.peak = self.peak.max(l.abs()).max(r.abs());
+            for (f, e) in self.filters.iter_mut().zip(self.energy.iter_mut()) {
+                let y = f.process(mono);
+                *e += y * y;
+            }
+            self.frames += 1;
+            if self.frames == METER_EVERY {
+                let n = self.frames as f32;
+                // ×2 : une sinusoïde d'amplitude A a une valeur efficace A/√2.
+                let mut bands = [0.0; METER_BANDS];
+                for (b, e) in bands.iter_mut().zip(self.energy.iter()) {
+                    *b = to_unit((2.0 * e / n).sqrt());
+                }
+                out.push(Reading {
+                    level: to_unit((self.sum_sq / n).sqrt()),
+                    peak: to_unit(self.peak),
+                    bands,
+                });
+                self.energy = [0.0; METER_BANDS];
+                self.sum_sq = 0.0;
+                self.peak = 0.0;
+                self.frames = 0;
+            }
+        }
+        out
+    }
+}
+
+fn send_meter(r: &Reading) {
+    let round = |x: f32| (x * 1000.0).round() / 1000.0;
+    crate::proto::event(json!({
+        "event": "meter",
+        "level": round(r.level),
+        "peak": round(r.peak),
+        "bands": r.bands.iter().map(|&b| round(b)).collect::<Vec<_>>(),
+    }));
+}
+
 // ── Distribution aux comptes ────────────────────────────────────────────────
 // Chaque compte en vocal a son tampon ; la capture y copie le son traité. Un
 // compte qui quitte le vocal libère sa source : son tampon sort de la liste.
@@ -702,6 +810,7 @@ where
 {
     let scfg: cpal::StreamConfig = cfg.clone().into();
     let mut dsp = Dsp::new();
+    let mut meter = Meter::new();
     let mut block: Vec<f32> = Vec::new();
     let mut pos = 0.0f32;
     let mut last_l = 0.0f32;
@@ -724,6 +833,11 @@ where
                 last_r = r;
             }
             dsp.process(&mut block);
+            if meter_on().load(Ordering::Relaxed) {
+                for reading in meter.feed(&block) {
+                    send_meter(&reading);
+                }
+            }
             distribute(&block);
         },
         |e| capture_error(format!("Capture interrompue : {e}")),
@@ -762,6 +876,29 @@ mod tests {
     /// Crête sur la deuxième moitié (une fois les filtres stabilisés).
     fn peak(buf: &[f32]) -> f32 {
         buf[buf.len() / 2..].iter().fold(0.0, |m, x| m.max(x.abs()))
+    }
+
+    #[test]
+    fn mesure_niveau_et_spectre() {
+        let mut m = Meter::new();
+        let mut buf = Vec::new();
+        for i in 0..OUT_RATE as usize {
+            let s = 0.5 * (std::f32::consts::TAU * 1000.0 * i as f32 / OUT_RATE as f32).sin();
+            buf.push(s);
+            buf.push(s);
+        }
+        let readings = m.feed(&buf);
+        assert_eq!(readings.len(), 20); // 1 s = 20 mesures de 50 ms
+        let last = readings.last().unwrap();
+        // Crête 0,5 → −6 dB → 0,9 ; efficace 0,354 → −9 dB → 0,85.
+        assert!((last.peak - 0.9).abs() < 0.01, "crête {}", last.peak);
+        assert!((last.level - 0.85).abs() < 0.01, "niveau {}", last.level);
+        // La bande la plus forte est celle autour de 1 kHz.
+        let best = (0..METER_BANDS)
+            .max_by(|&a, &b| last.bands[a].total_cmp(&last.bands[b]))
+            .unwrap();
+        let f = 40.0 * (16000.0f32 / 40.0).powf(best as f32 / (METER_BANDS - 1) as f32);
+        assert!((700.0..1400.0).contains(&f), "bande {f} Hz");
     }
 
     #[test]

@@ -127,6 +127,10 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
 
         // Audio
         "set_input" => done(audio::set_input(text(r, "name"))),
+        "set_meter" => {
+            audio::set_meter(flag(r, "on")?);
+            Ok(Value::Null)
+        }
         "set_volume" => {
             audio::set_volume(num(r, "volume")? as f32);
             Ok(Value::Null)
