@@ -1,4 +1,4 @@
-// Vencord 5d65574
+// Vencord fed95eb
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
