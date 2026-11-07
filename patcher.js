@@ -1,4 +1,4 @@
-// Vencord fed95eb
+// Vencord e2c6b6a
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
