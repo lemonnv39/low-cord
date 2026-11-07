@@ -32,10 +32,14 @@ const MAX_ACCOUNTS: usize = 25;
 /// Ordres vers la tâche d'un compte.
 #[derive(Clone)]
 enum Cmd {
-    Join { guild: String, channel: String },
+    Join {
+        guild: String,
+        channel: String,
+    },
     Leave,
     SetBitrate(i32),
-    SetFollow(Option<String>),
+    /// Compte à suivre (None = arrêter) et délai avant chaque déplacement (ms).
+    SetFollow(Option<String>, u64),
     SetFakeDeafen(bool),
     Shutdown,
 }
@@ -240,13 +244,21 @@ pub fn set_bitrate(kbps: u32) -> Result<(), String> {
 
 /// Suit un compte (id décimal) : rejoint son salon vocal et le suit
 /// (serveurs partagés uniquement). None = on arrête de suivre, on reste sur place.
-pub fn set_follow(account: Option<String>, target: Option<String>) -> Result<(), String> {
+/// `delay_ms` : attente avant chaque déplacement, pour espacer les comptes.
+pub fn set_follow(
+    account: Option<String>,
+    target: Option<String>,
+    delay_ms: u64,
+) -> Result<(), String> {
     if let Some(t) = &target {
         if t.parse::<u64>().is_err() {
             return Err(format!("identifiant invalide : {t}"));
         }
     }
-    send_to(account.as_deref(), Cmd::SetFollow(target))
+    send_to(
+        account.as_deref(),
+        Cmd::SetFollow(target, delay_ms.min(60_000)),
+    )
 }
 
 /// Faux sourd : le compte s'annonce sourd (self_deaf) mais continue d'émettre.
@@ -271,6 +283,7 @@ struct Persist {
     seq: Arc<AtomicI64>,
     current: Option<(String, String)>, // salon vocal confirmé, à re-rejoindre
     follow: Option<String>,
+    follow_delay: u64,
     properties: Option<Value>,
     /// clé du compte (pour ses événements)
     key: String,
@@ -292,6 +305,7 @@ async fn engine_main(
         seq: Arc::new(AtomicI64::new(-1)),
         current: None,
         follow: None,
+        follow_delay: 0,
         properties,
         key,
         fake_deafen: false,
@@ -369,7 +383,10 @@ async fn wait_backoff(
                 Some(Cmd::Shutdown) | None => return true,
                 Some(Cmd::Join { guild, channel }) => st.current = Some((guild, channel)),
                 Some(Cmd::Leave) => st.current = None,
-                Some(Cmd::SetFollow(t)) => st.follow = t,
+                Some(Cmd::SetFollow(t, delay)) => {
+                    st.follow = t;
+                    st.follow_delay = delay;
+                }
                 // Valeurs déjà enregistrées, appliquées à la reconnexion.
                 Some(Cmd::SetFakeDeafen(on)) => st.fake_deafen = on,
                 Some(Cmd::SetBitrate(_)) => {}
@@ -421,6 +438,10 @@ async fn run_session(
     let mut voice_map: std::collections::HashMap<String, (String, String)> = Default::default();
     let mut guild_ids: Vec<String> = Vec::new();
 
+    // Suivi : déplacement prévu (salon, échéance), après le délai du compte.
+    let mut follow_due: Option<((String, String), tokio::time::Instant)> = None;
+    let far = || tokio::time::Instant::now() + std::time::Duration::from_secs(3600);
+
     // Rejoindre un salon : on repart d'une poignée de main vierge.
     macro_rules! go_to {
         ($g:expr, $c:expr) => {{
@@ -430,6 +451,26 @@ async fn run_session(
             voice_session = None;
             vendpoint = None;
             vtoken = None;
+        }};
+    }
+
+    // Suivre la cible dans un salon : tout de suite, ou après le délai du compte.
+    macro_rules! follow_to {
+        ($g:expr, $c:expr) => {{
+            let tgt: (String, String) = ($g, $c);
+            let already = st.current.as_ref() == Some(&tgt)
+                || pending.as_ref() == Some(&tgt)
+                || follow_due.as_ref().map(|(t, _)| t) == Some(&tgt);
+            if !already {
+                if st.follow_delay == 0 {
+                    follow_due = None;
+                    go_to!(tgt.0, tgt.1);
+                } else {
+                    let at = tokio::time::Instant::now()
+                        + std::time::Duration::from_millis(st.follow_delay);
+                    follow_due = Some((tgt, at));
+                }
+            }
         }};
     }
 
@@ -498,7 +539,7 @@ async fn run_session(
                             if let Some(f) = st.follow.clone() {
                                 if let Some((g, c)) = voice_map.get(&f).cloned() {
                                     st.current = None;
-                                    go_to!(g, c);
+                                    follow_to!(g, c);
                                 }
                             } else if let Some((g, c)) = st.current.clone() {
                                 go_to!(g, c);
@@ -531,14 +572,10 @@ async fn run_session(
                             // Suivi : la cible bouge → on la suit.
                             if st.follow.is_some() && uid == st.follow {
                                 match chan {
-                                    Some(c) if !gid.is_empty() => {
-                                        let tgt = (gid.clone(), c.clone());
-                                        if st.current.as_ref() != Some(&tgt) && pending.as_ref() != Some(&tgt) {
-                                            go_to!(gid, c);
-                                        }
-                                    }
+                                    Some(c) if !gid.is_empty() => follow_to!(gid, c),
                                     _ => {
                                         // La cible a quitté le vocal → on quitte aussi.
+                                        follow_due = None;
                                         if let Some((g, _)) = st.current.take() {
                                             send(leave_voice(&g));
                                             driver.leave();
@@ -595,6 +632,15 @@ async fn run_session(
                 next_hb = tokio::time::Instant::now() + hb_period;
             }
 
+            // Déplacement de suivi arrivé à échéance.
+            _ = tokio::time::sleep_until(follow_due.as_ref().map_or_else(far, |d| d.1)), if follow_due.is_some() => {
+                if let Some(((g, c), _)) = follow_due.take() {
+                    if st.follow.is_some() && st.current.as_ref() != Some(&(g.clone(), c.clone())) {
+                        go_to!(g, c);
+                    }
+                }
+            }
+
             maybe_cmd = cmd_rx.recv() => match maybe_cmd {
                 Some(Cmd::Join { guild, channel }) => go_to!(guild, channel),
                 Some(Cmd::Leave) => {
@@ -606,15 +652,14 @@ async fn run_session(
                     pending = None;
                 }
                 Some(Cmd::SetBitrate(bps)) => driver.set_bitrate(songbird::driver::Bitrate::Bits(bps)),
-                Some(Cmd::SetFollow(target)) => {
+                Some(Cmd::SetFollow(target, delay)) => {
                     st.follow = target.clone();
+                    st.follow_delay = delay;
+                    follow_due = None;
                     if let Some(t) = &target {
                         for g in &guild_ids { send(guild_subscribe(g)); }
                         if let Some((g, c)) = voice_map.get(t).cloned() {
-                            let tgt = (g.clone(), c.clone());
-                            if st.current.as_ref() != Some(&tgt) && pending.as_ref() != Some(&tgt) {
-                                go_to!(g, c);
-                            }
+                            follow_to!(g, c);
                         }
                     }
                     // Arrêter de suivre ne quitte pas le vocal.
