@@ -28,7 +28,6 @@ export interface AccountState {
     guilds?: MusicalGuild[];
     current?: { guild: string; channel: string; };
     follow?: string | null;
-    presence?: boolean;
     fakeDeafen?: boolean;
 }
 
@@ -52,6 +51,8 @@ export interface MusicalPrefs {
     /** DEFAULT_INPUT ou nom d'un périphérique ; absente = rien n'est capté */
     source?: string;
     gain: number;
+    /** volume général de sortie, 0 à 2 (100 % = 1) */
+    volume: number;
     bitrate: number;
     latency: number;
     /** comptes cochés la dernière fois */
@@ -88,10 +89,10 @@ export interface MusicalPrefs {
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.3.0";
+export const MIN_ENGINE = "0.4.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
-    gain: 0, bitrate: 128, latency: 200,
+    gain: 0, volume: 1, bitrate: 128, latency: 200,
     selection: [], delay: 500,
     eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
     reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
@@ -243,6 +244,7 @@ function identity(): Record<string, unknown> | undefined {
 async function applyAudio() {
     await Promise.all([
         call("set_gain", { db: prefs.gain }),
+        call("set_volume", { volume: prefs.volume }),
         call("set_bitrate", { kbps: prefs.bitrate }),
         call("set_latency", { ms: prefs.latency }),
         call("set_8d", { mode: prefs.eightdMode, speed: prefs.eightdSpeed, position: prefs.eightdPos }),
@@ -297,7 +299,6 @@ export async function joinAll(guild: string, channel: string) {
 
 export const leave = (key?: string) => call("leave", key ? { account: key } : {});
 export const setFakeDeafen = (on: boolean, key?: string) => call("set_fake_deafen", { on, ...(key ? { account: key } : {}) });
-export const setPresence = (on: boolean) => call("set_presence", { on });
 export const setFollow = (target: string | null) => call("set_follow", { target });
 export const devices = () => call<string[]>("devices");
 
@@ -317,6 +318,11 @@ const live = (fn: () => Promise<unknown>) => { if (state.running) fn().catch(() 
 export function setGain(db: number) {
     savePrefs({ gain: db });
     live(() => call("set_gain", { db }));
+}
+
+export function setVolume(volume: number) {
+    savePrefs({ volume });
+    live(() => call("set_volume", { volume }));
 }
 
 export function setBitrate(kbps: number) {

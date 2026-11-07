@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import { cl, Section, Slider, Toggle } from "./controls";
+import { cl, Dropdown, Section, Slider, Toggle } from "./controls";
 import {
     applyEqPreset, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getPrefs, PREF_DEFAULTS,
     saveEqCustom, set8d, setEq, setProcessing, setReverb, setReverbParams, useMusical,
@@ -176,10 +176,12 @@ export function EqSection() {
                 </span>
             }
         >
-            <select className={cl("select")} value={known ? p.eqPreset : ""} onChange={e => applyEqPreset(e.currentTarget.value)}>
-                {!known && <option value="" disabled>Perso (non enregistré)</option>}
-                {presets.map(name => <option key={name} value={name}>{name}</option>)}
-            </select>
+            <Dropdown
+                value={known ? p.eqPreset : ""}
+                placeholder="Perso (non enregistré)"
+                choices={presets.map(name => ({ value: name, label: name }))}
+                onChange={applyEqPreset}
+            />
             <div className={cl("eq")}>
                 {EQ_LABELS.map((label, i) => (
                     <label key={label} className={cl("eq-band")}>

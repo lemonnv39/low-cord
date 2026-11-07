@@ -172,7 +172,7 @@
 }
 
 /* Champs */
-.lc-mp-select,
+.lc-mp-dropdown,
 .lc-mp-input {
     width: 100%;
     height: 36px;
@@ -188,15 +188,100 @@
     font-family: var(--font-code);
 }
 
-.lc-mp-select:focus,
 .lc-mp-input:focus {
     border-color: var(--text-muted);
     outline: none;
 }
 
-.lc-mp-select option,
-.lc-mp-select optgroup {
-    background: var(--background-base-lowest, #111214);
+/* Menu déroulant maison */
+.lc-mp-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.lc-mp-dropdown:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.lc-mp-dropdown:hover:not(:disabled),
+.lc-mp-dropdown-open {
+    border-color: var(--text-muted);
+}
+
+.lc-mp-dropdown-label {
+    overflow: hidden;
+    flex: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-mp-dropdown-placeholder {
+    color: var(--text-muted);
+}
+
+.lc-mp-dropdown-chevron {
+    flex: none;
+    color: var(--text-muted);
+    transition: transform 150ms ease;
+}
+
+.lc-mp-dropdown-open .lc-mp-dropdown-chevron {
+    transform: rotate(180deg);
+}
+
+.lc-mp-dropdown-list {
+    position: fixed;
+    z-index: 10000;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 8px;
+    background: var(--background-base-low, #1a1a1e);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
+}
+
+.lc-mp-dropdown-item {
+    overflow: hidden;
+    flex: none;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.lc-mp-dropdown-item:disabled {
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.lc-mp-dropdown-item:hover:not(:disabled) {
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+}
+
+.lc-mp-dropdown-item-on {
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 600;
+}
+
+.lc-mp-dropdown-empty {
+    padding: 7px 10px;
+    color: var(--text-muted);
+    font-size: 13px;
 }
 
 /* Curseurs */

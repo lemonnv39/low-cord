@@ -15,12 +15,12 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
 import { useEffect, useMemo, useState } from "@webpack/common";
 
-import { cl, Section, Slider, Toggle } from "./controls";
+import { cl, Dropdown, Section, Slider } from "./controls";
 import { EqSection, ProcessingSection, SpatialSection } from "./Effects";
 import {
     type AccountState, connectAccounts, DEFAULT_INPUT, devices, disconnect, type EngineState, errorText, getPrefs, isActive,
     isOutdated, isReady, joinAll, leave, type MusicalGuild, PREF_DEFAULTS, savePrefs, setBitrate, setFakeDeafen, setFollow,
-    setGain, setInput, setLatency, setPresence, useMusical,
+    setGain, setInput, setLatency, setVolume, useMusical,
 } from "./engine";
 import { MusicalIcon } from "./LowMusicalTab";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
@@ -77,23 +77,23 @@ function AudioColumn({ act }: { act(fn: () => Promise<unknown>): void; }) {
                 title="Source audio"
                 extra={<button className={cl("mini")} disabled={!music.running} onClick={loadInputs}><RefreshIcon /> Rafraîchir</button>}
             >
-                <select
-                    className={cl("select")}
+                <Dropdown
                     value={prefs.source ?? ""}
+                    placeholder={connected ? "Aucune source (silence)" : "Connecte un compte d'abord"}
                     disabled={!connected || !inputs}
-                    onChange={e => { const v = e.currentTarget.value; if (v) act(() => setInput(v)); }}
-                >
-                    <option value="" disabled>{connected ? "Aucune source (silence)" : "Connecte un compte d'abord"}</option>
-                    <option value={DEFAULT_INPUT}>Entrée par défaut</option>
-                    {inputs?.map(n => <option key={n} value={n}>{n}</option>)}
-                    {prefs.source && prefs.source !== DEFAULT_INPUT && inputs && !inputs.includes(prefs.source) && (
-                        <option value={prefs.source}>{prefs.source} (absent)</option>
-                    )}
-                </select>
+                    choices={[
+                        { value: DEFAULT_INPUT, label: "Entrée par défaut" },
+                        ...(inputs ?? []).map(n => ({ value: n, label: n })),
+                        ...(prefs.source && prefs.source !== DEFAULT_INPUT && inputs && !inputs.includes(prefs.source)
+                            ? [{ value: prefs.source, label: `${prefs.source} (absent)`, disabled: true }]
+                            : []),
+                    ]}
+                    onChange={v => act(() => setInput(v))}
+                />
                 {music.captureError && <p className={cl("error-line")}>{music.captureError}</p>}
                 <Slider
                     label="Gain" value={prefs.gain} display={`${prefs.gain > 0 ? "+" : ""}${prefs.gain} dB`}
-                    min={-60} max={24} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain}
+                    min={-64} max={64} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain}
                 />
                 <p className={cl("note")}>
                     Rien n'est diffusé tant qu'aucune source n'est choisie. Prends un câble virtuel (CABLE Output,
@@ -277,7 +277,6 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
     const currentGuild = guilds.find(g => g.id === current?.guild);
     const currentChannel = currentGuild?.channels.find(c => c.id === current?.channel);
     const allDeaf = ready.length > 0 && ready.every(a => a.fakeDeafen);
-    const allPresence = ready.length > 0 && ready.every(a => a.presence);
     const follow = ready.find(a => a.follow)?.follow;
     const exitMsg = !music.running && music.exitReason && music.exitReason !== "moteur arrêté" ? music.exitReason : null;
 
@@ -325,6 +324,10 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
                     </span>
                 }
             >
+                <Slider
+                    label="Volume général" value={getPrefs().volume} display={`${Math.round(getPrefs().volume * 100)} %`}
+                    min={0} max={2} step={0.01} reset={PREF_DEFAULTS.volume} onChange={setVolume}
+                />
                 <div className={cl("accounts")}>
                     {entries.map(([id, a]) => <AccountRow key={id} id={id} name={accounts?.find(x => x.id === id)?.username} account={a} pending={pending} act={act} />)}
                 </div>
@@ -350,23 +353,23 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
                 <Section title="Serveur & salon">
                     {guilds.length ? (
                         <>
-                            <select className={cl("select")} value={guildId} disabled={pending} onChange={e => { setGuildId(e.currentTarget.value); setChannelId(""); }}>
-                                <option value="">Choisir un serveur</option>
-                                {guilds.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                            </select>
-                            <select
-                                className={cl("select")}
+                            <Dropdown
+                                value={guildId}
+                                placeholder="Choisir un serveur"
+                                disabled={pending}
+                                choices={guilds.map(g => ({ value: g.id, label: g.name }))}
+                                onChange={id => { setGuildId(id); setChannelId(""); }}
+                            />
+                            <Dropdown
                                 value={channelId}
+                                placeholder="Choisir un salon"
                                 disabled={pending || !guild}
-                                onChange={e => {
-                                    const id = e.currentTarget.value;
+                                choices={(guild?.channels ?? []).map(c => ({ value: c.id, label: c.name }))}
+                                onChange={id => {
                                     setChannelId(id);
-                                    if (id) act(() => joinAll(guildId, id));
+                                    act(() => joinAll(guildId, id));
                                 }}
-                            >
-                                <option value="">Choisir un salon</option>
-                                {guild?.channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+                            />
                             <p className={cl("note")}>
                                 {ready.length > 1
                                     ? "Seuls les serveurs communs à tous les comptes sont proposés. Choisir un salon y envoie tous les comptes, un par un."
@@ -380,14 +383,7 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
             )}
 
             {ready.length > 0 && (
-                <Section title="Présence & suivi">
-                    <div className={cl("toggle-row")}>
-                        <div>
-                            <div className={cl("toggle-name")}>Présence low-musical</div>
-                            <div className={cl("toggle-desc")}>Affiche « Joue à low-musical » sur les comptes</div>
-                        </div>
-                        <Toggle on={allPresence} label="Présence low-musical" onChange={on => act(() => setPresence(on))} />
-                    </div>
+                <Section title="Suivi">
                     <span className={cl("label")}>Compte à suivre</span>
                     <div className={cl("follow")}>
                         <input
