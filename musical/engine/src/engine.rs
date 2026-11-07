@@ -1,11 +1,14 @@
-//! Compte Discord : gateway (WebSocket) + vocal (songbird, chiffrement DAVE).
+//! Comptes Discord : gateway (WebSocket) + vocal (songbird, chiffrement DAVE).
 //!
-//! Tout tourne dans UN fil dédié qui héberge un runtime tokio. Les commandes y
-//! arrivent par un canal ; l'état remonte à low-cord par des événements
-//! `status` (fusionnés dans un instantané pour qu'un panneau rouvert se recale).
+//! Plusieurs comptes peuvent tourner en même temps : chacun est une tâche sur
+//! un runtime tokio partagé, identifiée par une clé choisie par low-cord
+//! (l'id du compte dans le Token Importer). Les commandes visent un compte, ou
+//! tous si aucun n'est précisé. L'état remonte par des événements `status`
+//! portant la clé du compte (fusionnés dans un instantané par compte).
 
+use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use futures_util::{SinkExt, StreamExt};
@@ -23,187 +26,237 @@ use crate::audio::{LiveSource, OUT_RATE};
 use crate::lock;
 
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
+/// Garde-fou : nombre maximal de comptes connectés en même temps.
+const MAX_ACCOUNTS: usize = 25;
 
-/// Ordres vers le fil du moteur.
+/// Ordres vers la tâche d'un compte.
+#[derive(Clone)]
 enum Cmd {
     Join { guild: String, channel: String },
     Leave,
     SetBitrate(i32),
     SetFollow(Option<String>),
-    SetFakeDeafen,
+    SetFakeDeafen(bool),
     SetPresence(bool),
     Shutdown,
 }
 
-struct EngineHandle {
+struct Session {
     cmd: mpsc::UnboundedSender<Cmd>,
-    thread: std::thread::JoinHandle<()>,
+    task: tokio::task::JoinHandle<()>,
 }
 
-/// Un seul compte à la fois pour l'instant. `None` = déconnecté.
-fn engine_slot() -> &'static Mutex<Option<EngineHandle>> {
-    static S: OnceLock<Mutex<Option<EngineHandle>>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(None))
+/// Runtime partagé par tous les comptes (créé au premier besoin).
+fn runtime() -> &'static tokio::runtime::Runtime {
+    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RT.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("low-musical")
+            .enable_all()
+            .build()
+            .expect("runtime tokio")
+    })
 }
 
-/// Dernier état émis, fusionné.
-fn last_status() -> &'static Mutex<Map<String, Value>> {
+fn sessions() -> &'static Mutex<HashMap<String, Session>> {
+    static S: OnceLock<Mutex<HashMap<String, Session>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Dernier état émis par compte, fusionné.
+fn last_status() -> &'static Mutex<HashMap<String, Map<String, Value>>> {
+    static S: OnceLock<Mutex<HashMap<String, Map<String, Value>>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Dernier état commun (erreurs de capture…), fusionné.
+fn global_status() -> &'static Mutex<Map<String, Value>> {
     static S: OnceLock<Mutex<Map<String, Value>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(Map::new()))
 }
 
-/// Débit Opus (bits/s). Défaut 128 kbps.
+/// Débit Opus (bits/s), commun à tous les comptes. Défaut 128 kbps.
 fn bitrate_bps() -> &'static AtomicU32 {
     static B: OnceLock<AtomicU32> = OnceLock::new();
     B.get_or_init(|| AtomicU32::new(128_000))
 }
 
-/// Faux sourd : le compte s'annonce sourd (self_deaf) mais continue d'émettre.
-fn fake_deafen() -> &'static AtomicBool {
-    static D: OnceLock<AtomicBool> = OnceLock::new();
-    D.get_or_init(|| AtomicBool::new(false))
+fn merge(snap: &mut Map<String, Value>, obj: &Map<String, Value>) {
+    for (k, v) in obj {
+        snap.insert(k.clone(), v.clone());
+    }
+    // `current` n'existe qu'en vocal : purgé dès qu'on change d'état sans en fournir un neuf.
+    if let Some(st) = obj.get("state").and_then(Value::as_str) {
+        if st != "in_voice" && !obj.contains_key("current") {
+            snap.remove("current");
+        }
+    }
 }
 
-pub fn emit(payload: Value) {
+/// État d'un compte.
+pub fn emit(account: &str, payload: Value) {
     if let Some(obj) = payload.as_object() {
-        let mut snap = lock(last_status());
-        for (k, v) in obj {
-            snap.insert(k.clone(), v.clone());
-        }
-        // `current` n'existe qu'en vocal : purgé dès qu'on change d'état sans en fournir un neuf.
-        if let Some(st) = obj.get("state").and_then(Value::as_str) {
-            if st != "in_voice" && !obj.contains_key("current") {
-                snap.remove("current");
-            }
-        }
+        merge(
+            lock(last_status()).entry(account.to_string()).or_default(),
+            obj,
+        );
+    }
+    crate::proto::event(json!({ "event": "status", "account": account, "data": payload }));
+}
+
+/// État commun à tous les comptes (capture audio).
+pub fn emit_global(payload: Value) {
+    if let Some(obj) = payload.as_object() {
+        merge(&mut lock(global_status()), obj);
     }
     crate::proto::event(json!({ "event": "status", "data": payload }));
 }
 
 pub fn status() -> Value {
-    let mut map = lock(last_status()).clone();
+    let mut map = lock(global_status()).clone();
     crate::audio::snapshot(&mut map);
     map.insert(
         "bitrate".into(),
         json!(bitrate_bps().load(Ordering::Relaxed) / 1000),
     );
-    map.insert(
-        "fakeDeafen".into(),
-        json!(fake_deafen().load(Ordering::Relaxed)),
-    );
+    let live = lock(sessions());
+    let accounts: Map<String, Value> = lock(last_status())
+        .iter()
+        .filter(|(k, _)| live.contains_key(*k))
+        .map(|(k, v)| (k.clone(), Value::Object(v.clone())))
+        .collect();
+    map.insert("accounts".into(), Value::Object(accounts));
     Value::Object(map)
 }
 
 // ── Commandes ───────────────────────────────────────────────────────────────
 
-/// Démarre le moteur et connecte le gateway. `properties` = identité du
-/// client Discord à annoncer (celle du vrai Discord, fournie par low-cord).
-pub fn connect(token: String, properties: Option<Value>) -> Result<(), String> {
+fn check_key(account: &str) -> Result<(), String> {
+    if account.is_empty() || account.len() > 64 {
+        return Err("clé de compte invalide".into());
+    }
+    Ok(())
+}
+
+/// Connecte un compte (le remplace s'il l'était déjà). `properties` = identité
+/// du client Discord à annoncer (celle du vrai Discord, fournie par low-cord).
+pub fn connect(account: String, token: String, properties: Option<Value>) -> Result<(), String> {
+    check_key(&account)?;
     let token = token.trim().to_string();
     if token.is_empty() {
         return Err("Token vide.".into());
     }
     let properties = properties.filter(Value::is_object);
 
-    let mut slot = lock(engine_slot());
-    if let Some(h) = slot.take() {
-        let _ = h.cmd.send(Cmd::Shutdown);
+    let mut all = lock(sessions());
+    // Les comptes arrêtés d'eux-mêmes (token invalide…) ne comptent pas.
+    all.retain(|_, s| !s.task.is_finished());
+    if let Some(old) = all.remove(&account) {
+        let _ = old.cmd.send(Cmd::Shutdown);
+    } else if all.len() >= MAX_ACCOUNTS {
+        return Err(format!("{MAX_ACCOUNTS} comptes au maximum"));
     }
-    lock(last_status()).clear();
+    lock(last_status()).remove(&account);
 
     let (tx, rx) = mpsc::unbounded_channel::<Cmd>();
-    let thread = std::thread::Builder::new()
-        .name("low-musical".into())
-        .spawn(move || {
-            let rt = match tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt,
-                Err(e) => {
-                    emit(json!({ "state": "error", "error": format!("runtime tokio : {e}") }));
-                    return;
-                }
-            };
-            rt.block_on(engine_main(token, properties, rx));
-            emit(json!({ "state": "disconnected" }));
-        })
-        .map_err(|e| format!("fil du moteur : {e}"))?;
-
-    *slot = Some(EngineHandle { cmd: tx, thread });
+    let key = account.clone();
+    let task = runtime().spawn(async move {
+        engine_main(key.clone(), token, properties, rx).await;
+        emit(&key, json!({ "state": "disconnected" }));
+    });
+    all.insert(account, Session { cmd: tx, task });
     Ok(())
 }
 
-pub fn join(guild: String, channel: String) -> Result<(), String> {
+/// Envoie un ordre à un compte, ou à tous (`None`).
+fn send_to(account: Option<&str>, cmd: Cmd) -> Result<(), String> {
+    let all = lock(sessions());
+    match account {
+        Some(key) => match all.get(key) {
+            Some(s) => s.cmd.send(cmd).map_err(|_| "compte arrêté".to_string()),
+            None => Err("compte non connecté".into()),
+        },
+        None => {
+            let mut sent = false;
+            for s in all.values() {
+                sent |= s.cmd.send(cmd.clone()).is_ok();
+            }
+            if sent {
+                Ok(())
+            } else {
+                Err("aucun compte connecté".into())
+            }
+        }
+    }
+}
+
+pub fn join(account: Option<String>, guild: String, channel: String) -> Result<(), String> {
     for id in [&guild, &channel] {
         if id.parse::<u64>().map_or(true, |n| n == 0) {
             return Err(format!("identifiant invalide : {id}"));
         }
     }
-    send_cmd(Cmd::Join { guild, channel })
+    send_to(account.as_deref(), Cmd::Join { guild, channel })
 }
 
-pub fn leave() -> Result<(), String> {
-    send_cmd(Cmd::Leave)
+pub fn leave(account: Option<String>) -> Result<(), String> {
+    send_to(account.as_deref(), Cmd::Leave)
 }
 
-pub fn disconnect() -> Result<(), String> {
-    if let Some(h) = lock(engine_slot()).take() {
-        let _ = h.cmd.send(Cmd::Shutdown);
+/// Déconnecte un compte, ou tous.
+pub fn disconnect(account: Option<String>) -> Result<(), String> {
+    let mut all = lock(sessions());
+    let keys: Vec<String> = match account {
+        Some(k) => vec![k],
+        None => all.keys().cloned().collect(),
+    };
+    for k in keys {
+        if let Some(s) = all.remove(&k) {
+            let _ = s.cmd.send(Cmd::Shutdown);
+        }
     }
     Ok(())
 }
 
-/// Arrêt complet (fin du processus) : laisse au moteur le temps de quitter le vocal.
+/// Arrêt complet (fin du processus) : laisse aux comptes le temps de quitter le vocal.
 pub fn shutdown_and_wait(max: std::time::Duration) {
-    let Some(h) = lock(engine_slot()).take() else {
-        return;
-    };
-    let _ = h.cmd.send(Cmd::Shutdown);
+    let all: Vec<Session> = lock(sessions()).drain().map(|(_, s)| s).collect();
+    for s in &all {
+        let _ = s.cmd.send(Cmd::Shutdown);
+    }
     let deadline = std::time::Instant::now() + max;
-    while !h.thread.is_finished() && std::time::Instant::now() < deadline {
+    while all.iter().any(|s| !s.task.is_finished()) && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
 
-/// Débit Opus (kbps, borné 8..512), appliqué à chaud.
+/// Débit Opus (kbps, borné 8..512), commun à tous les comptes, appliqué à chaud.
 pub fn set_bitrate(kbps: u32) -> Result<(), String> {
     let bps = kbps.clamp(8, 512) * 1000;
     bitrate_bps().store(bps, Ordering::Relaxed);
-    if let Some(h) = lock(engine_slot()).as_ref() {
-        let _ = h.cmd.send(Cmd::SetBitrate(bps as i32));
-    }
+    let _ = send_to(None, Cmd::SetBitrate(bps as i32));
     Ok(())
 }
 
 /// Suit un compte (id décimal) : rejoint son salon vocal et le suit
 /// (serveurs partagés uniquement). None = on arrête de suivre, on reste sur place.
-pub fn set_follow(target: Option<String>) -> Result<(), String> {
+pub fn set_follow(account: Option<String>, target: Option<String>) -> Result<(), String> {
     if let Some(t) = &target {
         if t.parse::<u64>().is_err() {
             return Err(format!("identifiant invalide : {t}"));
         }
     }
-    send_cmd(Cmd::SetFollow(target))
+    send_to(account.as_deref(), Cmd::SetFollow(target))
 }
 
-pub fn set_fake_deafen(on: bool) -> Result<(), String> {
-    fake_deafen().store(on, Ordering::Relaxed);
-    if let Some(h) = lock(engine_slot()).as_ref() {
-        let _ = h.cmd.send(Cmd::SetFakeDeafen);
-    }
-    Ok(())
+/// Faux sourd : le compte s'annonce sourd (self_deaf) mais continue d'émettre.
+pub fn set_fake_deafen(account: Option<String>, on: bool) -> Result<(), String> {
+    send_to(account.as_deref(), Cmd::SetFakeDeafen(on))
 }
 
-pub fn set_presence(on: bool) -> Result<(), String> {
-    send_cmd(Cmd::SetPresence(on))
-}
-
-fn send_cmd(cmd: Cmd) -> Result<(), String> {
-    match lock(engine_slot()).as_ref() {
-        Some(h) => h.cmd.send(cmd).map_err(|_| "moteur arrêté".to_string()),
-        None => Err("non connecté".into()),
-    }
+pub fn set_presence(account: Option<String>, on: bool) -> Result<(), String> {
+    send_to(account.as_deref(), Cmd::SetPresence(on))
 }
 
 // ── Boucle du moteur ───────────────────────────────────────────────────────
@@ -225,11 +278,15 @@ struct Persist {
     follow: Option<String>,
     presence: bool,
     properties: Option<Value>,
+    /// clé du compte (pour ses événements)
+    key: String,
+    fake_deafen: bool,
 }
 
 /// Boucle de reconnexion avec attente exponentielle. Ne s'arrête que sur
 /// erreur fatale ou demande.
 async fn engine_main(
+    key: String,
     token: String,
     properties: Option<Value>,
     mut cmd_rx: mpsc::UnboundedReceiver<Cmd>,
@@ -243,12 +300,14 @@ async fn engine_main(
         follow: None,
         presence: false,
         properties,
+        key,
+        fake_deafen: false,
     };
     let mut driver = Driver::new(Config::default());
     let mut backoff_ms: u64 = 1000;
     const BACKOFF_MAX: u64 = 30_000;
 
-    emit(json!({ "state": "connecting" }));
+    emit(&st.key, json!({ "state": "connecting" }));
 
     loop {
         let resuming = st.session_id.is_some() && st.resume_url.is_some();
@@ -271,7 +330,10 @@ async fn engine_main(
                 .await
             }
             Err(e) => {
-                emit(json!({ "state": "reconnecting", "error": format!("connexion : {e}") }));
+                emit(
+                    &st.key,
+                    json!({ "state": "reconnecting", "error": format!("connexion : {e}") }),
+                );
                 Outcome::Reconnect
             }
         };
@@ -279,7 +341,7 @@ async fn engine_main(
         match outcome {
             Outcome::Shutdown => break,
             Outcome::Fatal(reason) => {
-                emit(json!({ "state": "error", "error": reason }));
+                emit(&st.key, json!({ "state": "error", "error": reason }));
                 break;
             }
             Outcome::Reidentify | Outcome::Reconnect => {
@@ -288,7 +350,7 @@ async fn engine_main(
                     st.resume_url = None;
                     st.seq.store(-1, Ordering::SeqCst);
                 }
-                emit(json!({ "state": "reconnecting" }));
+                emit(&st.key, json!({ "state": "reconnecting" }));
                 if wait_backoff(&mut cmd_rx, &mut st, backoff_ms).await {
                     break;
                 }
@@ -317,7 +379,8 @@ async fn wait_backoff(
                 Some(Cmd::SetFollow(t)) => st.follow = t,
                 Some(Cmd::SetPresence(on)) => st.presence = on,
                 // Valeurs déjà enregistrées, appliquées à la reconnexion.
-                Some(Cmd::SetBitrate(_)) | Some(Cmd::SetFakeDeafen) => {}
+                Some(Cmd::SetFakeDeafen(on)) => st.fake_deafen = on,
+                Some(Cmd::SetBitrate(_)) => {}
             },
         }
     }
@@ -374,7 +437,7 @@ async fn run_session(
     macro_rules! go_to {
         ($g:expr, $c:expr) => {{
             let (g, c): (String, String) = ($g, $c);
-            send(join_voice(&g, &c));
+            send(join_voice(&g, &c, st.fake_deafen));
             pending = Some((g, c));
             voice_session = None;
             vendpoint = None;
@@ -424,7 +487,7 @@ async fn run_session(
                             st.our_uid = d["user"]["id"].as_str().map(String::from);
                             st.session_id = d["session_id"].as_str().map(String::from);
                             st.resume_url = d["resume_gateway_url"].as_str().map(String::from);
-                            emit(json!({
+                            emit(&st.key, json!({
                                 "state": "connected",
                                 "user": {
                                     "id": st.our_uid,
@@ -434,6 +497,7 @@ async fn run_session(
                                 "guilds": parse_guilds(&d["guilds"]),
                                 "follow": st.follow,
                                 "presence": st.presence,
+                                "fakeDeafen": st.fake_deafen,
                             }));
                             if st.presence {
                                 if presence_since().load(Ordering::Relaxed) == 0 {
@@ -464,10 +528,10 @@ async fn run_session(
                         "RESUMED" => {
                             *backoff_ms = 1000;
                             if let Some((g, c)) = st.current.clone() {
-                                emit(json!({ "state": "in_voice", "current": { "guild": g, "channel": c } }));
+                                emit(&st.key, json!({ "state": "in_voice", "current": { "guild": g, "channel": c } }));
                                 go_to!(g, c);
                             } else {
-                                emit(json!({ "state": "connected" }));
+                                emit(&st.key, json!({ "state": "connected" }));
                             }
                         }
                         "VOICE_STATE_UPDATE" => {
@@ -499,7 +563,7 @@ async fn run_session(
                                         if let Some((g, _)) = st.current.take() {
                                             send(leave_voice(&g));
                                             driver.leave();
-                                            emit(json!({ "state": "connected_left" }));
+                                            emit(&st.key, json!({ "state": "connected_left" }));
                                         }
                                         pending = None;
                                     }
@@ -528,11 +592,11 @@ async fn run_session(
                                     driver.set_bitrate(songbird::driver::Bitrate::Bits(
                                         bitrate_bps().load(Ordering::Relaxed) as i32,
                                     ));
-                                    emit(json!({ "state": "in_voice", "current": { "guild": g, "channel": c } }));
+                                    emit(&st.key, json!({ "state": "in_voice", "current": { "guild": g, "channel": c } }));
                                 }
-                                Err(e) => emit(json!({ "state": "error", "error": format!("connexion vocale : {e:?}") })),
+                                Err(e) => emit(&st.key, json!({ "state": "error", "error": format!("connexion vocale : {e:?}") })),
                             },
-                            Err(e) => emit(json!({ "state": "error", "error": e })),
+                            Err(e) => emit(&st.key, json!({ "state": "error", "error": e })),
                         }
                         pending = None;
                         voice_session = None;
@@ -568,7 +632,7 @@ async fn run_session(
                     if let Some((g, _)) = st.current.take() {
                         send(leave_voice(&g));
                         driver.leave();
-                        emit(json!({ "state": "connected_left" }));
+                        emit(&st.key, json!({ "state": "connected_left" }));
                     }
                     pending = None;
                 }
@@ -585,12 +649,13 @@ async fn run_session(
                         }
                     }
                     // Arrêter de suivre ne quitte pas le vocal.
-                    emit(json!({ "follow": st.follow }));
+                    emit(&st.key, json!({ "follow": st.follow }));
                 }
-                Some(Cmd::SetFakeDeafen) => {
+                Some(Cmd::SetFakeDeafen(on)) => {
+                    st.fake_deafen = on;
                     // Ré-annonce l'état vocal sur le salon courant pour appliquer à chaud.
-                    if let Some((g, c)) = st.current.clone() { send(join_voice(&g, &c)); }
-                    emit(json!({ "fakeDeafen": fake_deafen().load(Ordering::Relaxed) }));
+                    if let Some((g, c)) = st.current.clone() { send(join_voice(&g, &c, on)); }
+                    emit(&st.key, json!({ "fakeDeafen": on }));
                 }
                 Some(Cmd::SetPresence(on)) => {
                     st.presence = on;
@@ -604,7 +669,7 @@ async fn run_session(
                         send(presence_clear());
                         next_presence = far();
                     }
-                    emit(json!({ "presence": st.presence }));
+                    emit(&st.key, json!({ "presence": st.presence }));
                 }
                 Some(Cmd::Shutdown) | None => {
                     // On quitte le vocal proprement (sinon le compte y reste
@@ -770,9 +835,8 @@ fn identify(token: &str, properties: Option<&Value>) -> String {
     .to_string()
 }
 
-fn join_voice(guild: &str, channel: &str) -> String {
+fn join_voice(guild: &str, channel: &str, deaf: bool) -> String {
     // Faux sourd : self_deaf seulement, jamais self_mute (la diffusion continue).
-    let deaf = fake_deafen().load(Ordering::Relaxed);
     json!({ "op": 4, "d": { "guild_id": guild, "channel_id": channel, "self_mute": false, "self_deaf": deaf, "self_video": false } })
         .to_string()
 }

@@ -1,12 +1,13 @@
-//! Chaîne audio : capture live (cpal) → tampon → source lue par songbird, qui
-//! applique les effets (gain → 8D → réverbe → égaliseur) au moment d'émettre.
+//! Chaîne audio : capture live (cpal) → effets (gain → 8D → réverbe →
+//! égaliseur), calculés UNE fois → copiés dans le tampon de chaque compte en
+//! vocal → lus par songbird. Tous les comptes diffusent donc le même son.
 //! Tous les réglages sont des atomiques lus à chaque bloc : ils s'appliquent à
 //! chaud, sans couper la diffusion.
 
 use std::collections::VecDeque;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde_json::{json, Map, Value};
@@ -14,14 +15,7 @@ use serde_json::{json, Map, Value};
 use crate::lock;
 
 pub const OUT_RATE: u32 = 48000;
-pub type Ring = Arc<Mutex<VecDeque<f32>>>;
-
-/// Tampon partagé (vit toute la session) : la capture pousse du f32 stéréo
-/// 48 kHz entrelacé, la source songbird le consomme.
-pub fn ring() -> &'static Ring {
-    static R: OnceLock<Ring> = OnceLock::new();
-    R.get_or_init(|| Arc::new(Mutex::new(VecDeque::new())))
-}
+type Ring = Arc<Mutex<VecDeque<f32>>>;
 
 fn f32_atomic(init: f32) -> AtomicU32 {
     AtomicU32::new(init.to_bits())
@@ -324,29 +318,26 @@ impl Eq {
     }
 }
 
-// ── Source lue par songbird ────────────────────────────────────────────────
-// Renvoie du silence quand le tampon est vide, pour que la piste ne s'arrête
-// jamais.
+// ── Chaîne d'effets ─────────────────────────────────────────────────────────
+// Vit dans la capture : une seule par source, quel que soit le nombre de comptes.
 
-pub struct LiveSource {
+struct Dsp {
     eq: Eq,
     reverb: Reverb,
     lfo: f32,
 }
 
-impl LiveSource {
-    pub fn new() -> Self {
-        LiveSource {
+impl Dsp {
+    fn new() -> Self {
+        Dsp {
             eq: Eq::new(),
             reverb: Reverb::new(),
             lfo: 0.0,
         }
     }
-}
 
-impl Read for LiveSource {
-    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
-        let n = out.len() / 4; // échantillons f32 entrelacés L,R
+    /// Applique les effets à un bloc stéréo entrelacé (réglages relus à chaque bloc).
+    fn process(&mut self, buf: &mut [f32]) {
         let g = load_f32(gain());
         let gains = *lock(eq_gains());
         let eq_active = gains.iter().any(|g| g.abs() > 0.01);
@@ -358,22 +349,77 @@ impl Read for LiveSource {
             self.reverb
                 .update(load_f32(reverb_room()), load_f32(reverb_distance()));
         }
-
-        let mut q = lock(ring());
-        let mut i = 0;
-        while i + 1 < n {
-            let l = q.pop_front().unwrap_or(0.0) * g;
-            let r = q.pop_front().unwrap_or(0.0) * g;
-            let (mut sl, mut sr) = spatialize(l, r, &mut self.lfo);
+        for frame in buf.as_chunks_mut::<2>().0 {
+            let (mut l, mut r) = spatialize(frame[0] * g, frame[1] * g, &mut self.lfo);
             if rvb {
-                (sl, sr) = self.reverb.process(sl, sr);
+                (l, r) = self.reverb.process(l, r);
             }
             if eq_active {
-                sl = self.eq.process(sl, 0);
-                sr = self.eq.process(sr, 1);
+                l = self.eq.process(l, 0);
+                r = self.eq.process(r, 1);
             }
-            out[i * 4..i * 4 + 4].copy_from_slice(&sl.to_le_bytes());
-            out[(i + 1) * 4..(i + 1) * 4 + 4].copy_from_slice(&sr.to_le_bytes());
+            frame[0] = l;
+            frame[1] = r;
+        }
+    }
+}
+
+// ── Distribution aux comptes ────────────────────────────────────────────────
+// Chaque compte en vocal a son tampon ; la capture y copie le son traité. Un
+// compte qui quitte le vocal libère sa source : son tampon sort de la liste.
+
+global!(consumers: Mutex<Vec<Weak<Mutex<VecDeque<f32>>>>> = Mutex::new(Vec::new()));
+
+fn distribute(block: &[f32]) {
+    let ms = latency_ms().load(Ordering::Relaxed) as usize;
+    let cap = (OUT_RATE as usize * 2 * ms / 1000).max(1920);
+    lock(consumers()).retain(|weak| {
+        let Some(ring) = weak.upgrade() else {
+            return false;
+        };
+        let mut q = lock(&ring);
+        q.extend(block.iter().copied());
+        // Plafond = latence cible : borne le retard capture → émission.
+        let excess = q.len().saturating_sub(cap);
+        q.drain(..excess);
+        true
+    });
+}
+
+fn clear_consumers() {
+    for weak in lock(consumers()).iter() {
+        if let Some(ring) = weak.upgrade() {
+            lock(&ring).clear();
+        }
+    }
+}
+
+// ── Source lue par songbird (une par compte en vocal) ──────────────────────
+// Renvoie du silence quand le tampon est vide, pour que la piste ne s'arrête
+// jamais.
+
+pub struct LiveSource {
+    ring: Ring,
+}
+
+impl LiveSource {
+    pub fn new() -> Self {
+        let ring: Ring = Arc::new(Mutex::new(VecDeque::new()));
+        lock(consumers()).push(Arc::downgrade(&ring));
+        LiveSource { ring }
+    }
+}
+
+impl Read for LiveSource {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let n = out.len() / 4; // échantillons f32 entrelacés L,R
+        let mut q = lock(&self.ring);
+        let mut i = 0;
+        while i + 1 < n {
+            let l = q.pop_front().unwrap_or(0.0);
+            let r = q.pop_front().unwrap_or(0.0);
+            out[i * 4..i * 4 + 4].copy_from_slice(&l.to_le_bytes());
+            out[(i + 1) * 4..(i + 1) * 4 + 4].copy_from_slice(&r.to_le_bytes());
             i += 2;
         }
         drop(q);
@@ -421,11 +467,11 @@ pub fn stop_capture() {
     if let Some(flag) = lock(capture_stop()).take() {
         flag.store(false, Ordering::Relaxed);
     }
-    lock(ring()).clear();
+    clear_consumers();
 }
 
 fn capture_error(msg: impl Into<String>) {
-    crate::engine::emit(json!({ "captureError": msg.into() }));
+    crate::engine::emit_global(json!({ "captureError": msg.into() }));
 }
 
 /// Fil dédié : `cpal::Stream` n'est pas Send, il vit ici jusqu'à l'arrêt.
@@ -468,7 +514,7 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
         if let Err(e) = stream.play() {
             return capture_error(format!("Capture impossible : {e}"));
         }
-        crate::engine::emit(json!({ "captureError": Value::Null }));
+        crate::engine::emit_global(json!({ "captureError": Value::Null }));
         while running.load(Ordering::Relaxed) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
@@ -476,8 +522,8 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
     });
 }
 
-/// Conversion f32, passage en stéréo, rééchantillonnage vers 48 kHz, puis
-/// signal BRUT dans le tampon (les effets s'appliquent dans `LiveSource`).
+/// Conversion f32, passage en stéréo, rééchantillonnage vers 48 kHz, effets,
+/// puis copie dans le tampon de chaque compte.
 fn build_stream<T>(
     device: &cpal::Device,
     cfg: &cpal::SupportedStreamConfig,
@@ -489,33 +535,30 @@ where
     T: cpal::SizedSample + Send + 'static,
 {
     let scfg: cpal::StreamConfig = cfg.clone().into();
-    let ring = ring().clone();
+    let mut dsp = Dsp::new();
+    let mut block: Vec<f32> = Vec::new();
     let mut pos = 0.0f32;
     let mut last_l = 0.0f32;
     let mut last_r = 0.0f32;
     device.build_input_stream(
         &scfg,
         move |data: &[T], _: &cpal::InputCallbackInfo| {
-            let in_ch = in_ch.max(1);
-            let mut q = lock(&ring);
-            for frame in data.chunks_exact(in_ch) {
+            block.clear();
+            for frame in data.chunks_exact(in_ch.max(1)) {
                 let l = conv(frame[0]);
                 let r = if in_ch == 1 { l } else { conv(frame[1]) };
                 pos += ratio;
                 while pos >= 1.0 {
                     pos -= 1.0;
                     let frac = 1.0 - pos;
-                    q.push_back(last_l + (l - last_l) * frac);
-                    q.push_back(last_r + (r - last_r) * frac);
+                    block.push(last_l + (l - last_l) * frac);
+                    block.push(last_r + (r - last_r) * frac);
                 }
                 last_l = l;
                 last_r = r;
             }
-            // Plafond du tampon = latence cible : borne le retard capture → émission.
-            let ms = latency_ms().load(Ordering::Relaxed) as usize;
-            let cap = (OUT_RATE as usize * 2 * ms / 1000).max(1920);
-            let excess = q.len().saturating_sub(cap);
-            q.drain(..excess);
+            dsp.process(&mut block);
+            distribute(&block);
         },
         |e| capture_error(format!("Capture interrompue : {e}")),
         None,

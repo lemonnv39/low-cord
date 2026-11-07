@@ -1,7 +1,7 @@
 //! low-musical — moteur audio (reprise du moteur WalkerCord).
 //!
-//! Un compte se connecte au gateway Discord avec son token, rejoint un salon
-//! vocal et y DIFFUSE de l'audio (émission seule) : capture d'un périphérique
+//! Un ou plusieurs comptes se connectent au gateway Discord, rejoignent un salon
+//! vocal et y DIFFUSENT de l'audio (émission seule) : capture d'un périphérique
 //! d'entrée → gain → 8D → réverbe → égaliseur → Opus (songbird, chiffrement
 //! DAVE inclus).
 //!
@@ -103,17 +103,22 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
         "status" => Ok(engine::status()),
         "devices" => Ok(json!(audio::devices())),
 
-        // Compte
+        // Comptes : `account` = clé du compte ; absente = tous les comptes connectés.
         "connect" => done(engine::connect(
+            need(r, "account")?,
             need(r, "token")?,
             r.get("properties").cloned(),
         )),
-        "disconnect" => done(engine::disconnect()),
-        "join" => done(engine::join(need(r, "guild")?, need(r, "channel")?)),
-        "leave" => done(engine::leave()),
-        "set_follow" => done(engine::set_follow(text(r, "target"))),
-        "set_fake_deafen" => done(engine::set_fake_deafen(flag(r, "on")?)),
-        "set_presence" => done(engine::set_presence(flag(r, "on")?)),
+        "disconnect" => done(engine::disconnect(text(r, "account"))),
+        "join" => done(engine::join(
+            text(r, "account"),
+            need(r, "guild")?,
+            need(r, "channel")?,
+        )),
+        "leave" => done(engine::leave(text(r, "account"))),
+        "set_follow" => done(engine::set_follow(text(r, "account"), text(r, "target"))),
+        "set_fake_deafen" => done(engine::set_fake_deafen(text(r, "account"), flag(r, "on")?)),
+        "set_presence" => done(engine::set_presence(text(r, "account"), flag(r, "on")?)),
         "set_bitrate" => done(engine::set_bitrate(num(r, "kbps")? as u32)),
 
         // Audio
