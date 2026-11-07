@@ -132,7 +132,21 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
         // Audio
         "set_input" => done(audio::set_input(text(r, "name"))),
         // Soundboard
-        "sb_load" => sound::load(&need(r, "sound")?, &need(r, "path")?).map(|ms| json!(ms)),
+        "sb_load" => {
+            let ms = |k: &str| {
+                r.get(k)
+                    .and_then(Value::as_f64)
+                    .filter(|v| *v >= 0.0)
+                    .map(|v| v as u32)
+            };
+            sound::load(
+                &need(r, "sound")?,
+                &need(r, "path")?,
+                ms("start"),
+                ms("end"),
+            )
+            .map(|ms| json!(ms))
+        }
         "sb_unload" => {
             sound::unload(&need(r, "sound")?);
             Ok(Value::Null)
