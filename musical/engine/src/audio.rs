@@ -36,8 +36,10 @@ macro_rules! global {
     };
 }
 
-// Gain linéaire (0 dB = 1.0).
+// Gain d'entrée linéaire (0 dB = 1.0).
 global!(gain: AtomicU32 = f32_atomic(1.0));
+// Volume général de sortie (1.0 = 100 %), juste avant le limiteur.
+global!(volume: AtomicU32 = f32_atomic(1.0));
 // Latence cible (ms) = taille max du tampon. Plus bas = plus réactif, mais
 // risque de micro-coupures.
 global!(latency_ms: AtomicU32 = AtomicU32::new(200));
@@ -84,6 +86,7 @@ pub fn snapshot(map: &mut Map<String, Value>) {
     map.insert("reverbRoom".into(), json!(load_f32(reverb_room())));
     map.insert("reverbDistance".into(), json!(load_f32(reverb_distance())));
     map.insert("eq".into(), json!(lock(eq_gains()).to_vec()));
+    map.insert("volume".into(), json!(load_f32(volume())));
     map.insert(
         "processing".into(),
         json!({
@@ -100,7 +103,12 @@ pub fn snapshot(map: &mut Map<String, Value>) {
 // ── Réglages ────────────────────────────────────────────────────────────────
 
 pub fn set_gain(db: f32) {
-    store_f32(gain(), 10f32.powf(db.clamp(-60.0, 24.0) / 20.0));
+    store_f32(gain(), 10f32.powf(db.clamp(-64.0, 64.0) / 20.0));
+}
+
+/// Volume général (0 à 2, soit 0 à 200 %), commun à tous les comptes.
+pub fn set_volume(v: f32) {
+    store_f32(volume(), v.clamp(0.0, 2.0));
 }
 
 pub fn set_latency(ms: u32) {
@@ -465,6 +473,7 @@ impl Dsp {
         // Intensité → seuil de −10 à −40 dB, rapport 4:1, compensation de la moitié.
         let threshold = -10.0 - 30.0 * load_f32(comp_amount());
         let makeup = from_db(-threshold * 0.75 * 0.5);
+        let vol = load_f32(volume());
         let limit = limiter_on().load(Ordering::Relaxed);
         const CEILING: f32 = 0.891; // −1 dBFS
 
@@ -502,6 +511,8 @@ impl Dsp {
                 l *= reduce * makeup;
                 r *= reduce * makeup;
             }
+            l *= vol;
+            r *= vol;
             if limit {
                 let env = self.limit.next(l.abs().max(r.abs()));
                 if env > CEILING {
@@ -729,6 +740,7 @@ mod tests {
 
     fn reset() {
         set_gain(0.0);
+        set_volume(1.0);
         set_8d(0, 0.15, 0.5);
         set_reverb(false);
         set_eq(vec![0.0; 10]);
@@ -757,6 +769,19 @@ mod tests {
         let _g = lock(&SERIAL);
         reset();
         assert!((peak(&run(440.0, 0.5, 0.5)) - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn volume_general_et_gain_64_db() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_volume(0.5);
+        assert!((peak(&run(440.0, 0.8, 0.8)) - 0.4).abs() < 0.01);
+        set_volume(1.0);
+        // Gain borné à +64 dB : 0.0001 × 1585 ≈ 0.158.
+        set_gain(80.0);
+        assert!((peak(&run(440.0, 0.0001, 0.0001)) - 0.1585).abs() < 0.005);
+        reset();
     }
 
     #[test]

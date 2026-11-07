@@ -3,7 +3,7 @@
 //! Un ou plusieurs comptes se connectent au gateway Discord, rejoignent un salon
 //! vocal et y DIFFUSENT de l'audio (émission seule) : capture d'un périphérique
 //! d'entrée → gain → coupe-bas → 8D → largeur → réverbe → égaliseur →
-//! saturation → compresseur → limiteur → Opus (songbird, chiffrement
+//! saturation → compresseur → volume → limiteur → Opus (songbird, chiffrement
 //! DAVE inclus).
 //!
 //! Protocole avec low-cord, par l'entrée/sortie standard, une ligne JSON par
@@ -119,11 +119,14 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
         "leave" => done(engine::leave(text(r, "account"))),
         "set_follow" => done(engine::set_follow(text(r, "account"), text(r, "target"))),
         "set_fake_deafen" => done(engine::set_fake_deafen(text(r, "account"), flag(r, "on")?)),
-        "set_presence" => done(engine::set_presence(text(r, "account"), flag(r, "on")?)),
         "set_bitrate" => done(engine::set_bitrate(num(r, "kbps")? as u32)),
 
         // Audio
         "set_input" => done(audio::set_input(text(r, "name"))),
+        "set_volume" => {
+            audio::set_volume(num(r, "volume")? as f32);
+            Ok(Value::Null)
+        }
         "set_gain" => {
             audio::set_gain(num(r, "db")? as f32);
             Ok(Value::Null)

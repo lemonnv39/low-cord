@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::sync::atomic::{AtomicI64, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use futures_util::{SinkExt, StreamExt};
@@ -37,7 +37,6 @@ enum Cmd {
     SetBitrate(i32),
     SetFollow(Option<String>),
     SetFakeDeafen(bool),
-    SetPresence(bool),
     Shutdown,
 }
 
@@ -255,10 +254,6 @@ pub fn set_fake_deafen(account: Option<String>, on: bool) -> Result<(), String> 
     send_to(account.as_deref(), Cmd::SetFakeDeafen(on))
 }
 
-pub fn set_presence(account: Option<String>, on: bool) -> Result<(), String> {
-    send_to(account.as_deref(), Cmd::SetPresence(on))
-}
-
 // ── Boucle du moteur ───────────────────────────────────────────────────────
 
 enum Outcome {
@@ -276,7 +271,6 @@ struct Persist {
     seq: Arc<AtomicI64>,
     current: Option<(String, String)>, // salon vocal confirmé, à re-rejoindre
     follow: Option<String>,
-    presence: bool,
     properties: Option<Value>,
     /// clé du compte (pour ses événements)
     key: String,
@@ -298,7 +292,6 @@ async fn engine_main(
         seq: Arc::new(AtomicI64::new(-1)),
         current: None,
         follow: None,
-        presence: false,
         properties,
         key,
         fake_deafen: false,
@@ -377,7 +370,6 @@ async fn wait_backoff(
                 Some(Cmd::Join { guild, channel }) => st.current = Some((guild, channel)),
                 Some(Cmd::Leave) => st.current = None,
                 Some(Cmd::SetFollow(t)) => st.follow = t,
-                Some(Cmd::SetPresence(on)) => st.presence = on,
                 // Valeurs déjà enregistrées, appliquées à la reconnexion.
                 Some(Cmd::SetFakeDeafen(on)) => st.fake_deafen = on,
                 Some(Cmd::SetBitrate(_)) => {}
@@ -428,10 +420,6 @@ async fn run_session(
     // Qui est dans quel salon (user_id → (serveur, salon)), pour le suivi.
     let mut voice_map: std::collections::HashMap<String, (String, String)> = Default::default();
     let mut guild_ids: Vec<String> = Vec::new();
-
-    let mut presence_idx: usize = 0;
-    let far = || tokio::time::Instant::now() + std::time::Duration::from_secs(3600);
-    let mut next_presence = far();
 
     // Rejoindre un salon : on repart d'une poignée de main vierge.
     macro_rules! go_to {
@@ -496,17 +484,8 @@ async fn run_session(
                                 },
                                 "guilds": parse_guilds(&d["guilds"]),
                                 "follow": st.follow,
-                                "presence": st.presence,
                                 "fakeDeafen": st.fake_deafen,
                             }));
-                            if st.presence {
-                                if presence_since().load(Ordering::Relaxed) == 0 {
-                                    presence_since().store(now_ms(), Ordering::Relaxed);
-                                }
-                                presence_idx = 0;
-                                send(presence_update(presence_idx));
-                                next_presence = tokio::time::Instant::now() + PRESENCE_PERIOD;
-                            }
                             seed_voice_map(&mut voice_map, &d["guilds"]);
                             guild_ids = collect_guild_ids(&d["guilds"]);
                             // Suivi : il faut s'abonner aux serveurs pour recevoir
@@ -616,16 +595,6 @@ async fn run_session(
                 next_hb = tokio::time::Instant::now() + hb_period;
             }
 
-            _ = tokio::time::sleep_until(next_presence) => {
-                if st.presence {
-                    presence_idx = presence_idx.wrapping_add(1);
-                    send(presence_update(presence_idx));
-                    next_presence = tokio::time::Instant::now() + PRESENCE_PERIOD;
-                } else {
-                    next_presence = far();
-                }
-            }
-
             maybe_cmd = cmd_rx.recv() => match maybe_cmd {
                 Some(Cmd::Join { guild, channel }) => go_to!(guild, channel),
                 Some(Cmd::Leave) => {
@@ -656,20 +625,6 @@ async fn run_session(
                     // Ré-annonce l'état vocal sur le salon courant pour appliquer à chaud.
                     if let Some((g, c)) = st.current.clone() { send(join_voice(&g, &c, on)); }
                     emit(&st.key, json!({ "fakeDeafen": on }));
-                }
-                Some(Cmd::SetPresence(on)) => {
-                    st.presence = on;
-                    if on {
-                        presence_since().store(now_ms(), Ordering::Relaxed);
-                        presence_idx = 0;
-                        send(presence_update(presence_idx));
-                        next_presence = tokio::time::Instant::now() + PRESENCE_PERIOD;
-                    } else {
-                        presence_since().store(0, Ordering::Relaxed);
-                        send(presence_clear());
-                        next_presence = far();
-                    }
-                    emit(&st.key, json!({ "presence": st.presence }));
                 }
                 Some(Cmd::Shutdown) | None => {
                     // On quitte le vocal proprement (sinon le compte y reste
@@ -851,49 +806,4 @@ fn leave_voice(guild: &str) -> String {
 /// officiel envoie le même en ouvrant un serveur.
 fn guild_subscribe(guild: &str) -> String {
     json!({ "op": 14, "d": { "guild_id": guild, "typing": true, "activities": true, "threads": false } }).to_string()
-}
-
-// ── Présence « Joue à low-musical » ─────────────────────────────────────────
-
-const PRESENCE_NAME: &str = "low-musical";
-const PRESENCE_STATE: &str = "low-cord";
-const PRESENCE_LINES: [&str; 3] = ["Diffusion en cours", "En live · 24/7", "Musique en cours"];
-const PRESENCE_PERIOD: std::time::Duration = std::time::Duration::from_secs(12);
-
-/// Début de la présence (ms depuis 1970 ; 0 = inactive), pour le chrono.
-fn presence_since() -> &'static AtomicU64 {
-    static T: OnceLock<AtomicU64> = OnceLock::new();
-    T.get_or_init(|| AtomicU64::new(0))
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-fn presence_update(idx: usize) -> String {
-    let since = presence_since().load(Ordering::Relaxed);
-    json!({
-        "op": 3,
-        "d": {
-            "since": 0,
-            "activities": [{
-                "type": 0,
-                "name": PRESENCE_NAME,
-                "details": PRESENCE_LINES[idx % PRESENCE_LINES.len()],
-                "state": PRESENCE_STATE,
-                "timestamps": if since > 0 { json!({ "start": since }) } else { Value::Null }
-            }],
-            "status": "online",
-            "afk": false
-        }
-    })
-    .to_string()
-}
-
-fn presence_clear() -> String {
-    json!({ "op": 3, "d": { "since": 0, "activities": [], "status": "online", "afk": false } })
-        .to_string()
 }
