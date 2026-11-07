@@ -26,8 +26,6 @@ use crate::audio::{LiveSource, OUT_RATE};
 use crate::lock;
 
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
-/// Garde-fou : nombre maximal de comptes connectés en même temps.
-const MAX_ACCOUNTS: usize = 25;
 
 /// Ordres vers la tâche d'un compte.
 #[derive(Clone)]
@@ -155,10 +153,9 @@ pub fn connect(account: String, token: String, properties: Option<Value>) -> Res
     let mut all = lock(sessions());
     // Les comptes arrêtés d'eux-mêmes (token invalide…) ne comptent pas.
     all.retain(|_, s| !s.task.is_finished());
+    // Pas de limite au nombre de comptes connectés en même temps.
     if let Some(old) = all.remove(&account) {
         let _ = old.cmd.send(Cmd::Shutdown);
-    } else if all.len() >= MAX_ACCOUNTS {
-        return Err(format!("{MAX_ACCOUNTS} comptes au maximum"));
     }
     lock(last_status()).remove(&account);
 
