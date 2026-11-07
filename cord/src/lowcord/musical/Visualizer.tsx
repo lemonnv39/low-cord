@@ -53,13 +53,15 @@ export function Visualizer() {
         // Forme du faisceau : pincé aux bords, ouvert au centre.
         const env = Float32Array.from({ length: POINTS }, (_, i) => Math.pow(Math.sin(Math.PI * i / (POINTS - 1)), 1.4));
         let level = 0, bass = 0, bassAvg = 0.2, flash = 0, pulse = 1;
-        let last = performance.now();
-        const start = last;
+        // Horloge de la fenêtre du panneau (celle de rAF), pas de Discord :
+        // les deux ne partent pas du même zéro.
+        let last = -1, start = 0;
         let raf = 0;
 
         const draw = (now: number) => {
             raf = win.requestAnimationFrame(draw);
-            const dt = Math.min(0.1, (now - last) / 1000);
+            if (last < 0) last = start = now;
+            const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
             last = now;
             const dpr = win.devicePixelRatio || 1;
             const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -74,7 +76,7 @@ export function Visualizer() {
             const m = getMeter();
             const fresh = !!m && performance.now() - m.at < 400;
             for (let i = 0; i < 24; i++) {
-                const raw = fresh ? m!.bands[i] ?? 0 : 0;
+                const raw = fresh ? Math.max(0, Number(m!.bands[i]) || 0) : 0;
                 // Le repère monte vite et redescend en ~4 s, jamais sous un plancher.
                 norm[i] = raw > norm[i] ? raw : Math.max(0.12, norm[i] + (raw - norm[i]) * ease(dt, 4));
                 // Mélange : relatif (sensible) + absolu (garde les écarts réels).
@@ -86,7 +88,7 @@ export function Visualizer() {
                 const t = Math.abs(i / (POINTS - 1) - 0.5) * 2;
                 energy[i] += (sample(bands, t) - energy[i]) * ease(dt, 0.05);
             }
-            const lv = fresh ? m!.level : 0;
+            const lv = fresh ? Number(m!.level) || 0 : 0;
             level += (lv - level) * ease(dt, lv > level ? 0.05 : 0.35);
 
             // Coups de basse : graves au-dessus de leur moyenne récente.
