@@ -13,14 +13,14 @@ import "./panel.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
-import { useEffect, useMemo, useState } from "@webpack/common";
+import { ChannelStore, GuildStore, SelectedChannelStore, useEffect, useMemo, useState, useStateFromStores } from "@webpack/common";
 
 import { cl, Dropdown, Section, Slider } from "./controls";
 import { EqSection, ProcessingSection, SpatialSection } from "./Effects";
 import {
-    type AccountState, connectAccounts, DEFAULT_INPUT, devices, disconnect, type EngineState, errorText, getPrefs, isActive,
-    isOutdated, isReady, joinAll, leave, type MusicalGuild, PREF_DEFAULTS, savePrefs, setBitrate, setFakeDeafen, setFollow,
-    setGain, setInput, setLatency, setVolume, useMusical,
+    type AccountState, connectAccounts, DEFAULT_INPUT, devices, disconnect, type EngineState, errorText, followMe, getPrefs,
+    isActive, isOutdated, isReady, PREF_DEFAULTS, savePrefs, setBitrate, setFakeDeafen, setGain, setInput, setLatency,
+    setVolume, stopFollowing, useMusical,
 } from "./engine";
 import { MusicalIcon } from "./LowMusicalTab";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
@@ -212,8 +212,8 @@ function AccountPicker({ groups, exclude, pending, act }: {
     );
 }
 
-function AccountRow({ id, name, account, pending, act }: {
-    id: string; name?: string; account: AccountState; pending: boolean; act(fn: () => Promise<unknown>): void;
+function AccountRow({ id, name, account, warning, pending, act }: {
+    id: string; name?: string; account: AccountState; warning?: string; pending: boolean; act(fn: () => Promise<unknown>): void;
 }) {
     const label = account.user?.username ?? name ?? "…";
     const avatar = account.user && avatarUrl(account.user);
@@ -226,8 +226,8 @@ function AccountRow({ id, name, account, pending, act }: {
             </span>
             <div className={cl("account-id")}>
                 <div className={cl("account-name")}>{label}</div>
-                <div className={cl("account-state", failed && "account-error")}>
-                    {failed && account.error ? account.error : account.state ? STATE_LABEL[account.state] : ""}
+                <div className={cl("account-state", failed && "account-error", !failed && warning && "account-warn")}>
+                    {failed && account.error ? account.error : warning ?? (account.state ? STATE_LABEL[account.state] : "")}
                 </div>
             </div>
             <button
@@ -245,40 +245,71 @@ function AccountRow({ id, name, account, pending, act }: {
     );
 }
 
+/** Salon vocal où tu es (ton compte Discord), avec son serveur. */
+function useMyVoice() {
+    return useStateFromStores([SelectedChannelStore, ChannelStore, GuildStore], () => {
+        const id = SelectedChannelStore.getVoiceChannelId();
+        const channel = id ? ChannelStore.getChannel(id) : null;
+        if (!channel) return null;
+        return { id: channel.id, name: channel.name, guild: channel.guild_id ? GuildStore.getGuild(channel.guild_id)?.name : undefined };
+    });
+}
+
+/** Rejoindre ta vocale : les comptes te suivent ensuite partout (serveurs en commun). */
+function MyVoice({ act, pending }: { act(fn: () => Promise<unknown>): void; pending: boolean; }) {
+    const music = useMusical();
+    const voice = useMyVoice();
+    const ready = Object.values(music.accounts).filter(isReady);
+    const here = voice ? ready.filter(a => a.current?.channel === voice.id).length : 0;
+
+    return (
+        <div className={cl("myvoice")}>
+            <div className={cl("myvoice-info")}>
+                <span className={cl("label")}>Ta vocale</span>
+                <span className={cl("myvoice-name")}>{voice ? voice.name : "Tu n'es pas en vocal"}</span>
+                <span className={cl("muted")}>
+                    {voice?.guild ?? ""}
+                    {music.following && voice ? `${voice.guild ? " · " : ""}${here}/${ready.length} compte${ready.length > 1 ? "s" : ""} ici` : ""}
+                </span>
+            </div>
+            {music.following ? (
+                <button className={cl("btn", "btn-leave")} disabled={pending} onClick={() => act(stopFollowing)}>Quitter</button>
+            ) : (
+                <button className={cl("btn", "btn-join")} disabled={pending || !ready.length} onClick={() => act(followMe)}>
+                    {voice ? "Rejoindre ma vocale" : "Me suivre"}
+                </button>
+            )}
+        </div>
+    );
+}
+
 function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void; pending: boolean; }) {
     const music = useMusical();
+    const voice = useMyVoice();
     const { accounts, groups } = useAccountGroups();
-    const [guildId, setGuildId] = useState("");
-    const [channelId, setChannelId] = useState("");
-    const [followInput, setFollowInput] = useState("");
     const [adding, setAdding] = useState(false);
+
+    // Moment où ta vocale a changé : un compte absent de ton salon n'est signalé
+    // qu'après son délai et quelques secondes (le temps qu'il arrive).
+    const [movedAt, setMovedAt] = useState(Date.now());
+    const [, tick] = useState(0);
+    useEffect(() => { setMovedAt(Date.now()); }, [voice?.id]);
+    useEffect(() => {
+        const timer = setInterval(() => tick(n => n + 1), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const entries = Object.entries(music.accounts);
     const active = entries.filter(([, a]) => isActive(a));
     const ready = entries.filter(([, a]) => isReady(a)).map(([, a]) => a);
-    const inVoice = ready.filter(a => a.state === "in_voice");
-    const current = inVoice[0]?.current;
-
-    // Serveurs communs à tous les comptes prêts : là où ils peuvent tous aller.
-    const guilds = useMemo<MusicalGuild[]>(() => {
-        if (!ready.length) return [];
-        const [first, ...rest] = ready;
-        return (first.guilds ?? []).filter(g => rest.every(a => a.guilds?.some(x => x.id === g.id)));
-    }, [ready.map(a => a.user?.id + ":" + a.guilds?.length).join()]);
-
-    useEffect(() => {
-        if (current) {
-            setGuildId(current.guild);
-            setChannelId(current.channel);
-        }
-    }, [current?.guild, current?.channel]);
-
-    const guild = guilds.find(g => g.id === guildId);
-    const currentGuild = guilds.find(g => g.id === current?.guild);
-    const currentChannel = currentGuild?.channels.find(c => c.id === current?.channel);
     const allDeaf = ready.length > 0 && ready.every(a => a.fakeDeafen);
-    const follow = ready.find(a => a.follow)?.follow;
     const exitMsg = !music.running && music.exitReason && music.exitReason !== "moteur arrêté" ? music.exitReason : null;
+
+    function missing(id: string, a: AccountState) {
+        if (!music.following || !voice || !isReady(a) || a.current?.channel === voice.id) return false;
+        const index = ready.findIndex(r => r === a);
+        return Date.now() - movedAt > index * getPrefs().delay + 6000 && !!entries.find(([k]) => k === id);
+    }
 
     if (accounts && !accounts.length) {
         return (
@@ -313,6 +344,16 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
         <div className={cl("col")}>
             <div className={cl("col-title")}>Discord</div>
 
+            <MyVoice act={act} pending={pending} />
+            <Slider
+                label="Volume général" value={getPrefs().volume} display={`${Math.round(getPrefs().volume * 100)} %`}
+                min={0} max={2} step={0.01} reset={PREF_DEFAULTS.volume} onChange={setVolume}
+            />
+            <p className={cl("note")}>
+                Les comptes rejoignent ta vocale et te suivent quand tu changes de salon, un par un avec le délai choisi.
+                Il faut qu'ils soient sur le même serveur que toi et qu'ils aient accès au salon.
+            </p>
+
             <Section
                 title={`Comptes · ${active.length}`}
                 extra={
@@ -324,12 +365,14 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
                     </span>
                 }
             >
-                <Slider
-                    label="Volume général" value={getPrefs().volume} display={`${Math.round(getPrefs().volume * 100)} %`}
-                    min={0} max={2} step={0.01} reset={PREF_DEFAULTS.volume} onChange={setVolume}
-                />
                 <div className={cl("accounts")}>
-                    {entries.map(([id, a]) => <AccountRow key={id} id={id} name={accounts?.find(x => x.id === id)?.username} account={a} pending={pending} act={act} />)}
+                    {entries.map(([id, a]) => (
+                        <AccountRow
+                            key={id} id={id} name={accounts?.find(x => x.id === id)?.username} account={a}
+                            warning={missing(id, a) ? "pas dans ta vocale (accès ou serveur ?)" : undefined}
+                            pending={pending} act={act}
+                        />
+                    ))}
                 </div>
                 {adding ? (
                     <AccountPicker groups={groups} exclude={new Set(entries.map(([id]) => id))} pending={pending} act={fn => act(async () => { await fn(); setAdding(false); })} />
@@ -337,72 +380,6 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
                     <button className={cl("mini")} disabled={pending || !accounts} onClick={() => setAdding(true)}>+ Ajouter des comptes</button>
                 )}
             </Section>
-
-            {current && (
-                <div className={cl("live")}>
-                    <span>
-                        En vocal : <b>{currentChannel?.name ?? "salon"}</b>
-                        <span className={cl("muted")}> · {inVoice.length}/{ready.length} compte{ready.length > 1 ? "s" : ""}</span>
-                    </span>
-                    <span className={cl("live-tag")}>LIVE</span>
-                    <button className={cl("mini")} disabled={pending} onClick={() => act(() => leave())}>Quitter</button>
-                </div>
-            )}
-
-            {ready.length > 0 && (
-                <Section title="Serveur & salon">
-                    {guilds.length ? (
-                        <>
-                            <Dropdown
-                                value={guildId}
-                                placeholder="Choisir un serveur"
-                                disabled={pending}
-                                choices={guilds.map(g => ({ value: g.id, label: g.name }))}
-                                onChange={id => { setGuildId(id); setChannelId(""); }}
-                            />
-                            <Dropdown
-                                value={channelId}
-                                placeholder="Choisir un salon"
-                                disabled={pending || !guild}
-                                choices={(guild?.channels ?? []).map(c => ({ value: c.id, label: c.name }))}
-                                onChange={id => {
-                                    setChannelId(id);
-                                    act(() => joinAll(guildId, id));
-                                }}
-                            />
-                            <p className={cl("note")}>
-                                {ready.length > 1
-                                    ? "Seuls les serveurs communs à tous les comptes sont proposés. Choisir un salon y envoie tous les comptes, un par un."
-                                    : "Choisir un salon le rejoint aussitôt."}
-                            </p>
-                        </>
-                    ) : (
-                        <p className={cl("note")}>{ready.length > 1 ? "Aucun serveur avec un salon vocal en commun entre ces comptes." : "Aucun serveur avec un salon vocal pour ce compte."}</p>
-                    )}
-                </Section>
-            )}
-
-            {ready.length > 0 && (
-                <Section title="Suivi">
-                    <span className={cl("label")}>Compte à suivre</span>
-                    <div className={cl("follow")}>
-                        <input
-                            className={cl("input")}
-                            placeholder={follow ? `Suivi : ${follow}` : "ID du compte"}
-                            value={followInput}
-                            onChange={e => setFollowInput(e.currentTarget.value.replace(/\D/g, ""))}
-                        />
-                        {follow ? (
-                            <button className={cl("btn")} disabled={pending} onClick={() => act(() => setFollow(null))}>Arrêter</button>
-                        ) : (
-                            <button className={cl("btn")} disabled={pending || followInput.length < 15} onClick={() => act(() => setFollow(followInput).then(() => setFollowInput("")))}>
-                                Suivre
-                            </button>
-                        )}
-                    </div>
-                    <p className={cl("note")}>Colle l'ID d'un compte : les comptes rejoignent automatiquement son salon vocal (serveurs en commun).</p>
-                </Section>
-            )}
         </div>
     );
 }

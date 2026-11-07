@@ -172,8 +172,7 @@
 }
 
 /* Champs */
-.lc-mp-dropdown,
-.lc-mp-input {
+.lc-mp-dropdown {
     width: 100%;
     height: 36px;
     padding: 0 10px;
@@ -182,19 +181,8 @@
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
     color: var(--text-normal, var(--text-default));
     font-size: 14px;
-}
 
-.lc-mp-input {
-    font-family: var(--font-code);
-}
-
-.lc-mp-input:focus {
-    border-color: var(--text-muted);
-    outline: none;
-}
-
-/* Menu déroulant maison */
-.lc-mp-dropdown {
+    /* Menu déroulant maison */
     display: flex;
     align-items: center;
     gap: 8px;
@@ -489,33 +477,6 @@
     color: var(--header-primary, var(--text-strong));
 }
 
-.lc-mp-live {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
-    font-size: 13px;
-}
-
-.lc-mp-live > span:first-child {
-    overflow: hidden;
-    flex: 1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.lc-mp-live-tag {
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--status-danger, #f23f43);
-    color: #fff;
-    font-family: var(--font-code);
-    font-size: 10px;
-    font-weight: 700;
-}
-
 /* Interrupteur */
 .lc-mp-toggle-row {
     display: flex;
@@ -566,11 +527,6 @@
 .lc-mp-switch-on .lc-mp-knob {
     transform: translateX(16px);
     background: var(--background-base-low, var(--background-primary, #1e1f22));
-}
-
-.lc-mp-follow {
-    display: flex;
-    gap: 8px;
 }
 
 /* Effets */
@@ -817,4 +773,54 @@
 .lc-mp-close-on {
     background: var(--background-mod-strong, rgb(255 255 255 / 10%));
     color: var(--header-primary, var(--text-strong));
+}
+
+/* Ta vocale */
+.lc-mp-myvoice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+    border-radius: 10px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-mp-myvoice-info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.lc-mp-myvoice-name {
+    overflow: hidden;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-mp-btn-join {
+    border-color: var(--status-positive, #23a55a);
+    background: var(--status-positive, #23a55a);
+    color: #fff;
+    font-weight: 600;
+}
+
+.lc-mp-btn-join:hover:not(:disabled) {
+    border-color: var(--status-positive, #23a55a);
+    filter: brightness(1.1);
+}
+
+.lc-mp-btn-leave:hover:not(:disabled) {
+    border-color: var(--status-danger, #f23f43);
+    color: var(--status-danger, #f23f43);
+}
+
+.lc-mp-account-warn {
+    color: var(--status-warning, #f0b232);
 }

@@ -14,7 +14,7 @@
 import * as DataStore from "@api/DataStore";
 import type { SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
-import { useEffect, useState } from "@webpack/common";
+import { useEffect, UserStore, useState } from "@webpack/common";
 
 export interface VoiceChannel { id: string; name: string; }
 export interface MusicalGuild { id: string; name: string; icon?: string | null; channels: VoiceChannel[]; }
@@ -44,6 +44,8 @@ export interface MusicalState {
     captureError?: string | null;
     /** raison du dernier arrêt du moteur */
     exitReason?: string;
+    /** les comptes suivent ton compte (bouton « Rejoindre ma vocale ») */
+    following?: boolean;
 }
 
 /** Réglages gardés d'une session à l'autre et renvoyés au moteur à chaque connexion. */
@@ -89,7 +91,7 @@ export interface MusicalPrefs {
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.4.0";
+export const MIN_ENGINE = "0.5.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -169,7 +171,7 @@ function wire() {
             state = { ...state, running: true };
             setAccount(msg.account, patch);
         } else if (msg?.event === "exit") {
-            state = { installed: state.installed, running: false, accounts: {}, exitReason: String(msg.reason ?? "") };
+            state = { installed: state.installed, running: false, accounts: {}, following: false, exitReason: String(msg.reason ?? "") };
             emit();
         }
     });
@@ -276,30 +278,43 @@ export async function connectAccounts(accounts: SavedAccount[]) {
         if (first) await applyAudio();
         first = false;
     }
+    // Comptes ajoutés pendant le suivi : ils suivent aussi.
+    if (state.following) await followMe(usable.map(a => a.id));
 }
 
 export async function disconnect(key?: string) {
     await call("disconnect", key ? { account: key } : {});
-    if (!key) return set({ accounts: {} });
+    if (!key) return set({ accounts: {}, following: false });
     const { [key]: _, ...rest } = state.accounts;
     set({ accounts: rest });
 }
 
-const readyKeys = () => Object.entries(state.accounts).filter(([, a]) => isReady(a)).map(([k]) => k);
+const activeKeys = () => Object.entries(state.accounts).filter(([, a]) => isActive(a)).map(([k]) => k);
 
-/** Fait rejoindre le salon à tous les comptes prêts, espacés du délai choisi. */
-export async function joinAll(guild: string, channel: string) {
-    let first = true;
-    for (const key of readyKeys()) {
-        if (!first) await sleep(prefs.delay);
-        first = false;
-        await call("join", { account: key, guild, channel }).catch(e => setAccount(key, { error: errorText(e) }));
-    }
+/**
+ * Les comptes suivent ton compte : ils rejoignent ta vocale tout de suite et
+ * te suivent quand tu changes de salon. Chaque compte a son délai (1er : 0,
+ * 2e : le délai choisi, 3e : deux fois…), appliqué par le moteur à chaque
+ * déplacement. `keys` = seulement ces comptes (ajoutés en cours de route).
+ */
+export async function followMe(keys?: string[]) {
+    const me = UserStore.getCurrentUser()?.id;
+    if (!me) throw new Error("compte Discord introuvable");
+    const all = activeKeys();
+    await Promise.all((keys ?? all).map(key =>
+        call("set_follow", { account: key, target: me, delay: Math.max(0, all.indexOf(key)) * prefs.delay })
+            .catch(e => setAccount(key, { error: errorText(e) }))
+    ));
+    set({ following: true });
 }
 
-export const leave = (key?: string) => call("leave", key ? { account: key } : {});
+/** Les comptes arrêtent de te suivre et quittent la vocale (ils restent connectés). */
+export async function stopFollowing() {
+    set({ following: false });
+    await call("set_follow", { target: null }).catch(() => { });
+    await call("leave").catch(() => { });
+}
 export const setFakeDeafen = (on: boolean, key?: string) => call("set_fake_deafen", { on, ...(key ? { account: key } : {}) });
-export const setFollow = (target: string | null) => call("set_follow", { target });
 export const devices = () => call<string[]>("devices");
 
 // ── Audio ───────────────────────────────────────────────────────────────────
