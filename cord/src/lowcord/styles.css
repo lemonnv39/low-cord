@@ -1023,6 +1023,72 @@
     font-size: 13px;
 }
 
+.lc-mu-dot-ready {
+    background: var(--text-normal, var(--text-default));
+    opacity: 0.8;
+}
+
+.lc-mu-section-title {
+    margin: 20px 0 8px;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.lc-mu-field {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+}
+
+.lc-mu-field-wide {
+    flex-basis: 100%;
+}
+
+.lc-mu-label {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.lc-mu-field-error {
+    color: var(--text-feedback-critical, var(--text-danger, #f23f43));
+    font-size: 12px;
+}
+
+.lc-mu-field-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-mu-actions-end {
+    align-self: flex-end;
+}
+
+.lc-mu-select {
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: var(--input-background, var(--background-base-lowest, #111214));
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+}
+
+.lc-mu-select:focus {
+    border-color: var(--text-muted);
+    outline: none;
+}
+
+.lc-mu-select:disabled {
+    opacity: 0.5;
+}
+
 .lc-mu-note {
     margin-top: 12px;
     color: var(--text-muted);

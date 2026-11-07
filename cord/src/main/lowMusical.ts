@@ -19,11 +19,12 @@
 
 import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
-import { execFile } from "child_process";
+import { ChildProcess, execFile, spawn } from "child_process";
 import { createHash } from "crypto";
-import { app, ipcMain, net, shell } from "electron";
+import { app, BrowserWindow, ipcMain, net, shell } from "electron";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
+import { createInterface } from "readline";
 
 import { DATA_DIR } from "./utils/constants";
 
@@ -116,6 +117,7 @@ async function install(): Promise<MusicalStatus> {
     busy = true;
     const tmp = join(DIR, `.download-${process.pid}.exe`);
     try {
+        await stopEngine();
         const latest = await latestManifest();
         const res = await net.fetch(`https://raw.githubusercontent.com/${LOWCORD_REPO}/${latest.commit}/${EXE_NAME}`, { headers: { "User-Agent": "low-cord" } });
         if (!res.ok) throw new Error(`téléchargement : HTTP ${res.status}`);
@@ -143,12 +145,112 @@ async function uninstall(): Promise<MusicalStatus> {
     if (busy) throw new Error("une opération est déjà en cours");
     busy = true;
     try {
+        await stopEngine();
         rmSync(DIR, { recursive: true, force: true });
     } finally {
         busy = false;
     }
     return status();
 }
+
+// ── Moteur ──────────────────────────────────────────────────────────────────
+// Lancé à la demande, une ligne JSON par message sur son entrée/sortie. Ses
+// événements (état du compte, erreurs) sont relayés à toutes les fenêtres de
+// Discord. Fermer son entrée = il quitte le vocal et s'arrête : c'est ce qui
+// se passe aussi quand Discord se ferme ou plante.
+
+/** Commandes que Discord peut envoyer au moteur (jamais « shutdown » : géré ici). */
+const ENGINE_COMMANDS = new Set([
+    "version", "status", "devices",
+    "connect", "disconnect", "join", "leave", "set_follow", "set_fake_deafen", "set_presence", "set_bitrate",
+    "set_input", "set_gain", "set_latency", "set_8d", "set_reverb", "set_reverb_params", "set_eq",
+]);
+const CALL_TIMEOUT = 15_000;
+
+let engine: ChildProcess | null = null;
+let nextId = 1;
+const waiting = new Map<number, { resolve(v: any): void; reject(e: Error): void; timer: NodeJS.Timeout; }>();
+
+function broadcast(msg: unknown) {
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(IpcEvents.LOWMUSICAL_EVENT, msg);
+    }
+}
+
+function startEngine(): ChildProcess {
+    if (engine) return engine;
+    if (busy) throw new Error("installation en cours");
+    if (!readInstalled()) throw new Error("low-musical n'est pas installé");
+
+    const proc = spawn(ENGINE_EXE, [], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    engine = proc;
+
+    createInterface({ input: proc.stdout! }).on("line", line => {
+        let msg: any;
+        try { msg = JSON.parse(line); } catch { return; }
+        if (typeof msg?.id === "number" && waiting.has(msg.id)) {
+            const w = waiting.get(msg.id)!;
+            waiting.delete(msg.id);
+            clearTimeout(w.timer);
+            if (msg.ok) w.resolve(msg.result);
+            else w.reject(new Error(String(msg.error ?? "erreur du moteur")));
+        } else if (typeof msg?.event === "string") {
+            broadcast(msg);
+        }
+    });
+    // Le moteur n'écrit sur stderr qu'en cas de plantage : utile dans les logs.
+    createInterface({ input: proc.stderr! }).on("line", line => console.error("[low-musical]", line));
+
+    const finish = (reason: string) => {
+        if (engine !== proc) return;
+        engine = null;
+        for (const [id, w] of waiting) {
+            clearTimeout(w.timer);
+            w.reject(new Error(reason));
+            waiting.delete(id);
+        }
+        broadcast({ event: "exit", reason });
+    };
+    proc.on("exit", code => finish(code === 0 ? "moteur arrêté" : `le moteur s'est arrêté (code ${code})`));
+    proc.on("error", e => finish(`le moteur ne démarre pas : ${e.message}`));
+    proc.stdin!.on("error", () => { }); // moteur déjà fermé : on ignore
+    return proc;
+}
+
+function callEngine(cmd: string, args: Record<string, unknown>) {
+    const proc = startEngine();
+    const id = nextId++;
+    return new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            waiting.delete(id);
+            reject(new Error("le moteur ne répond pas"));
+        }, CALL_TIMEOUT);
+        waiting.set(id, { resolve, reject, timer });
+        proc.stdin!.write(JSON.stringify({ ...args, id, cmd }) + "\n");
+    });
+}
+
+/** Arrêt propre (le moteur quitte le vocal), forcé au bout de 3 s. */
+function stopEngine() {
+    const proc = engine;
+    if (!proc) return Promise.resolve();
+    return new Promise<void>(resolve => {
+        const timer = setTimeout(() => { proc.kill(); resolve(); }, 3000);
+        proc.once("exit", () => { clearTimeout(timer); resolve(); });
+        proc.stdin!.end();
+    });
+}
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown) => {
+    if (typeof cmd !== "string" || !ENGINE_COMMANDS.has(cmd)) throw new Error("commande refusée");
+    const plain = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
+    return callEngine(cmd, plain);
+});
+ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_RUNNING, () => engine !== null);
+ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_STOP, () => stopEngine());
+
+// Discord se ferme : le moteur quitte le vocal de lui-même en voyant son entrée se fermer.
+app.on("will-quit", () => engine?.stdin?.end());
 
 ipcMain.handle(IpcEvents.LOWMUSICAL_STATUS, () => status());
 ipcMain.handle(IpcEvents.LOWMUSICAL_INSTALL, () => install());

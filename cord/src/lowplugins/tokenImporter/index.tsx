@@ -55,7 +55,7 @@ export interface SavedAccount {
     sealed?: string;
 }
 
-interface Folder {
+export interface Folder {
     id: string;
     name: string;
 }
@@ -69,7 +69,7 @@ interface CheckResult {
 // ── Stockage ─────────────────────────────────────────────────────────────────
 const makeFolderId = () => `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-async function getFolders(): Promise<Folder[]> {
+export async function getFolders(): Promise<Folder[]> {
     const list = await DataStore.get<Folder[]>(STORE_KEY_FOLDERS);
     return Array.isArray(list) ? list.filter(f => f?.id && typeof f.name === "string") : [];
 }

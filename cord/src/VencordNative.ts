@@ -121,6 +121,14 @@ export default {
         install: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_INSTALL),
         uninstall: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_UNINSTALL),
         openFolder: () => invoke<void>(IpcEvents.LOWMUSICAL_OPEN_FOLDER),
+        /** Envoie une commande au moteur (lancé à la demande). */
+        call: <T = any>(cmd: string, args?: Record<string, unknown>) => invoke<T>(IpcEvents.LOWMUSICAL_ENGINE_CALL, cmd, args ?? {}),
+        isRunning: () => invoke<boolean>(IpcEvents.LOWMUSICAL_ENGINE_RUNNING),
+        stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
+        /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
+        onEvent(cb: (msg: any) => void) {
+            ipcRenderer.on(IpcEvents.LOWMUSICAL_EVENT, (_, msg) => cb(msg));
+        },
     },
 
     csp: {

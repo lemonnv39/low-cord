@@ -17,6 +17,8 @@ import { relaunch } from "@utils/native";
 import type { IconProps } from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
 
+import { ConnectionSection } from "./ConnectionSection";
+
 const cl = classNameFactory("lc-mu-");
 
 export function MusicalIcon({ width = 20, height = 20 }: IconProps) {
@@ -156,6 +158,13 @@ function LowMusicalSettings() {
                     </div>
                 )}
             </div>
+
+            {status?.installed && !running && (
+                <>
+                    <h3 className={cl("section-title")}>Connexion</h3>
+                    <ConnectionSection />
+                </>
+            )}
 
             <p className={cl("note")}>
                 Module optionnel, mis à jour séparément de low-cord. Le moteur est téléchargé depuis le repo low-cord,
