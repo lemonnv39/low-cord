@@ -13,12 +13,16 @@
 //  - Channel: L R | 1 2 | all
 //  - Copy: L=R R=0.5*L+-6dB*R …
 //  - Delay: 10 ms | 480 samples
+//  - Convolution: salle.wav  (réponse impulsionnelle importée dans le volet)
 // Formules des filtres : celles d'APO (RBJ), valeurs par défaut comprises
 // (Q 0,707 ; pente des shelfs 0,9 ; notch Q 30 ; fréquence de coin des LS/HS).
 // Les coefficients sont calculés ici pour 48 kHz : la courbe affichée est
 // exactement ce que joue le moteur.
 
 export const APO_RATE = 48000;
+
+/** Fréquences de la courbe affichée : 20 Hz → 20 kHz, échelle logarithmique. */
+export const APO_FREQS = Array.from({ length: 240 }, (_, i) => 20 * Math.pow(1000, i / 239));
 
 type Ch = [boolean, boolean];
 
@@ -27,7 +31,11 @@ export type ApoStage =
     | { t: "iir"; ch: Ch; b: number[]; a: number[]; }
     | { t: "graphic"; ch: Ch; points: [number, number][]; }
     | { t: "copy"; m: [number, number, number, number]; c: [number, number]; }
-    | { t: "delay"; ch: Ch; samples: number; };
+    | { t: "delay"; ch: Ch; samples: number; }
+    | { t: "conv"; ch: Ch; ir: string; name: string; };
+
+/** Réponse impulsionnelle importée : nom d'origine et fichier rangé par low-cord. */
+export interface ApoIr { name: string; file: string; }
 
 /** Une ligne lue, pour la liste du panneau. */
 export interface ApoLine {
@@ -237,7 +245,6 @@ function parseCopy(params: string): { m: [number, number, number, number]; c: [n
 }
 
 const IGNORED: Record<string, string> = {
-    CONVOLUTION: "convolution : bientôt dans low-musical",
     INCLUDE: "Include : colle directement le contenu du fichier",
     DEVICE: "Device : inutile ici (low-musical a sa propre sortie)",
     STAGE: "Stage : inutile ici",
@@ -251,7 +258,7 @@ const IGNORED: Record<string, string> = {
 };
 
 /** Lit un set Equalizer APO. */
-export function parseApo(text: string): ApoParse {
+export function parseApo(text: string, irs: ApoIr[] = []): ApoParse {
     const stages: ApoStage[] = [];
     const lines: ApoLine[] = [];
     let sel: Ch = [true, true];
@@ -337,6 +344,19 @@ export function parseApo(text: string): ApoParse {
                 lines.push({ line: at, kind: "Delay", summary: `${+(samples / APO_RATE * 1000).toFixed(2)} ms` });
                 return;
             }
+            case "CONVOLUTION": {
+                // Nom du fichier seul (APO accepte un chemin relatif ou absolu).
+                const wanted = params.trim().replace(/^["']|["']$/g, "");
+                const base = wanted.split(/[\\/]/).pop()!.toLowerCase();
+                const ir = irs.find(i => i.name.toLowerCase() === base);
+                if (!ir) {
+                    lines.push({ line: at, kind: "Convolution", summary: wanted, warning: `importe « ${base} » dans « Réponses impulsionnelles »` });
+                    return;
+                }
+                stages.push({ t: "conv", ch: [...sel], ir: ir.file, name: ir.name });
+                lines.push({ line: at, kind: "Convolution", summary: ir.name });
+                return;
+            }
             default: {
                 const name = line.slice(0, colon).trim();
                 lines.push({ line: at, kind: name, summary: params.trim(), warning: IGNORED[command] ?? "commande inconnue : ignorée" });
@@ -380,9 +400,9 @@ export function graphicDb(points: [number, number][], f: number) {
  * Réponse de chaque canal (dB) aux fréquences données. Les mélanges (Copy)
  * sont suivis en supposant un signal identique sur L et R (mono).
  */
-export function apoResponse(stages: ApoStage[], freqs: number[]): [number[], number[]] {
+export function apoResponse(stages: ApoStage[], freqs: number[], irResponse?: (file: string) => [number[], number[]] | undefined): [number[], number[]] {
     const out: [number[], number[]] = [[], []];
-    for (const f of freqs) {
+    for (const [fi, f] of freqs.entries()) {
         // Amplitudes (linéaires) de L et R pour une entrée mono de 1.
         let amp: [number, number] = [1, 1];
         for (const s of stages) {
@@ -405,6 +425,16 @@ export function apoResponse(stages: ApoStage[], freqs: number[]): [number[], num
                     break;
                 case "delay":
                     break;
+                case "conv": {
+                    // Module de l'IR (calculé à part), s'il est déjà connu.
+                    const resp = irResponse?.(s.ir);
+                    if (!resp) break;
+                    amp = [
+                        s.ch[0] ? amp[0] * Math.pow(10, resp[0][fi] / 20) : amp[0],
+                        s.ch[1] ? amp[1] * Math.pow(10, resp[1][fi] / 20) : amp[1],
+                    ];
+                    break;
+                }
             }
         }
         out[0].push(20 * Math.log10(Math.max(1e-6, amp[0])));
@@ -435,3 +465,57 @@ Filter 1: ON LSC Fc 105 Hz Gain 4.0 dB Q 0.70
 Filter 2: ON PK Fc 2500 Hz Gain -2.5 dB Q 1.40
 Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.70
 `;
+
+// ── Réponse d'une IR (pour la courbe) ───────────────────────────────────────
+
+/** FFT en place (radix 2), taille puissance de 2. */
+function fft(re: Float64Array, im: Float64Array) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            [re[i], re[j]] = [re[j], re[i]];
+            [im[i], im[j]] = [im[j], im[i]];
+        }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+        const ang = -2 * Math.PI / len;
+        const wr = Math.cos(ang), wi = Math.sin(ang);
+        for (let i = 0; i < n; i += len) {
+            let cr = 1, ci = 0;
+            for (let k = 0; k < len / 2; k++) {
+                const a = i + k, b = a + len / 2;
+                const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+                re[b] = re[a] - tr;
+                im[b] = im[a] - ti;
+                re[a] += tr;
+                im[a] += ti;
+                const nr = cr * wr - ci * wi;
+                ci = cr * wi + ci * wr;
+                cr = nr;
+            }
+        }
+    }
+}
+
+/** Module (dB) d'une IR aux fréquences APO_FREQS, lissé au 1/12 d'octave. */
+export function irMagnitude(samples: Float32Array): number[] {
+    let n = 1;
+    while (n < samples.length) n <<= 1;
+    n = Math.max(n, 4096);
+    const re = new Float64Array(n), im = new Float64Array(n);
+    re.set(samples);
+    fft(re, im);
+    const power = new Float64Array(n / 2 + 1);
+    for (let k = 0; k <= n / 2; k++) power[k] = re[k] * re[k] + im[k] * im[k];
+    const bin = (f: number) => f * n / APO_RATE;
+    return APO_FREQS.map(f => {
+        const lo = Math.max(0, Math.floor(bin(f * Math.pow(2, -1 / 24))));
+        const hi = Math.min(n / 2, Math.max(lo, Math.ceil(bin(f * Math.pow(2, 1 / 24)))));
+        let sum = 0;
+        for (let k = lo; k <= hi; k++) sum += power[k];
+        return 10 * Math.log10(Math.max(1e-12, sum / (hi - lo + 1)));
+    });
+}

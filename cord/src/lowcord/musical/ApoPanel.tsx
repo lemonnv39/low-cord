@@ -12,9 +12,11 @@
 import { copyToClipboard } from "@utils/clipboard";
 import { useEffect, useMemo, useRef, useState } from "@webpack/common";
 
-import { APO_EXAMPLE, apoResponse, type ApoStage, parseApo, removeLine, toggleFilterLine } from "./apo";
+import { APO_EXAMPLE, APO_FREQS as FREQS, apoResponse, type ApoStage, parseApo, removeLine, toggleFilterLine } from "./apo";
 import { cl, Dropdown, Toggle } from "./controls";
-import { deleteApoSet, getPrefs, loadApoSet, saveApoSet, setApoOn, setApoText, useMusical } from "./engine";
+import {
+    deleteApoSet, deleteIr, getApoError, getIrResponse, getPrefs, importIrs, loadApoSet, saveApoSet, setApoOn, setApoText, useMusical,
+} from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
 
@@ -24,15 +26,15 @@ const icon = (d: string, size = 15) => (
     </svg>
 );
 
-/** Fréquences de la courbe : 20 Hz → 20 kHz, échelle logarithmique. */
-const FREQS = Array.from({ length: 240 }, (_, i) => 20 * Math.pow(1000, i / 239));
 const GRID_HZ = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
 const hzLabel = (f: number) => f >= 1000 ? `${f / 1000}k` : `${f}`;
 
 /** Courbe de réponse du set (gauche en clair, droite en pointillés si elle diffère). */
 function ApoGraph({ stages }: { stages: ApoStage[]; }) {
     const ref = useRef<HTMLCanvasElement>(null);
-    const [l, r] = useMemo(() => apoResponse(stages, FREQS), [stages]);
+    // Les IR sont analysées à part : la courbe se met à jour quand c'est prêt.
+    const irsReady = stages.filter(s => s.t === "conv").map(s => (s.t === "conv" && getIrResponse(s.ir) ? 1 : 0)).join("");
+    const [l, r] = useMemo(() => apoResponse(stages, FREQS, getIrResponse), [stages, irsReady]);
 
     useEffect(() => {
         const canvas = ref.current!;
@@ -119,8 +121,11 @@ const ADD_LINES = [
 export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
     useMusical();
     const p = getPrefs();
-    const parsed = useMemo(() => parseApo(p.apoText), [p.apoText]);
+    const parsed = useMemo(() => parseApo(p.apoText, p.apoIrs), [p.apoText, p.apoIrs]);
+    const engineError = getApoError();
     const fileRef = useRef<HTMLInputElement>(null);
+    const irRef = useRef<HTMLInputElement>(null);
+    const [confirmIr, setConfirmIr] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [name, setName] = useState("");
     const [note, setNote] = useState<string | null>(null);
@@ -195,6 +200,7 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
             {note && <div className={cl("apo-note")}>{note}</div>}
 
             <ApoGraph stages={parsed.stages} />
+            {engineError && p.apoOn && <p className={cl("error-line")}>Le moteur garde le set précédent : {engineError}</p>}
 
             {/* Texte du set, au format d'Equalizer APO */}
             <div className={cl("apo-editor")}>
@@ -212,6 +218,48 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                     onChange={e => setApoText(e.currentTarget.value, p.apoName)}
                     placeholder={"Colle ici un set Equalizer APO\nPreamp: -6 dB\nFilter: ON PK Fc 100 Hz Gain 3 dB Q 1.41"}
                 />
+            </div>
+
+            {/* Réponses impulsionnelles (Convolution) */}
+            <div className={cl("apo-irs")}>
+                <div className={cl("apo-editor-head")}>
+                    <span className={cl("group-title")}>Réponses impulsionnelles <span className={cl("count")}>{p.apoIrs.length}</span></span>
+                    <button type="button" className={cl("link")} onClick={() => irRef.current?.click()} title="wav, flac ou ogg, 6 s au plus">+ Importer IR</button>
+                </div>
+                <input
+                    ref={irRef}
+                    type="file"
+                    accept=".wav,.flac,.ogg"
+                    multiple
+                    hidden
+                    onChange={e => {
+                        const files = [...(e.currentTarget.files ?? [])];
+                        e.currentTarget.value = "";
+                        if (files.length) act(async () => { await importIrs(files); flash(files.length > 1 ? `${files.length} IR importées.` : `« ${files[0].name} » importée.`); });
+                    }}
+                />
+                {p.apoIrs.length ? (
+                    <div className={cl("apo-ir-list")}>
+                        {p.apoIrs.map(ir => (
+                            <span key={ir.file} className={cl("apo-ir")}>
+                                <button type="button" className={cl("apo-ir-name")} onClick={() => append(`Convolution: ${ir.name}`)} title={`Ajouter « Convolution: ${ir.name} » au set`}>{ir.name}</button>
+                                <button
+                                    type="button"
+                                    className={cl("apo-ir-del", confirmIr === ir.name && "apo-ir-del-ask")}
+                                    onClick={() => {
+                                        if (confirmIr !== ir.name) return setConfirmIr(ir.name);
+                                        setConfirmIr(null);
+                                        act(() => deleteIr(ir.name));
+                                    }}
+                                    onBlur={() => setConfirmIr(c => (c === ir.name ? null : c))}
+                                    title={confirmIr === ir.name ? "Cliquer encore pour supprimer" : "Supprimer cette IR"}
+                                >{confirmIr === ir.name ? "Confirmer ?" : icon("M6 6l12 12M18 6 6 18", 10)}</button>
+                            </span>
+                        ))}
+                    </div>
+                ) : (
+                    <p className={cl("hint")}>Importe une IR (salle, profil de casque…) puis clique dessus pour l'ajouter au set.</p>
+                )}
             </div>
 
             {/* Ce qui a été compris, ligne par ligne */}

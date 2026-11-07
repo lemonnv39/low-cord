@@ -139,6 +139,10 @@ export default {
         readSound: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_SOUND_READ, file),
         /** élargit la fenêtre du panneau (volet Mini APO), 0 = taille d'origine */
         widen: (extra: number) => invoke<void>(IpcEvents.LOWMUSICAL_WIDEN, extra),
+        /** Mini APO : réponses impulsionnelles (Convolution) */
+        importIr: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_IR_IMPORT, name, data),
+        deleteIr: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_IR_DELETE, file),
+        readIr: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_IR_READ, file),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

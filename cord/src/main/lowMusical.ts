@@ -250,6 +250,14 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown
         plain.path = soundPath(plain.file);
         delete plain.file;
     }
+    if (cmd === "set_apo" && Array.isArray(plain.stages)) {
+        // Convolution : seulement les IR importées, chemin résolu ici.
+        plain.stages = plain.stages.map((s: any) => {
+            if (s?.t !== "conv") return s;
+            const { ir, ...rest } = s;
+            return { ...rest, path: irPath(ir) };
+        });
+    }
     return callEngine(cmd, plain);
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_RUNNING, () => engine !== null);
@@ -336,6 +344,29 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_DELETE, (_, file: unknown) => {
     rmSync(soundPath(file), { force: true });
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_READ, (_, file: unknown) => readFileSync(soundPath(file)));
+
+// ── Mini APO : réponses impulsionnelles importées (Convolution) ─────────────
+const IR_DIR = join(DATA_DIR, "low-musical-ir");
+const IR_FILE = /^[0-9a-f-]{36}\.(wav|flac|ogg)$/;
+const MAX_IR_FILE = 25 * 1024 * 1024;
+
+function irPath(file: unknown) {
+    if (typeof file !== "string" || !IR_FILE.test(file)) throw new Error("réponse impulsionnelle invalide");
+    return join(IR_DIR, file);
+}
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_IR_IMPORT, (_, name: unknown, data: unknown) => {
+    const ext = typeof name === "string" ? /\.(wav|flac|ogg)$/i.exec(name)?.[1]?.toLowerCase() : undefined;
+    if (!ext) throw new Error("format non pris en charge (wav, flac, ogg)");
+    if (!(data instanceof Uint8Array) || !data.length) throw new Error("fichier vide");
+    if (data.length > MAX_IR_FILE) throw new Error("fichier trop lourd (25 Mo au plus)");
+    mkdirSync(IR_DIR, { recursive: true });
+    const file = `${randomUUID()}.${ext}`;
+    writeFileSync(join(IR_DIR, file), data);
+    return file;
+});
+ipcMain.handle(IpcEvents.LOWMUSICAL_IR_DELETE, (_, file: unknown) => { rmSync(irPath(file), { force: true }); });
+ipcMain.handle(IpcEvents.LOWMUSICAL_IR_READ, (_, file: unknown) => readFileSync(irPath(file)));
 /** Sons encore présents sur le disque (les autres ont été effacés à la main). */
 ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
     try {

@@ -16,7 +16,7 @@ import type { SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, SelectedChannelStore, useEffect, UserStore, useState } from "@webpack/common";
 
-import { APO_EXAMPLE, parseApo } from "./apo";
+import { APO_EXAMPLE, type ApoIr, irMagnitude, parseApo } from "./apo";
 
 export interface VoiceChannel { id: string; name: string; }
 export interface MusicalGuild { id: string; name: string; icon?: string | null; channels: VoiceChannel[]; }
@@ -141,6 +141,8 @@ export interface MusicalPrefs {
     apoText: string;
     apoName: string;
     apoSets: { name: string; text: string; }[];
+    /** réponses impulsionnelles importées (Convolution) */
+    apoIrs: ApoIr[];
 }
 
 export interface SoundPad {
@@ -174,7 +176,7 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     profile: "Naturel", autoBitrate: true,
     preset: "", userPresets: [], streamProof: false,
     bass: 0, mid: 0, treble: 0, sounds: [], sbVolume: 1,
-    apoOn: false, apoText: APO_EXAMPLE, apoName: "", apoSets: [],
+    apoOn: false, apoText: APO_EXAMPLE, apoName: "", apoSets: [], apoIrs: [],
 };
 
 type ProcessingKey =
@@ -348,6 +350,7 @@ function wire() {
             if (!Array.isArray(prefs.userPresets)) prefs.userPresets = [];
             if (!Array.isArray(prefs.sounds)) prefs.sounds = [];
             if (!Array.isArray(prefs.apoSets)) prefs.apoSets = [];
+            if (!Array.isArray(prefs.apoIrs)) prefs.apoIrs = [];
             if (typeof prefs.apoText !== "string") prefs.apoText = APO_EXAMPLE;
             prefs.sounds = prefs.sounds.filter(pad => pad && typeof pad.id === "string" && typeof pad.file === "string");
             // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
@@ -869,10 +872,23 @@ export const readSound = (pad: SoundPad) => VencordNative.lowMusical.readSound(p
 // ── Mini APO ────────────────────────────────────────────────────────────────
 // Le texte du set est lu ici (apo.ts), le moteur reçoit les étapes prêtes.
 
+/** Dernière erreur du moteur sur le set (IR illisible…) ; null = tout va bien. */
+let apoError: string | null = null;
+export const getApoError = () => apoError;
+
 /** Envoie le set au moteur (ou le coupe). Renvoie le nombre d'étapes jouées. */
-function sendApo() {
-    const stages = prefs.apoOn ? parseApo(prefs.apoText).stages : [];
-    return call<number>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
+async function sendApo() {
+    const stages = prefs.apoOn ? parseApo(prefs.apoText, prefs.apoIrs).stages : [];
+    try {
+        const n = await call<number>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
+        if (apoError) { apoError = null; emit(); }
+        return n;
+    } catch (e) {
+        // Le moteur garde le set d'avant : on dit pourquoi.
+        apoError = errorText(e);
+        emit();
+        return 0;
+    }
 }
 
 let apoTimer: ReturnType<typeof setTimeout> | null = null;
@@ -908,3 +924,48 @@ export function deleteApoSet(name: string) {
 
 /** Panneau Mini APO ouvert : la fenêtre s'élargit sur le côté. */
 export const widenPanel = (extra: number) => VencordNative.lowMusical.widen(extra).catch(() => { });
+
+// ── Mini APO : réponses impulsionnelles (Convolution) ──────────────────────
+
+const IR_EXT = /\.(wav|flac|ogg)$/i;
+
+/** Importe des IR ; le nom d'origine sert dans « Convolution: nom.wav ». */
+export async function importIrs(files: File[]) {
+    for (const file of files) {
+        if (!IR_EXT.test(file.name)) throw new Error(`« ${file.name} » : format non pris en charge (wav, flac, ogg)`);
+        const stored = await VencordNative.lowMusical.importIr(file.name, new Uint8Array(await file.arrayBuffer()));
+        const old = prefs.apoIrs.find(i => i.name.toLowerCase() === file.name.toLowerCase());
+        if (old) await VencordNative.lowMusical.deleteIr(old.file).catch(() => { });
+        savePrefs({ apoIrs: [...prefs.apoIrs.filter(i => i !== old), { name: file.name, file: stored }] });
+    }
+    live(sendApo);
+}
+
+export async function deleteIr(name: string) {
+    const ir = prefs.apoIrs.find(i => i.name === name);
+    if (!ir) return;
+    savePrefs({ apoIrs: prefs.apoIrs.filter(i => i !== ir) });
+    live(sendApo);
+    await VencordNative.lowMusical.deleteIr(ir.file).catch(() => { });
+}
+
+/** Réponse (dB) de chaque IR, calculée une fois puis gardée. */
+const irResponses = new Map<string, [number[], number[]] | "pending" | "error">();
+
+export function getIrResponse(file: string): [number[], number[]] | undefined {
+    const known = irResponses.get(file);
+    if (known && known !== "pending" && known !== "error") return known;
+    if (!known) {
+        irResponses.set(file, "pending");
+        (async () => {
+            const bytes = await VencordNative.lowMusical.readIr(file);
+            const ctx = new OfflineAudioContext(2, 1, 48000);
+            const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+            const buf = await ctx.decodeAudioData(copy);
+            const l = buf.getChannelData(0), r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
+            irResponses.set(file, [irMagnitude(l), irMagnitude(r)]);
+            emit();
+        })().catch(() => irResponses.set(file, "error"));
+    }
+    return undefined;
+}

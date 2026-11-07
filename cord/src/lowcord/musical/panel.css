@@ -2152,3 +2152,61 @@
     background: rgb(242 84 91 / 12%);
     color: var(--mp-bad);
 }
+
+.lc-mp-apo-irs {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lc-mp-apo-ir-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.lc-mp-apo-ir {
+    display: inline-flex;
+    overflow: hidden;
+    max-width: 100%;
+    border: 1px solid var(--mp-line-strong);
+    border-radius: 8px;
+}
+
+.lc-mp-apo-ir-name {
+    overflow: hidden;
+    padding: 5px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--mp-text);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.lc-mp-apo-ir-name:hover {
+    background: rgb(255 255 255 / 6%);
+    color: var(--mp-strong);
+}
+
+.lc-mp-apo-ir-del {
+    display: grid;
+    flex: none;
+    place-items: center;
+    padding: 0 7px;
+    border: 0;
+    border-left: 1px solid var(--mp-line);
+    background: transparent;
+    color: var(--mp-faint);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.lc-mp-apo-ir-del:hover,
+.lc-mp-apo-ir-del-ask {
+    background: rgb(242 84 91 / 12%);
+    color: var(--mp-bad);
+}
