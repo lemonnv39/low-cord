@@ -242,22 +242,43 @@ export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB
     const dialRef = useRef<HTMLDivElement>(null);
     const valueRef = useRef(value);
     valueRef.current = value;
-    const clampStep = (v: number) => Math.max(min, Math.min(max, Math.round(v / step) * step));
-    const set = (v: number) => {
-        const next = clampStep(v);
-        if (next === valueRef.current) return;
+    // Pendant qu'on tourne : position continue (l'aiguille suit la souris sans
+    // à-coups) ; la valeur arrondie n'est envoyée qu'une fois par image.
+    const [live, setLive] = useState<number | null>(null);
+    const pending = useRef<number | null>(null);
+    const frame = useRef(0);
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+    const clamp = (v: number) => Math.max(min, Math.min(max, v));
+    const clampStep = (v: number) => clamp(Math.round(v / step) * step);
+    const flush = () => {
+        frame.current = 0;
+        const next = pending.current;
+        pending.current = null;
+        if (next === null || next === valueRef.current) return;
         valueRef.current = next;
-        onChange(next);
+        onChangeRef.current(next);
+    };
+    const set = (v: number) => {
+        pending.current = clampStep(v);
+        if (!frame.current) frame.current = dialRef.current!.ownerDocument.defaultView!.requestAnimationFrame(flush);
     };
     const setRef = useRef(set);
     setRef.current = set;
+    const endDrag = () => {
+        drag.current = null;
+        setLive(null);
+        if (frame.current) dialRef.current?.ownerDocument.defaultView?.cancelAnimationFrame(frame.current);
+        flush();
+    };
+    useEffect(() => () => { if (frame.current) dialRef.current?.ownerDocument.defaultView?.cancelAnimationFrame(frame.current); }, []);
 
     // Molette de la souris : écoute non passive, sinon le bloc défile en même temps.
     useEffect(() => {
         const el = dialRef.current!;
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
-            setRef.current(valueRef.current + (e.deltaY < 0 ? step : -step));
+            setRef.current((pending.current ?? valueRef.current) + (e.deltaY < 0 ? step : -step));
         };
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
@@ -275,9 +296,10 @@ export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB
         return `M${x1.toFixed(2)} ${y1.toFixed(2)}A${r} ${r} 0 ${b - a > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
     };
     const zero = angle(Math.max(min, Math.min(max, 0)));
-    const now = angle(value);
+    const now = angle(live ?? value);
     const [hx, hy] = point(now, 13);
-    const shown = `${value > 0 ? "+" : ""}${Number.isInteger(value) ? value : value.toFixed(1)}`;
+    const v = live === null ? value : clampStep(live);
+    const shown = `${v > 0 ? "+" : ""}${Number.isInteger(v) ? v : v.toFixed(1)}`;
 
     return (
         <div className={cl("knob-wrap")}>
@@ -296,10 +318,12 @@ export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB
                     if (!drag.current) return;
                     // 120 px de course = toute la plage (Maj : réglage fin).
                     const range = (max - min) * (e.shiftKey ? 0.25 : 1);
-                    set(drag.current.v + (drag.current.y - e.clientY) / 120 * range);
+                    const raw = clamp(drag.current.v + (drag.current.y - e.clientY) / 120 * range);
+                    setLive(raw);
+                    set(raw);
                 }}
-                onPointerUp={() => { drag.current = null; }}
-                onPointerCancel={() => { drag.current = null; }}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
                 onDoubleClick={() => onChange(reset)}
                 onKeyDown={e => {
                     if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); set(value + step); }
@@ -308,7 +332,7 @@ export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB
             >
                 <svg viewBox="0 0 48 48" aria-hidden="true">
                     <path className={cl("knob-track")} d={arc(-135, 135, 20)} />
-                    {value !== 0 && <path className={cl("knob-fill")} d={arc(zero, now, 20)} />}
+                    {Math.abs(live ?? value) > 0.01 && <path className={cl("knob-fill")} d={arc(zero, now, 20)} />}
                     <circle className={cl("knob-cap")} cx="24" cy="24" r="15" />
                     <line className={cl("knob-hand")} x1="24" y1="24" x2={hx.toFixed(2)} y2={hy.toFixed(2)} />
                 </svg>
