@@ -141,7 +141,7 @@ pub fn mix(frames: usize) -> Option<Vec<f32>> {
 }
 
 /// Décode un fichier audio en stéréo 48 kHz entrelacé.
-fn decode(path: &str) -> Result<Vec<f32>, String> {
+pub(crate) fn decode(path: &str) -> Result<Vec<f32>, String> {
     use symphonia::core::audio::SampleBuffer;
     use symphonia::core::codecs::DecoderOptions;
     use symphonia::core::formats::FormatOptions;

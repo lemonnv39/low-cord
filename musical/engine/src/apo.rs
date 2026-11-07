@@ -9,12 +9,16 @@
 //!   interpolation linéaire en dB sur une échelle de fréquence
 //!   logarithmique, valeur des bords gardée au-delà, filtre RIF
 //!   à phase minimale de 16384 points ;
+//! - `conv`    : convolution par une réponse impulsionnelle importée (IR
+//!   wav, flac, ogg ; jusqu'à 6 s). Comme APO : une IR stéréo va gauche →
+//!   gauche, droite → droite ; une IR mono s'applique aux deux ;
 //! - `copy`    : mélange des canaux (sortie = matrice × entrée + constante) ;
 //! - `delay`   : retard en échantillons.
 //!
 //! Chaque étape vise les canaux choisis (`ch` : [gauche, droite]).
-//! Le RIF est appliqué par convolution découpée en blocs de 256 échantillons
-//! (FFT), soit 256 échantillons (5,3 ms) de latence quand un GraphicEQ est actif.
+//! Les RIF sont appliqués par convolution découpée (FFT) : blocs de 256
+//! échantillons (5,3 ms de latence) pour le GraphicEQ et les IR courtes,
+//! plus grands pour les IR longues (jusqu'à 85 ms au-delà de 2,7 s).
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -32,8 +36,10 @@ const MAX_POINTS: usize = 4096;
 const MAX_DELAY: usize = OUT_RATE as usize * 2;
 /// Longueur du RIF du GraphicEQ (comme APO).
 const FIR_LEN: usize = 16384;
-/// Bloc de la convolution découpée.
+/// Bloc de la convolution découpée (le plus petit).
 const BLOCK: usize = 256;
+/// Longueur maximale d'une réponse impulsionnelle (6 s).
+const MAX_IR: usize = OUT_RATE as usize * 6;
 
 type Ch = [bool; 2];
 
@@ -43,6 +49,7 @@ enum Def {
     Gain([f32; 2]),
     Iir { ch: Ch, b: Vec<f64>, a: Vec<f64> },
     Graphic { ch: Ch, kernel: Arc<Kernel> },
+    Conv { ch: Ch, kernels: [Arc<Kernel>; 2] },
     Copy { m: [[f32; 2]; 2], c: [f32; 2] },
     Delay { ch: Ch, samples: usize },
 }
@@ -161,6 +168,16 @@ fn parse(list: &[Value]) -> Result<Config, String> {
                     kernel: Arc::new(Kernel::design(&points)),
                 }
             }
+            "conv" => {
+                let path = s
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("APO : réponse impulsionnelle introuvable")?;
+                Def::Conv {
+                    ch: ch(s),
+                    kernels: impulse(path)?,
+                }
+            }
             "copy" => {
                 let m = nums(s, "m")?;
                 let c = nums(s, "c")?;
@@ -212,6 +229,7 @@ fn gain_at(points: &[(f64, f64)], f: f64) -> f64 {
 
 /// RIF découpé en blocs, déjà passé en fréquentiel (prêt pour la convolution).
 pub struct Kernel {
+    block: usize,
     parts: Vec<Vec<Complex<f32>>>,
     fft: Arc<dyn Fft<f32>>,
     ifft: Arc<dyn Fft<f32>>,
@@ -219,17 +237,18 @@ pub struct Kernel {
 
 impl Kernel {
     fn design(points: &[(f64, f64)]) -> Kernel {
-        Kernel::from_taps(&min_phase(points))
+        Kernel::from_taps(&min_phase(points), BLOCK)
     }
 
-    fn from_taps(taps: &[f32]) -> Kernel {
+    /// Découpe le RIF en blocs de `block` échantillons, passés en fréquentiel.
+    fn from_taps(taps: &[f32], block: usize) -> Kernel {
         let mut planner = FftPlanner::<f32>::new();
-        let fft = planner.plan_fft_forward(BLOCK * 2);
-        let ifft = planner.plan_fft_inverse(BLOCK * 2);
+        let fft = planner.plan_fft_forward(block * 2);
+        let ifft = planner.plan_fft_inverse(block * 2);
         let parts = taps
-            .chunks(BLOCK)
+            .chunks(block)
             .map(|chunk| {
-                let mut buf = vec![Complex::new(0.0, 0.0); BLOCK * 2];
+                let mut buf = vec![Complex::new(0.0, 0.0); block * 2];
                 for (d, &s) in buf.iter_mut().zip(chunk) {
                     d.re = s;
                 }
@@ -237,7 +256,12 @@ impl Kernel {
                 buf
             })
             .collect();
-        Kernel { parts, fft, ifft }
+        Kernel {
+            block,
+            parts,
+            fft,
+            ifft,
+        }
     }
 }
 
@@ -301,16 +325,17 @@ struct Conv {
 impl Conv {
     fn new(kernel: Arc<Kernel>) -> Conv {
         let parts = kernel.parts.len().max(1);
+        let block = kernel.block;
         Conv {
-            history: vec![vec![Complex::new(0.0, 0.0); BLOCK * 2]; parts],
+            history: vec![vec![Complex::new(0.0, 0.0); block * 2]; parts],
             head: 0,
-            prev: vec![0.0; BLOCK],
-            input: Vec::with_capacity(BLOCK),
+            prev: vec![0.0; block],
+            input: Vec::with_capacity(block),
             // Un bloc de silence : la latence de la convolution.
-            output: vec![0.0; BLOCK],
+            output: vec![0.0; block],
             out_pos: 0,
-            work: vec![Complex::new(0.0, 0.0); BLOCK * 2],
-            acc: vec![Complex::new(0.0, 0.0); BLOCK * 2],
+            work: vec![Complex::new(0.0, 0.0); block * 2],
+            acc: vec![Complex::new(0.0, 0.0); block * 2],
             kernel,
         }
     }
@@ -319,7 +344,7 @@ impl Conv {
         self.input.push(x);
         let y = self.output[self.out_pos];
         self.out_pos += 1;
-        if self.input.len() == BLOCK {
+        if self.input.len() == self.kernel.block {
             self.block();
         }
         y
@@ -327,13 +352,14 @@ impl Conv {
 
     fn block(&mut self) {
         let n = self.history.len();
+        let block = self.kernel.block;
         // [bloc précédent | bloc actuel] → spectre, rangé en tête de l'historique.
         self.head = (self.head + n - 1) % n;
         for (i, w) in self.work.iter_mut().enumerate() {
-            let s = if i < BLOCK {
+            let s = if i < block {
                 self.prev[i]
             } else {
-                self.input[i - BLOCK]
+                self.input[i - block]
             };
             *w = Complex::new(s, 0.0);
         }
@@ -348,14 +374,58 @@ impl Conv {
             }
         }
         self.kernel.ifft.process(&mut self.acc);
-        let scale = 1.0 / (BLOCK * 2) as f32;
+        let scale = 1.0 / (block * 2) as f32;
         self.output.clear();
         self.output
-            .extend(self.acc[BLOCK..].iter().map(|c| c.re * scale));
+            .extend(self.acc[block..].iter().map(|c| c.re * scale));
         self.out_pos = 0;
         self.prev.copy_from_slice(&self.input);
         self.input.clear();
     }
+}
+
+// ── Réponses impulsionnelles (Convolution) ──────────────────────────────────
+
+type IrKernels = [Arc<Kernel>; 2];
+
+/// IR déjà préparées, par fichier : le set est renvoyé à chaque modification,
+/// on ne relit pas le fichier à chaque fois.
+fn ir_cache() -> &'static Mutex<std::collections::HashMap<String, IrKernels>> {
+    static C: OnceLock<Mutex<std::collections::HashMap<String, IrKernels>>> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Taille de bloc selon la longueur : latence courte pour les IR courtes,
+/// calcul raisonnable pour les longues.
+fn block_for(len: usize) -> usize {
+    match len {
+        0..=32_768 => BLOCK,
+        32_769..=131_072 => 1024,
+        _ => 4096,
+    }
+}
+
+fn impulse(path: &str) -> Result<IrKernels, String> {
+    if let Some(k) = lock(ir_cache()).get(path) {
+        return Ok(k.clone());
+    }
+    let pcm = crate::sound::decode(path)?;
+    let frames = pcm.len() / 2;
+    if frames > MAX_IR {
+        return Err("réponse impulsionnelle trop longue (6 s au plus)".into());
+    }
+    let block = block_for(frames);
+    let channel = |c: usize| -> Vec<f32> { pcm.iter().skip(c).step_by(2).copied().collect() };
+    let kernels = [
+        Arc::new(Kernel::from_taps(&channel(0), block)),
+        Arc::new(Kernel::from_taps(&channel(1), block)),
+    ];
+    let mut cache = lock(ir_cache());
+    if cache.len() >= 16 {
+        cache.clear();
+    }
+    cache.insert(path.to_string(), kernels.clone());
+    Ok(kernels)
 }
 
 // ── Exécution (une par chaîne de traitement) ────────────────────────────────
@@ -493,6 +563,10 @@ fn build(def: &Def) -> Run {
             *ch,
             Box::new([Conv::new(kernel.clone()), Conv::new(kernel.clone())]),
         ),
+        Def::Conv { ch, kernels } => Run::Conv(
+            *ch,
+            Box::new([Conv::new(kernels[0].clone()), Conv::new(kernels[1].clone())]),
+        ),
         Def::Copy { m, c } => Run::Copy(*m, *c),
         Def::Delay { ch, samples } => {
             let line = || DelayLine {
@@ -582,6 +656,38 @@ mod tests {
         // Retard de 48 échantillons : le niveau ne change pas.
         let (l, _) = run(json!([{ "t": "delay", "samples": 48 }]), 1000.0);
         assert!(db(l).abs() < 0.05);
+    }
+
+    #[test]
+    fn convolution_découpée_exacte() {
+        // RIF connu (écho à 300 échantillons, ×0,5) : la sortie est exacte,
+        // en tenant compte d'un bloc de latence, pour chaque taille de bloc.
+        let mut taps = vec![0.0f32; 700];
+        taps[0] = 1.0;
+        taps[300] = 0.5;
+        for block in [256, 1024] {
+            let mut conv = Conv::new(Arc::new(Kernel::from_taps(&taps, block)));
+            let input: Vec<f32> = (0..5000)
+                .map(|i| ((i * 7919) % 101) as f32 / 50.0 - 1.0)
+                .collect();
+            let out: Vec<f32> = input.iter().map(|&x| conv.process(x)).collect();
+            for (n, &got) in out.iter().enumerate().skip(block + 400) {
+                let t = n - block;
+                let want = input[t] + 0.5 * input[t - 300];
+                assert!(
+                    (got - want).abs() < 1e-4,
+                    "bloc {block} n {n} : {got} au lieu de {want}"
+                );
+            }
+        }
+        assert_eq!(block_for(48_000), 1024);
+        assert_eq!(block_for(200_000), 4096);
+    }
+
+    #[test]
+    fn ir_absente_refusée() {
+        assert!(parse(&[json!({ "t": "conv", "path": "C:/n_existe_pas.wav" })]).is_err());
+        assert!(parse(&[json!({ "t": "conv" })]).is_err());
     }
 
     #[test]

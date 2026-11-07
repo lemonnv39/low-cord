@@ -1,6 +1,6 @@
 [package]
 name = "low-musical-engine"
-version = "0.10.0"
+version = "0.11.0"
 description = "Moteur audio de low-musical : diffuse de l'audio dans un salon vocal Discord"
 authors = ["shitday"]
 edition = "2021"
