@@ -896,12 +896,28 @@ export const getApoVst = () => apoVst;
 /** Plugins déposés dans le dossier VST (relu à l'ouverture du volet). */
 let vstFiles: string[] = [];
 export const getVstFiles = () => vstFiles;
+let apoSending = false;
+
 export async function refreshVstFiles() {
     const list = await VencordNative.lowMusical.listVst().catch(() => [] as string[]);
-    if (list.join("|") !== vstFiles.join("|")) {
+    const changed = list.join("|") !== vstFiles.join("|");
+    if (changed) {
         vstFiles = list;
         emit();
-        live(sendApo);
+    }
+    // Plugins du set pas encore chargés (Discord relancé, aucun compte
+    // connecté) : on envoie le set, le moteur démarre si besoin. Sans ça,
+    // leurs réglages et leur bouton « Ouvrir le panneau » n'apparaissent pas.
+    const wanted = prefs.apoOn ? apoStages().filter(s => s.t === "vst").length : 0;
+    const missing = wanted > 0 && apoVst.length < wanted;
+    if ((changed && state.running) || missing) {
+        if (apoSending || !state.installed || isOutdated()) return;
+        apoSending = true;
+        try {
+            await sendApo();
+        } finally {
+            apoSending = false;
+        }
     }
 }
 export const openVstFolder = () => VencordNative.lowMusical.openVstFolder();
@@ -915,6 +931,8 @@ async function sendApo() {
         const res = await call<{ stages: number; vst?: VstInfo[]; }>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
         apoVst = Array.isArray(res?.vst) ? res.vst : [];
         apoError = null;
+        // L'envoi a pu démarrer le moteur (aucun compte connecté).
+        if (!state.running) state = { ...state, running: true };
         emit();
         return res?.stages ?? 0;
     } catch (e) {

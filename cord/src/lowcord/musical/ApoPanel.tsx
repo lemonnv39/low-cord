@@ -343,7 +343,7 @@ function VstSection({ act, files, stages, append, error }: {
                             <button type="button" className={cl("apo-vst-head")} onClick={() => setOpen(open === slot ? null : slot)} aria-expanded={open === slot}>
                                 <span className={cl("apo-vst-name")}>{info?.name || s.lib}</span>
                                 {info?.vendor && <span className={cl("apo-vst-vendor")}>{info.vendor}</span>}
-                                <span className={cl("apo-vst-count")}>{info?.error ? "erreur" : `${info?.params?.length ?? 0} réglages`}</span>
+                                <span className={cl("apo-vst-count")}>{!info ? "chargement…" : info.error ? "erreur" : `${info.params?.length ?? 0} réglages`}</span>
                             </button>
                             {info?.editor && !info.error && (
                                 <button
