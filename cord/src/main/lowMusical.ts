@@ -164,7 +164,7 @@ const ENGINE_COMMANDS = new Set([
     "version", "status", "devices",
     "connect", "disconnect", "leave", "set_follow", "set_fake_deafen", "set_bitrate", "set_volume",
     "set_input", "set_gain", "set_latency", "set_space", "set_eq", "set_processing", "set_meter",
-    "join", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
+    "join", "set_apo", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
 ]);
 const CALL_TIMEOUT = 15_000;
 
@@ -342,6 +342,29 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
         return readdirSync(SOUNDS_DIR).filter(f => SOUND_FILE.test(f) && statSync(join(SOUNDS_DIR, f)).isFile());
     } catch {
         return [];
+    }
+});
+
+// ── Volet Mini APO : la fenêtre s'élargit vers la droite ────────────────────
+// (ou vers la gauche s'il n'y a pas la place), puis reprend sa taille.
+const widened = new WeakMap<BrowserWindow, { extra: number; shift: number; }>();
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_WIDEN, (_, extra: unknown) => {
+    const want = typeof extra === "number" && Number.isFinite(extra) ? Math.max(0, Math.min(800, Math.round(extra))) : 0;
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed() || win.getTitle() !== "low-musical" || !win.webContents.getURL().includes("/popout")) continue;
+        if (win.isMaximized() || win.isFullScreen()) continue;
+        const prev = widened.get(win) ?? { extra: 0, shift: 0 };
+        if (prev.extra === want) continue;
+        const b = win.getBounds();
+        // Retour à la taille d'origine, puis nouvel élargissement.
+        const baseX = b.x + prev.shift, baseW = b.width - prev.extra;
+        const area = screen.getDisplayMatching(b).workArea;
+        const width = baseW + want;
+        const shift = Math.max(0, baseX + width - (area.x + area.width));
+        const x = Math.max(area.x, baseX - shift);
+        win.setBounds({ x, y: b.y, width, height: b.height });
+        widened.set(win, { extra: want, shift: baseX - x });
     }
 });
 

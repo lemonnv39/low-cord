@@ -20,13 +20,14 @@ import { copyToClipboard } from "@utils/clipboard";
 import { ChannelStore, GuildStore, SelectedChannelStore, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
+import { ApoDrawer } from "./ApoPanel";
 import { Card, Chip, cl, Dropdown, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, applyPreset, connectAccounts, deleteUserPreset, disconnect, type EngineState, errorText, exportPreset,
     followMe, getPrefs, importPreset, isActive, isOutdated, isReady, joinMe, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, savePrefs,
     saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
-} from "./engine";
+widenPanel, } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
 import { SoundboardCard } from "./Soundboard";
 import { Visualizer } from "./Visualizer";
@@ -433,6 +434,9 @@ function useTransparentWindow(ref: React.RefObject<HTMLElement | null>) {
     }, []);
 }
 
+/** Largeur du volet Mini APO (px). */
+const APO_WIDTH = 440;
+
 /** L'animation d'ouverture ne se joue qu'une fois par lancement de Discord. */
 let introPlayed = false;
 
@@ -462,6 +466,10 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const onTop = useAlwaysOnTop();
+    // Volet Mini APO : la fenêtre s'élargit de sa largeur, le reste ne bouge pas.
+    const [apoOpen, setApoOpen] = useState(false);
+    useEffect(() => { widenPanel(apoOpen ? APO_WIDTH + 10 : 0); }, [apoOpen]);
+    useEffect(() => () => { widenPanel(0); }, []);
     const startDrag = useWindowDrag();
 
     async function act(fn: () => Promise<unknown>) {
@@ -478,6 +486,7 @@ function PanelBody({ onClose }: { onClose(): void; }) {
 
     return (
         <div ref={rootRef} className={cl("panel", intro && "panel-intro")} onPointerDown={startDrag}>
+            <div className={cl("main")}>
             <main className={cl("grid")}>
                 <SessionCard act={act} pending={pending} />
 
@@ -520,6 +529,17 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                     <SoundboardCard act={act} />
                 </div>
             </main>
+            <button
+                type="button"
+                className={cl("apo-tab", apoOpen && "apo-tab-on")}
+                onClick={() => setApoOpen(!apoOpen)}
+                aria-expanded={apoOpen}
+                title={apoOpen ? "Fermer le Mini APO" : "Ouvrir le Mini APO (sets Equalizer APO)"}
+            >
+                <span>APO</span>
+            </button>
+            </div>
+            {apoOpen && <ApoDrawer act={act} onClose={() => setApoOpen(false)} />}
         </div>
     );
 }

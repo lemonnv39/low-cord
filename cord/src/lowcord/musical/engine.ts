@@ -16,6 +16,8 @@ import type { SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, SelectedChannelStore, useEffect, UserStore, useState } from "@webpack/common";
 
+import { APO_EXAMPLE, parseApo } from "./apo";
+
 export interface VoiceChannel { id: string; name: string; }
 export interface MusicalGuild { id: string; name: string; icon?: string | null; channels: VoiceChannel[]; }
 
@@ -134,6 +136,11 @@ export interface MusicalPrefs {
     /** soundboard : sons importés et volume commun (0 à 2) */
     sounds: SoundPad[];
     sbVolume: number;
+    /** Mini APO : set Equalizer APO actif (texte) et sets enregistrés */
+    apoOn: boolean;
+    apoText: string;
+    apoName: string;
+    apoSets: { name: string; text: string; }[];
 }
 
 export interface SoundPad {
@@ -153,7 +160,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.9.4";
+export const MIN_ENGINE = "0.10.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -167,6 +174,7 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     profile: "Naturel", autoBitrate: true,
     preset: "", userPresets: [], streamProof: false,
     bass: 0, mid: 0, treble: 0, sounds: [], sbVolume: 1,
+    apoOn: false, apoText: APO_EXAMPLE, apoName: "", apoSets: [],
 };
 
 type ProcessingKey =
@@ -339,6 +347,8 @@ function wire() {
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
             if (!Array.isArray(prefs.userPresets)) prefs.userPresets = [];
             if (!Array.isArray(prefs.sounds)) prefs.sounds = [];
+            if (!Array.isArray(prefs.apoSets)) prefs.apoSets = [];
+            if (typeof prefs.apoText !== "string") prefs.apoText = APO_EXAMPLE;
             prefs.sounds = prefs.sounds.filter(pad => pad && typeof pad.id === "string" && typeof pad.file === "string");
             // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
             if (!("profile" in saved)) prefs.profile = PROFILE_CUSTOM;
@@ -424,6 +434,7 @@ async function applyAudio() {
         call("set_processing", processingArgs()),
         call("set_meter", { on: meterWanted }),
         call("sb_volume", { volume: prefs.sbVolume }),
+        sendApo(),
     ]);
     await loadSounds();
     // La source n'est relancée que si elle a été choisie à la main avant.
@@ -854,3 +865,46 @@ export async function trimSound(id: string, start: number, end: number) {
 
 /** Contenu d'un son importé (pour l'éditeur). */
 export const readSound = (pad: SoundPad) => VencordNative.lowMusical.readSound(pad.file);
+
+// ── Mini APO ────────────────────────────────────────────────────────────────
+// Le texte du set est lu ici (apo.ts), le moteur reçoit les étapes prêtes.
+
+/** Envoie le set au moteur (ou le coupe). Renvoie le nombre d'étapes jouées. */
+function sendApo() {
+    const stages = prefs.apoOn ? parseApo(prefs.apoText).stages : [];
+    return call<number>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
+}
+
+let apoTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Texte du set modifié : appliqué après une courte pause de frappe. */
+export function setApoText(text: string, name?: string) {
+    savePrefs({ apoText: text, ...(name !== undefined ? { apoName: name } : {}) });
+    if (apoTimer) clearTimeout(apoTimer);
+    apoTimer = setTimeout(() => live(sendApo), 250);
+}
+
+export function setApoOn(on: boolean) {
+    savePrefs({ apoOn: on });
+    live(sendApo);
+}
+
+/** Enregistre le set actuel sous ce nom (remplace celui du même nom). */
+export function saveApoSet(rawName: string) {
+    const name = rawName.trim().slice(0, 40);
+    if (!name) throw new Error("donne un nom au set");
+    const others = prefs.apoSets.filter(s => s.name !== name);
+    savePrefs({ apoSets: [...others, { name, text: prefs.apoText }], apoName: name });
+}
+
+export function loadApoSet(name: string) {
+    const set = prefs.apoSets.find(s => s.name === name);
+    if (set) setApoText(set.text, name);
+}
+
+export function deleteApoSet(name: string) {
+    savePrefs({ apoSets: prefs.apoSets.filter(s => s.name !== name), ...(prefs.apoName === name ? { apoName: "" } : {}) });
+}
+
+/** Panneau Mini APO ouvert : la fenêtre s'élargit sur le côté. */
+export const widenPanel = (extra: number) => VencordNative.lowMusical.widen(extra).catch(() => { });

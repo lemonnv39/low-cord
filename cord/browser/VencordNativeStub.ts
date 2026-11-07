@@ -170,6 +170,7 @@ window.VencordNative = {
         deleteSound: async () => { },
         listSounds: async () => [],
         readSound: async () => new Uint8Array(),
+        widen: async () => { },
         stop: async () => { },
         onEvent: () => { },
     },
