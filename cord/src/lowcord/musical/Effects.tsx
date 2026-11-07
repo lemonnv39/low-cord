@@ -153,7 +153,7 @@ export function SignalCard({ act }: { act: Act; }) {
                     onChange={v => act(() => setInput(v))}
                 />
                 {music.captureError && <p className={cl("error-line")}>{music.captureError}</p>}
-                <Slider label="Gain" value={p.gain} display={signed(p.gain, "dB")} min={-64} max={64} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain} center />
+                <Slider label="Gain" value={p.gain} display={signed(p.gain, "dB")} min={-64} max={128} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain} center />
             </Group>
 
             <Group title="Profil">

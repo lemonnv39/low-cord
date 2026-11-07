@@ -140,7 +140,7 @@ export interface UserPreset { name: string; data: Partial<MusicalPrefs>; }
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.9.0";
+export const MIN_ENGINE = "0.9.1";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -615,6 +615,13 @@ const eq = (name: string) => ({ eq: [...EQ_PRESETS[name]], eqPreset: name });
 const SPACE_OFF = { spaceMode: 0, reverb: false } as const;
 
 export const PRESETS: Record<string, { desc: string; data: Partial<MusicalPrefs>; }> = {
+    "Aucun effet": {
+        desc: "Le son brut, sans aucun traitement (tout à 0, limiteur coupé)",
+        data: {
+            ...Object.fromEntries(SOUND_KEYS.map(k => [k, PREF_DEFAULTS[k]])),
+            eq: [...PREF_DEFAULTS.eq], eqPreset: "Flat", limiter: false, compressor: false, profile: PROFILE_CUSTOM,
+        },
+    },
     "Écoute casque": {
         desc: "Naturel et doux, pour une longue écoute",
         data: { gain: 0, ...PROFILES.Naturel.set, profile: "Naturel", ...eq("Casque"), ...SPACE_OFF },
