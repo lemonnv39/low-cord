@@ -12,6 +12,7 @@
 //! - `conv`    : convolution par une réponse impulsionnelle importée (IR
 //!   wav, flac, ogg ; jusqu'à 6 s). Comme APO : une IR stéréo va gauche →
 //!   gauche, droite → droite ; une IR mono s'applique aux deux ;
+//! - `vst`     : plugin VST2 (voir vst.rs), dans son propre processus ;
 //! - `copy`    : mélange des canaux (sortie = matrice × entrée + constante) ;
 //! - `delay`   : retard en échantillons.
 //!
@@ -50,12 +51,15 @@ enum Def {
     Iir { ch: Ch, b: Vec<f64>, a: Vec<f64> },
     Graphic { ch: Ch, kernel: Arc<Kernel> },
     Conv { ch: Ch, kernels: [Arc<Kernel>; 2] },
+    Vst { ch: Ch, plugin: crate::vst::Shared },
     Copy { m: [[f32; 2]; 2], c: [f32; 2] },
     Delay { ch: Ch, samples: usize },
 }
 
 pub struct Config {
     defs: Vec<Def>,
+    /// plugins VST du set, dans l'ordre (Err = plugin qui n'a pas pu démarrer)
+    vst: Vec<Result<crate::vst::Shared, Value>>,
 }
 
 struct Slot {
@@ -73,8 +77,9 @@ fn slot() -> &'static Mutex<Slot> {
     })
 }
 
-/// Nouveau set (ou `enabled: false` pour couper). Renvoie le nombre d'étapes.
-pub fn set(v: &Value) -> Result<usize, String> {
+/// Nouveau set (ou `enabled: false` pour couper). Renvoie le nombre
+/// d'étapes et l'état de chaque plugin VST.
+pub fn set(v: &Value) -> Result<Value, String> {
     let enabled = v.get("enabled").and_then(Value::as_bool).unwrap_or(false);
     let stages = v.get("stages").and_then(Value::as_array);
     let config = match (enabled, stages) {
@@ -82,10 +87,44 @@ pub fn set(v: &Value) -> Result<usize, String> {
         _ => None,
     };
     let n = config.as_ref().map_or(0, |c| c.defs.len());
+    let vst = config.as_ref().map_or_else(Vec::new, |c| vst_infos(c));
+    // Les plugins qui ne sont plus dans le set s'arrêtent.
+    let used: Vec<crate::vst::Shared> = config
+        .as_ref()
+        .map(|c| {
+            c.vst
+                .iter()
+                .filter_map(|r| r.as_ref().ok().cloned())
+                .collect()
+        })
+        .unwrap_or_default();
+    crate::vst::keep_only(&used);
     let mut s = lock(slot());
     s.generation += 1;
     s.config = config;
-    Ok(n)
+    Ok(serde_json::json!({ "stages": n, "vst": vst }))
+}
+
+fn vst_infos(c: &Config) -> Vec<Value> {
+    c.vst
+        .iter()
+        .map(|r| match r {
+            Ok(b) => lock(b).info(),
+            Err(e) => e.clone(),
+        })
+        .collect()
+}
+
+/// Réglage d'un paramètre du n-ième plugin du set ; renvoie son nouvel état
+/// (dont le ChunkData, pour réécrire le set).
+pub fn vst_param(slot_index: usize, index: i64, value: f64) -> Result<Value, String> {
+    let config = lock(slot()).config.clone().ok_or("aucun set actif")?;
+    let plugin = match config.vst.get(slot_index) {
+        Some(Ok(b)) => b.clone(),
+        _ => return Err("plugin introuvable".into()),
+    };
+    let mut b = lock(&plugin);
+    b.set_param(index, value)
 }
 
 fn parse(list: &[Value]) -> Result<Config, String> {
@@ -112,6 +151,8 @@ fn parse(list: &[Value]) -> Result<Config, String> {
     };
 
     let mut defs = Vec::with_capacity(list.len());
+    let mut vst = Vec::new();
+    let mut ranks: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for s in list {
         let kind = s.get("t").and_then(Value::as_str).unwrap_or("");
         defs.push(match kind {
@@ -178,6 +219,35 @@ fn parse(list: &[Value]) -> Result<Config, String> {
                     kernels: impulse(path)?,
                 }
             }
+            "vst" => {
+                let path = s
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("APO : plugin VST introuvable")?;
+                let chunk = s.get("chunk").and_then(Value::as_str).map(str::to_string);
+                let params = s
+                    .get("params")
+                    .and_then(Value::as_object)
+                    .map(|m| {
+                        m.iter()
+                            .filter_map(|(k, v)| Some((k.clone(), num(v)? as f32)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let rank = ranks.entry(path.to_string()).or_insert(0);
+                let found = crate::vst::plugin_for(path, *rank, chunk, params);
+                *rank += 1;
+                match found {
+                    Ok(plugin) => {
+                        vst.push(Ok(plugin.clone()));
+                        Def::Vst { ch: ch(s), plugin }
+                    }
+                    Err(e) => {
+                        vst.push(Err(serde_json::json!({ "error": e })));
+                        continue;
+                    }
+                }
+            }
             "copy" => {
                 let m = nums(s, "m")?;
                 let c = nums(s, "c")?;
@@ -201,7 +271,7 @@ fn parse(list: &[Value]) -> Result<Config, String> {
             other => return Err(format!("APO : étape inconnue « {other} »")),
         });
     }
-    Ok(Config { defs })
+    Ok(Config { defs, vst })
 }
 
 // ── GraphicEQ : conception du RIF à phase minimale ──────────────────────────
@@ -476,6 +546,7 @@ enum Run {
     Gain([f32; 2]),
     Iir(Ch, [Iir; 2]),
     Conv(Ch, Box<[Conv; 2]>),
+    Vst(Ch, crate::vst::Shared, Vec<f32>),
     Copy([[f32; 2]; 2], [f32; 2]),
     Delay(Ch, [DelayLine; 2]),
 }
@@ -525,6 +596,24 @@ impl Apo {
                 }
                 Run::Iir(ch, filters) => per_channel(buf, ch, |c, x| filters[c].process(x)),
                 Run::Conv(ch, conv) => per_channel(buf, ch, |c, x| conv[c].process(x)),
+                Run::Vst(ch, plugin, keep) => {
+                    // Canal non choisi : remis tel quel après le plugin.
+                    keep.clear();
+                    keep.extend_from_slice(buf);
+                    lock(plugin).process(buf);
+                    for (frame, old) in buf
+                        .as_chunks_mut::<2>()
+                        .0
+                        .iter_mut()
+                        .zip(keep.as_chunks::<2>().0)
+                    {
+                        for c in 0..2 {
+                            if !ch[c] {
+                                frame[c] = old[c];
+                            }
+                        }
+                    }
+                }
                 Run::Delay(ch, lines) => per_channel(buf, ch, |c, x| lines[c].process(x)),
                 Run::Copy(m, k) => {
                     for f in buf.as_chunks_mut::<2>().0 {
@@ -567,6 +656,7 @@ fn build(def: &Def) -> Run {
             *ch,
             Box::new([Conv::new(kernels[0].clone()), Conv::new(kernels[1].clone())]),
         ),
+        Def::Vst { ch, plugin } => Run::Vst(*ch, plugin.clone(), Vec::new()),
         Def::Copy { m, c } => Run::Copy(*m, *c),
         Def::Delay { ch, samples } => {
             let line = || DelayLine {
@@ -696,6 +786,6 @@ mod tests {
         assert!(parse(&[json!({ "t": "inconnu" })]).is_err());
         assert!(parse(&vec![json!({ "t": "gain" }); MAX_STAGES + 1]).is_err());
         // Coupé : aucune étape.
-        assert_eq!(set(&json!({ "enabled": false })).unwrap(), 0);
+        assert_eq!(set(&json!({ "enabled": false })).unwrap()["stages"], 0);
     }
 }

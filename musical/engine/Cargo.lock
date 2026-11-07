@@ -1926,10 +1926,12 @@ dependencies = [
 
 [[package]]
 name = "low-musical-engine"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
+ "base64 0.22.1",
  "cpal",
  "futures-util",
+ "libloading",
  "rustfft",
  "serde_json",
  "songbird",

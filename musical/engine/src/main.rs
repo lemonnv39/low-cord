@@ -24,6 +24,7 @@ mod engine;
 mod proto;
 mod sound;
 mod space;
+mod vst;
 
 use serde_json::{json, Value};
 use std::io::BufRead;
@@ -39,6 +40,11 @@ pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 fn main() {
     if std::env::args().any(|a| a == "--version") {
         println!("{VERSION}");
+        return;
+    }
+    // Processus hôte d'un plugin VST (lancé par le moteur lui-même).
+    if std::env::args().any(|a| a == "--vst-host") {
+        vst::host_main();
         return;
     }
 
@@ -166,7 +172,12 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
             sound::set_volume(num(r, "volume")? as f32);
             Ok(Value::Null)
         }
-        "set_apo" => apo::set(r).map(|n| json!(n)),
+        "set_apo" => apo::set(r),
+        "vst_param" => apo::vst_param(
+            num(r, "slot")? as usize,
+            num(r, "index")? as i64,
+            num(r, "value")?,
+        ),
         "set_meter" => {
             audio::set_meter(flag(r, "on")?);
             Ok(Value::Null)
