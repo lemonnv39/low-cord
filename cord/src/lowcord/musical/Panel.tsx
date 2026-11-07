@@ -4,18 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — panneau de gestion, flottant au-dessus de Discord. Il s'ouvre
-// toujours centré ; on peut le déplacer en le tenant par son en-tête. Discord
-// reste utilisable derrière. Le fermer ne coupe rien : le compte reste en
-// vocal et la diffusion continue. Plusieurs comptes peuvent diffuser ensemble.
-// Il peut aussi s'ouvrir dans une fenêtre à part (voir window.tsx).
+// low-musical — panneau de gestion. Il vit dans sa propre fenêtre (voir
+// window.tsx) : ouverte centrée sur Discord, déplaçable par son en-tête sur
+// n'importe quel écran. Le fermer ne coupe rien : les comptes restent en vocal
+// et la diffusion continue. Plusieurs comptes peuvent diffuser ensemble.
 
 import "./panel.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
-import { useEffect, useMemo, useRef, useState } from "@webpack/common";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useState } from "@webpack/common";
 
 import { cl, Section, Slider, Toggle } from "./controls";
 import { EqSection, ProcessingSection, SpatialSection } from "./Effects";
@@ -415,22 +413,6 @@ function DiscordColumn({ act, pending }: { act(fn: () => Promise<unknown>): void
 
 // ── Panneau ─────────────────────────────────────────────────────────────────
 
-const DetachIcon = () => (
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M14 4h6v6" />
-        <path d="M20 4l-8 8" />
-        <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-    </svg>
-);
-
-const AttachIcon = () => (
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M10 14H4v6" />
-        <path d="M4 20l8-8" />
-        <path d="M14 4h5a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-3" />
-    </svg>
-);
-
 const PinIcon = () => (
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
@@ -438,25 +420,12 @@ const PinIcon = () => (
     </svg>
 );
 
-/**
- * `floating` : au-dessus de Discord, déplaçable, avec Détacher et Fermer.
- * `window` : remplit la fenêtre détachée, avec Toujours au premier plan et
- * Remettre dans Discord.
- */
-function PanelBody({ mode, onClose, onDetach, onAttach }: {
-    mode: "floating" | "window";
-    onClose?(): void;
-    onDetach?(): void;
-    onAttach?(): void;
-}) {
+/** Le panneau remplit sa fenêtre ; l'en-tête sert de poignée pour la déplacer (sur n'importe quel écran). */
+function PanelBody({ onClose }: { onClose(): void; }) {
     useMusical();
-    const ref = useRef<HTMLDivElement>(null);
-    // null = centré ; sinon position choisie en le déplaçant.
-    const [pos, setPos] = useState<{ x: number; y: number; } | null>(null);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const onTop = useAlwaysOnTop();
-    const floating = mode === "floating";
 
     async function act(fn: () => Promise<unknown>) {
         setPending(true);
@@ -470,68 +439,23 @@ function PanelBody({ mode, onClose, onDetach, onAttach }: {
         }
     }
 
-    function startDrag(e: ReactMouseEvent) {
-        if (!floating || e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
-        const box = ref.current!.getBoundingClientRect();
-        const dx = e.clientX - box.left;
-        const dy = e.clientY - box.top;
-        e.preventDefault();
-
-        const move = (ev: MouseEvent) => {
-            // Toujours au moins 80 px de l'en-tête dans la fenêtre : on peut le rattraper.
-            const x = Math.min(Math.max(ev.clientX - dx, 80 - box.width), window.innerWidth - 80);
-            const y = Math.min(Math.max(ev.clientY - dy, 0), window.innerHeight - 48);
-            setPos({ x, y });
-        };
-        const up = () => {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-    }
-
     return (
-        <div
-            ref={ref}
-            className={cl("panel", floating ? !pos && "centered" : "window")}
-            style={floating && pos ? { left: pos.x, top: pos.y } : undefined}
-            role={floating ? "dialog" : undefined}
-            aria-label="low-musical"
-        >
-            <header
-                className={cl("head", !floating && "head-static")}
-                onMouseDown={startDrag}
-                onDoubleClick={floating ? () => setPos(null) : undefined}
-                title={floating ? "Glisser pour déplacer · double-clic pour recentrer" : undefined}
-            >
+        <div className={cl("panel")} aria-label="low-musical">
+            <header className={cl("head")} title="Glisser pour déplacer la fenêtre">
                 <span className={cl("logo")}><MusicalIcon width={18} height={18} /></span>
                 <span className={cl("title")}>low-musical</span>
                 <span className={cl("tag")}>beta</span>
                 <span className={cl("head-note")}>Diffuse de l'audio dans un salon vocal avec un compte <b>dédié</b>.</span>
-                {floating ? (
-                    <>
-                        <button className={cl("close")} onClick={onDetach} aria-label="Détacher" title="Ouvrir dans une fenêtre à part (déplaçable sur un autre écran)">
-                            <DetachIcon />
-                        </button>
-                        <button className={cl("close")} onClick={onClose} aria-label="Fermer" title="Fermer (la diffusion continue)">
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <button
-                            className={cl("close", onTop && "close-on")}
-                            onClick={() => setAlwaysOnTop(!onTop)}
-                            aria-label="Toujours au premier plan"
-                            aria-pressed={onTop}
-                            title="Toujours au premier plan"
-                        ><PinIcon /></button>
-                        <button className={cl("close")} onClick={onAttach} aria-label="Remettre dans Discord" title="Remettre dans Discord">
-                            <AttachIcon />
-                        </button>
-                    </>
-                )}
+                <button
+                    className={cl("close", onTop && "close-on")}
+                    onClick={() => setAlwaysOnTop(!onTop)}
+                    aria-label="Toujours au premier plan"
+                    aria-pressed={onTop}
+                    title="Toujours au premier plan"
+                ><PinIcon /></button>
+                <button className={cl("close")} onClick={onClose} aria-label="Fermer" title="Fermer (la diffusion continue)">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
             </header>
             {isOutdated() && (
                 <div className={cl("error")}>

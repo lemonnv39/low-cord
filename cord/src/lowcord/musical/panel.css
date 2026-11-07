@@ -1,26 +1,26 @@
-/* low-musical — panneau flottant (monochrome, style low-cord) */
+/* low-musical — panneau (monochrome, style low-cord), dans sa propre fenêtre sans cadre */
+
+/* Bloc de contenu de la fenêtre : le panneau le remplit. */
+.lc-mp-window-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
 
 .lc-mp-panel {
-    position: fixed;
-    z-index: 1000;
     display: flex;
+    flex: 1;
     flex-direction: column;
-    width: min(980px, calc(100vw - 48px));
-    max-height: calc(100vh - 96px);
+    width: 100%;
+    min-height: 0;
     overflow: hidden;
-    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
-    border-radius: 12px;
     background: var(--background-base-lowest, var(--background-tertiary, #0b0b0c));
-    box-shadow: 0 24px 64px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 35%);
     color: var(--text-normal, var(--text-default));
 }
 
-.lc-mp-centered {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
+/* L'en-tête déplace la fenêtre (sur n'importe quel écran) ; ses boutons restent cliquables. */
 .lc-mp-head {
     display: flex;
     flex: none;
@@ -28,12 +28,12 @@
     gap: 10px;
     padding: 10px 12px 10px 16px;
     border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
-    cursor: grab;
     user-select: none;
+    -webkit-app-region: drag;
 }
 
-.lc-mp-head:active {
-    cursor: grabbing;
+.lc-mp-head button {
+    -webkit-app-region: no-drag;
 }
 
 .lc-mp-logo {
@@ -727,36 +727,6 @@
     font-family: var(--font-code);
     font-size: 11px;
     font-weight: 400;
-}
-
-/* Fenêtre à part */
-
-/* Bloc de contenu de la fenêtre (sous sa barre de titre) : le panneau le remplit. */
-.lc-mp-window-content {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.lc-mp-window {
-    position: static;
-    flex: 1;
-    width: 100%;
-    min-height: 0;
-    max-height: none;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-.lc-mp-head-static {
-    cursor: default;
-}
-
-.lc-mp-head-static:active {
-    cursor: default;
 }
 
 .lc-mp-close-on {
