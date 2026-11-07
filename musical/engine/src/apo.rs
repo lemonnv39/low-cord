@@ -115,16 +115,35 @@ fn vst_infos(c: &Config) -> Vec<Value> {
         .collect()
 }
 
+/// n-ième plugin du set actif.
+fn vst_at(slot_index: usize) -> Result<crate::vst::Shared, String> {
+    let config = lock(slot()).config.clone().ok_or("aucun set actif")?;
+    match config.vst.get(slot_index) {
+        Some(Ok(b)) => Ok(b.clone()),
+        _ => Err("plugin introuvable".into()),
+    }
+}
+
 /// Réglage d'un paramètre du n-ième plugin du set ; renvoie son nouvel état
 /// (dont le ChunkData, pour réécrire le set).
 pub fn vst_param(slot_index: usize, index: i64, value: f64) -> Result<Value, String> {
-    let config = lock(slot()).config.clone().ok_or("aucun set actif")?;
-    let plugin = match config.vst.get(slot_index) {
-        Some(Ok(b)) => b.clone(),
-        _ => return Err("plugin introuvable".into()),
-    };
+    let plugin = vst_at(slot_index)?;
     let mut b = lock(&plugin);
     b.set_param(index, value)
+}
+
+/// Ouvre le panneau (l'interface) du n-ième plugin.
+pub fn vst_editor(slot_index: usize) -> Result<Value, String> {
+    let plugin = vst_at(slot_index)?;
+    let mut b = lock(&plugin);
+    b.open_editor()
+}
+
+/// État actuel du n-ième plugin (réglages faits dans son panneau compris).
+pub fn vst_state(slot_index: usize) -> Result<Value, String> {
+    let plugin = vst_at(slot_index)?;
+    let mut b = lock(&plugin);
+    b.refresh()
 }
 
 fn parse(list: &[Value]) -> Result<Config, String> {

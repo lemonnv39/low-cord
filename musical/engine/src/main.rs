@@ -173,6 +173,8 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "set_apo" => apo::set(r),
+        "vst_editor" => apo::vst_editor(num(r, "slot")? as usize),
+        "vst_state" => apo::vst_state(num(r, "slot")? as usize),
         "vst_param" => apo::vst_param(
             num(r, "slot")? as usize,
             num(r, "index")? as i64,

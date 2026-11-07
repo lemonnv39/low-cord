@@ -14,6 +14,10 @@
 //!
 //! Les plugins ne sont chargés que depuis le dossier VST de low-musical
 //! (chemin vérifié par low-cord), jamais automatiquement.
+//!
+//! Le panneau du plugin (son interface) s'ouvre dans une fenêtre Windows de
+//! ce même processus, comme le bouton « Open panel » d'APO ; ses réglages sont
+//! relus ensuite (ChunkData) pour être gardés dans le set.
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void, CStr};
@@ -63,6 +67,11 @@ const AM_GET_PRODUCT_STRING: i32 = 33;
 const AM_GET_VENDOR_VERSION: i32 = 34;
 const AM_CAN_DO: i32 = 37;
 const AM_WILL_REPLACE_OR_ACCUMULATE: i32 = 39;
+const AM_SIZE_WINDOW: i32 = 15;
+const EFF_EDIT_GET_RECT: i32 = 13;
+const EFF_EDIT_OPEN: i32 = 14;
+const EFF_EDIT_CLOSE: i32 = 15;
+const EFF_EDIT_IDLE: i32 = 19;
 
 type Dispatcher = extern "C" fn(*mut AEffect, i32, i32, isize, *mut c_void, f32) -> isize;
 type ProcessFn = extern "C" fn(*mut AEffect, *mut *mut f32, *mut *mut f32, i32);
@@ -103,8 +112,8 @@ pub struct AEffect {
 extern "C" fn host_callback(
     _: *mut AEffect,
     opcode: i32,
-    _: i32,
-    _: isize,
+    index: i32,
+    value: isize,
     ptr: *mut c_void,
     _: f32,
 ) -> isize {
@@ -129,13 +138,23 @@ extern "C" fn host_callback(
         AM_GET_PRODUCT_STRING => copy(b"low-musical"),
         AM_GET_VENDOR_VERSION => 1,
         AM_WILL_REPLACE_OR_ACCUMULATE => 1,
+        AM_SIZE_WINDOW => {
+            // Le plugin change la taille de son panneau.
+            #[cfg(windows)]
+            gui::resize(index, value as i32);
+            let _ = (index, value);
+            1
+        }
         AM_CAN_DO => {
             if ptr.is_null() {
                 return 0;
             }
             // SAFETY : chaîne terminée par 0 fournie par le plugin.
             let what = unsafe { CStr::from_ptr(ptr as *const c_char) };
-            i32::from(what.to_bytes() == b"startStopProcess") as isize
+            i32::from(matches!(
+                what.to_bytes(),
+                b"startStopProcess" | b"sizeWindow"
+            )) as isize
         }
         _ => 0,
     }
@@ -354,6 +373,37 @@ impl Plugin {
         }
     }
 
+    pub fn has_editor(&self) -> bool {
+        self.instances[0].fx().flags & FLAG_HAS_EDITOR != 0
+    }
+
+    /// Recopie l'état du premier exemplaire sur les autres (plugin mono).
+    pub fn sync_copies(&mut self) {
+        let Some((first, rest)) = self.instances.split_first() else {
+            return;
+        };
+        if rest.is_empty() {
+            return;
+        }
+        if first.uses_chunks() {
+            let data = first.chunk();
+            for inst in rest {
+                if inst.chunk() != data {
+                    inst.set_chunk(&data);
+                }
+            }
+        } else {
+            for i in 0..first.param_count() {
+                let v = first.get_param(i);
+                for inst in rest {
+                    if inst.get_param(i) != v {
+                        inst.set_param(i, v);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn set_param(&mut self, index: i32, value: f32) {
         if index >= 0 && index < self.instances[0].param_count() {
             for inst in &self.instances {
@@ -386,6 +436,7 @@ impl Plugin {
             "editor": first.fx().flags & FLAG_HAS_EDITOR != 0,
             "latency": first.fx().initial_delay.max(0),
             "chunks": first.uses_chunks(),
+            "editorOpen": EDITOR_OPEN.load(std::sync::atomic::Ordering::Relaxed),
             "params": params, "chunk": chunk,
         })
     }
@@ -448,6 +499,14 @@ const OP_OPEN: u8 = 1;
 const OP_PROCESS: u8 = 2;
 const OP_SET_PARAM: u8 = 3;
 const OP_APPLY: u8 = 4;
+const OP_EDITOR: u8 = 5;
+const OP_STATE: u8 = 6;
+
+/// Le panneau du plugin est ouvert (fenêtre de l'hôte).
+static EDITOR_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Demande d'ouverture du panneau : adresse de l'effet et titre de la fenêtre.
+pub type OpenEditor<'a> = &'a dyn Fn(usize, String) -> Result<(), String>;
 
 fn write_msg(w: &mut impl Write, tag: u8, payload: &[u8]) -> std::io::Result<()> {
     w.write_all(&[tag])?;
@@ -481,8 +540,14 @@ fn params_of(v: &Value) -> BTreeMap<String, f32> {
 
 /// Boucle de l'hôte : un plugin, des messages jusqu'à la fermeture de l'entrée.
 /// `load` = chargement du plugin (DLL en vrai, plugin de test dans les tests).
-pub fn serve(r: &mut impl Read, w: &mut impl Write, load: impl Fn(&str) -> Result<Plugin, String>) {
+pub fn serve(
+    r: &mut impl Read,
+    w: &mut impl Write,
+    load: impl Fn(&str) -> Result<Plugin, String>,
+    editor: OpenEditor,
+) {
     let mut plugin: Option<Plugin> = None;
+    let mut blocks = 0u32;
     while let Ok((op, payload)) = read_msg(r) {
         let reply = match op {
             OP_PROCESS => {
@@ -493,6 +558,14 @@ pub fn serve(r: &mut impl Read, w: &mut impl Write, load: impl Fn(&str) -> Resul
                     .map(|b| f32::from_le_bytes(*b))
                     .collect();
                 if let Some(p) = plugin.as_mut() {
+                    // Plugin mono (deux exemplaires) : les réglages faits dans le
+                    // panneau du premier sont recopiés sur le second.
+                    blocks = blocks.wrapping_add(1);
+                    if blocks.is_multiple_of(16)
+                        && EDITOR_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        p.sync_copies();
+                    }
                     p.process(&mut buf);
                 }
                 let out: Vec<u8> = buf.iter().flat_map(|x| x.to_le_bytes()).collect();
@@ -532,6 +605,22 @@ pub fn serve(r: &mut impl Read, w: &mut impl Write, load: impl Fn(&str) -> Resul
                     None => Err("aucun plugin chargé".to_string()),
                 }
             }
+            OP_EDITOR => match plugin.as_ref() {
+                Some(p) if p.has_editor() => editor(
+                    p.instances[0].effect as usize,
+                    format!("{} — low-musical", p.name),
+                )
+                .map(|_| json!({ "ok": true })),
+                Some(_) => Err("ce plugin n'a pas de panneau".to_string()),
+                None => Err("aucun plugin chargé".to_string()),
+            },
+            OP_STATE => match plugin.as_mut() {
+                Some(p) => {
+                    p.sync_copies();
+                    Ok(p.state())
+                }
+                None => Err("aucun plugin chargé".to_string()),
+            },
             _ => Err("demande inconnue".to_string()),
         };
         let (tag, body) = match reply {
@@ -544,11 +633,25 @@ pub fn serve(r: &mut impl Read, w: &mut impl Write, load: impl Fn(&str) -> Resul
     }
 }
 
-/// Point d'entrée du processus hôte.
+/// Point d'entrée du processus hôte : les messages du moteur sur un fil, la
+/// fenêtre du panneau (boucle de messages Windows) sur le fil principal.
 pub fn host_main() {
-    let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
-    serve(&mut stdin.lock(), &mut stdout.lock(), Plugin::load);
+    let (tx, rx) = mpsc::channel::<(usize, String)>();
+    std::thread::spawn(move || {
+        let stdin = std::io::stdin();
+        let stdout = std::io::stdout();
+        let open = move |effect: usize, title: String| {
+            tx.send((effect, title))
+                .map_err(|_| "fenêtre indisponible".to_string())
+        };
+        serve(&mut stdin.lock(), &mut stdout.lock(), Plugin::load, &open);
+        // Entrée fermée : le moteur ne veut plus de ce plugin.
+        std::process::exit(0);
+    });
+    #[cfg(windows)]
+    gui::run(rx);
+    #[cfg(not(windows))]
+    while rx.recv().is_ok() {}
 }
 
 // ── Côté moteur : un plugin dans son processus ──────────────────────────────
@@ -659,11 +762,26 @@ impl Bridge {
         }
     }
 
+    /// Ouvre le panneau du plugin (sa fenêtre).
+    pub fn open_editor(&mut self) -> Result<Value, String> {
+        self.request(OP_EDITOR, b"{}", OPEN_TIMEOUT)
+    }
+
+    /// État actuel (réglages faits dans le panneau du plugin compris).
+    pub fn refresh(&mut self) -> Result<Value, String> {
+        let state = self.request(OP_STATE, b"{}", OPEN_TIMEOUT)?;
+        Ok(self.adopt(state))
+    }
+
     /// Réglage d'un paramètre depuis le panneau ; renvoie le nouvel état.
     pub fn set_param(&mut self, index: i64, value: f64) -> Result<Value, String> {
         let req = json!({ "index": index, "value": value });
         let state = self.request(OP_SET_PARAM, req.to_string().as_bytes(), OPEN_TIMEOUT)?;
-        // Le set sera réécrit avec cet état : ce n'est pas un changement à rappliquer.
+        Ok(self.adopt(state))
+    }
+
+    /// Le set va être réécrit avec cet état : ce n'est pas un changement à rappliquer.
+    fn adopt(&mut self, state: Value) -> Value {
         self.applied.0 = state
             .get("chunk")
             .and_then(Value::as_str)
@@ -686,7 +804,7 @@ impl Bridge {
             }
         }
         self.state = state.clone();
-        Ok(state)
+        state
     }
 
     /// Traite un bloc stéréo entrelacé ; plugin arrêté = son inchangé.
@@ -963,6 +1081,13 @@ mod tests {
         p.set_param(0, 1.0);
         p.process(&mut buf);
         assert_eq!(buf, vec![1.0, -0.5]);
+        // Réglage fait sur le premier exemplaire seulement (comme depuis son
+        // panneau) : recopié sur le second.
+        p.instances[0].set_param(0, 0.25);
+        p.sync_copies();
+        let mut buf = vec![1.0f32, 1.0];
+        p.process(&mut buf);
+        assert_eq!(buf, vec![0.5, 0.5]);
     }
 
     #[test]
@@ -971,9 +1096,12 @@ mod tests {
         let (mut to_host_w, mut to_host_r) = pipe();
         let (mut from_host_w, mut from_host_r) = pipe();
         let host = std::thread::spawn(move || {
-            serve(&mut to_host_r, &mut from_host_w, |_| {
-                Plugin::open(test_plugin::entry, None)
-            });
+            serve(
+                &mut to_host_r,
+                &mut from_host_w,
+                |_| Plugin::open(test_plugin::entry, None),
+                &|_, _| Err("pas de panneau".to_string()),
+            );
         });
         write_msg(
             &mut to_host_w,
@@ -991,6 +1119,16 @@ mod tests {
         write_msg(&mut to_host_w, OP_SET_PARAM, br#"{"index":0,"value":1.0}"#).unwrap();
         let (_, body) = read_msg(&mut from_host_r).unwrap();
         assert!(String::from_utf8_lossy(&body).contains("\"chunk\":\"MQ==\""));
+        // Pas de panneau pour ce plugin : refus clair, l'hôte continue.
+        write_msg(&mut to_host_w, OP_EDITOR, b"{}").unwrap();
+        let (tag, body) = read_msg(&mut from_host_r).unwrap();
+        assert_eq!(tag, 1);
+        assert!(String::from_utf8_lossy(&body).contains("pas de panneau"));
+        // État relu (comme après un réglage fait dans le panneau du plugin).
+        write_msg(&mut to_host_w, OP_STATE, b"{}").unwrap();
+        let (tag, body) = read_msg(&mut from_host_r).unwrap();
+        assert_eq!(tag, 0);
+        assert!(String::from_utf8_lossy(&body).contains("\"editorOpen\":false"));
         drop(to_host_w);
         host.join().unwrap();
     }
@@ -1028,6 +1166,214 @@ mod tests {
             out[..n].copy_from_slice(&self.1[..n]);
             self.1.drain(..n);
             Ok(n)
+        }
+    }
+}
+
+// ── Fenêtre du panneau du plugin (Windows) ──────────────────────────────────
+
+#[cfg(windows)]
+mod gui {
+    use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
+    use std::sync::mpsc::{Receiver, TryRecvError};
+    use std::time::{Duration, Instant};
+
+    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
+        LoadCursorW, PeekMessageW, RegisterClassW, SetForegroundWindow, SetWindowPos, ShowWindow,
+        TranslateMessage, CW_USEDEFAULT, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, MSG, PM_REMOVE,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNORMAL, WM_CLOSE, WNDCLASSW, WS_CAPTION,
+        WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
+    };
+
+    use super::{
+        AEffect, EDITOR_OPEN, EFF_EDIT_CLOSE, EFF_EDIT_GET_RECT, EFF_EDIT_IDLE, EFF_EDIT_OPEN,
+    };
+
+    const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
+    /// Fenêtre ouverte (0 = aucune) et effet qu'elle affiche.
+    static WINDOW: AtomicIsize = AtomicIsize::new(0);
+    static EFFECT: AtomicUsize = AtomicUsize::new(0);
+
+    #[repr(C)]
+    struct ERect {
+        top: i16,
+        left: i16,
+        bottom: i16,
+        right: i16,
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(Some(0)).collect()
+    }
+
+    fn dispatch(op: i32, ptr: *mut core::ffi::c_void) -> isize {
+        let effect = EFFECT.load(Ordering::Relaxed) as *mut AEffect;
+        if effect.is_null() {
+            return 0;
+        }
+        // SAFETY : l'effet vit autant que le processus hôte (un seul plugin).
+        match unsafe { (*effect).dispatcher } {
+            Some(d) => d(effect, op, 0, 0, ptr, 0.0),
+            None => 0,
+        }
+    }
+
+    /// Taille voulue par le plugin (son rectangle d'éditeur).
+    fn editor_size() -> (i32, i32) {
+        let mut rect: *mut ERect = std::ptr::null_mut();
+        dispatch(
+            EFF_EDIT_GET_RECT,
+            &mut rect as *mut *mut ERect as *mut core::ffi::c_void,
+        );
+        if rect.is_null() {
+            return (480, 320);
+        }
+        // SAFETY : rectangle fourni par le plugin.
+        let r = unsafe { &*rect };
+        let (w, h) = ((r.right - r.left) as i32, (r.bottom - r.top) as i32);
+        if w > 0 && h > 0 {
+            (w, h)
+        } else {
+            (480, 320)
+        }
+    }
+
+    /// Taille de la fenêtre (cadre compris) pour une zone intérieure w × h.
+    fn outer(w: i32, h: i32) -> (i32, i32) {
+        let mut r = RECT {
+            left: 0,
+            top: 0,
+            right: w,
+            bottom: h,
+        };
+        // SAFETY : simple calcul de rectangle.
+        unsafe { AdjustWindowRectEx(&mut r, STYLE, 0, 0) };
+        (r.right - r.left, r.bottom - r.top)
+    }
+
+    /// Le plugin demande une autre taille (audioMasterSizeWindow).
+    pub fn resize(w: i32, h: i32) {
+        let hwnd = WINDOW.load(Ordering::Relaxed) as HWND;
+        if hwnd.is_null() || w <= 0 || h <= 0 {
+            return;
+        }
+        let (ow, oh) = outer(w, h);
+        // SAFETY : fenêtre de ce processus.
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                0,
+                0,
+                ow,
+                oh,
+                SWP_NOMOVE | SWP_NOZORDER,
+            )
+        };
+    }
+
+    unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        if msg == WM_CLOSE {
+            dispatch(EFF_EDIT_CLOSE, std::ptr::null_mut());
+            WINDOW.store(0, Ordering::Relaxed);
+            EDITOR_OPEN.store(false, Ordering::Relaxed);
+            // SAFETY : fenêtre de ce processus.
+            unsafe { DestroyWindow(hwnd) };
+            return 0;
+        }
+        // SAFETY : traitement par défaut de Windows.
+        unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+    }
+
+    fn open(effect: usize, title: &str) {
+        EFFECT.store(effect, Ordering::Relaxed);
+        let existing = WINDOW.load(Ordering::Relaxed) as HWND;
+        if !existing.is_null() {
+            // Déjà ouvert : on le ramène devant.
+            // SAFETY : fenêtre de ce processus.
+            unsafe { SetForegroundWindow(existing) };
+            return;
+        }
+        let class = wide("LowMusicalVstPanel");
+        let title = wide(title);
+        let (w, h) = editor_size();
+        let (ow, oh) = outer(w, h);
+        // SAFETY : création d'une fenêtre Windows ordinaire, dans ce processus.
+        unsafe {
+            let instance = GetModuleHandleW(std::ptr::null());
+            let wc = WNDCLASSW {
+                style: 0,
+                lpfnWndProc: Some(wndproc),
+                cbClsExtra: 0,
+                cbWndExtra: 0,
+                hInstance: instance,
+                hIcon: std::ptr::null_mut(),
+                hCursor: LoadCursorW(std::ptr::null_mut(), IDC_ARROW),
+                hbrBackground: std::ptr::null_mut(),
+                lpszMenuName: std::ptr::null(),
+                lpszClassName: class.as_ptr(),
+            };
+            RegisterClassW(&wc); // déjà enregistrée : sans effet
+            let hwnd = CreateWindowExW(
+                0,
+                class.as_ptr(),
+                title.as_ptr(),
+                STYLE,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                ow,
+                oh,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                instance,
+                std::ptr::null(),
+            );
+            if hwnd.is_null() {
+                return;
+            }
+            WINDOW.store(hwnd as isize, Ordering::Relaxed);
+            EDITOR_OPEN.store(true, Ordering::Relaxed);
+            dispatch(EFF_EDIT_OPEN, hwnd);
+            // Certains plugins ne connaissent leur taille qu'une fois ouverts.
+            let (w2, h2) = editor_size();
+            resize(w2, h2);
+            ShowWindow(hwnd, SW_SHOWNORMAL);
+            // Devant tout le reste (la fenêtre du panneau low-musical peut être
+            // « toujours au premier plan »), puis comportement normal.
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(hwnd);
+        }
+    }
+
+    /// Boucle de messages : fenêtre du panneau et « idle » du plugin (~30 fois/s).
+    pub fn run(rx: Receiver<(usize, String)>) {
+        let mut last_idle = Instant::now();
+        loop {
+            // SAFETY : boucle de messages standard du fil qui possède la fenêtre.
+            unsafe {
+                let mut msg: MSG = std::mem::zeroed();
+                while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            match rx.try_recv() {
+                Ok((effect, title)) => open(effect, &title),
+                Err(TryRecvError::Disconnected) => return,
+                Err(TryRecvError::Empty) => {}
+            }
+            if WINDOW.load(Ordering::Relaxed) != 0
+                && last_idle.elapsed() >= Duration::from_millis(30)
+            {
+                last_idle = Instant::now();
+                dispatch(EFF_EDIT_IDLE, std::ptr::null_mut());
+            }
+            std::thread::sleep(Duration::from_millis(8));
         }
     }
 }
