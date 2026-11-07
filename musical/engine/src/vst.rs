@@ -505,8 +505,12 @@ const OP_STATE: u8 = 6;
 /// Le panneau du plugin est ouvert (fenêtre de l'hôte).
 static EDITOR_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Demande d'ouverture du panneau : adresse de l'effet et titre de la fenêtre.
-pub type OpenEditor<'a> = &'a dyn Fn(usize, String) -> Result<(), String>;
+/// Travail à faire sur le fil du plugin (celui des fenêtres), et sa réponse.
+pub type Job = Box<dyn FnOnce() -> Result<Value, String> + Send>;
+/// Exécute un travail sur le fil du plugin et attend la réponse.
+pub type RunOnPluginThread<'a> = &'a dyn Fn(Job) -> Result<Value, String>;
+/// Le plugin, partagé : traitement du son d'un côté, tout le reste de l'autre.
+pub type PluginSlot = Arc<Mutex<Option<Plugin>>>;
 
 fn write_msg(w: &mut impl Write, tag: u8, payload: &[u8]) -> std::io::Result<()> {
     w.write_all(&[tag])?;
@@ -538,92 +542,87 @@ fn params_of(v: &Value) -> BTreeMap<String, f32> {
         .unwrap_or_default()
 }
 
+// SAFETY : comme dans tout hôte VST2, le plugin est utilisé depuis deux fils :
+// traitement du son d'un côté, pilotage et panneau de l'autre. Les accès
+// passent par un verrou (sauf les appels du panneau, que VST2 permet pendant
+// le traitement).
+unsafe impl Send for Plugin {}
+
 /// Boucle de l'hôte : un plugin, des messages jusqu'à la fermeture de l'entrée.
-/// `load` = chargement du plugin (DLL en vrai, plugin de test dans les tests).
+///
+/// Le son est traité ici même ; tout le reste (chargement, état, réglages,
+/// panneau) passe par `on_plugin_thread`, le fil qui gère les fenêtres : les
+/// plugins (JUCE notamment) exigent d'être créés et pilotés sur ce fil-là.
 pub fn serve(
     r: &mut impl Read,
     w: &mut impl Write,
-    load: impl Fn(&str) -> Result<Plugin, String>,
-    editor: OpenEditor,
+    plugin: PluginSlot,
+    load: fn(&str) -> Result<Plugin, String>,
+    open_editor: fn(usize, String) -> Result<(), String>,
+    on_plugin_thread: RunOnPluginThread,
 ) {
-    let mut plugin: Option<Plugin> = None;
-    let mut blocks = 0u32;
     while let Ok((op, payload)) = read_msg(r) {
-        let reply = match op {
-            OP_PROCESS => {
-                let mut buf: Vec<f32> = payload
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .map(|b| f32::from_le_bytes(*b))
-                    .collect();
-                if let Some(p) = plugin.as_mut() {
-                    // Plugin mono (deux exemplaires) : les réglages faits dans le
-                    // panneau du premier sont recopiés sur le second.
-                    blocks = blocks.wrapping_add(1);
-                    if blocks.is_multiple_of(16)
-                        && EDITOR_OPEN.load(std::sync::atomic::Ordering::Relaxed)
-                    {
-                        p.sync_copies();
-                    }
-                    p.process(&mut buf);
-                }
-                let out: Vec<u8> = buf.iter().flat_map(|x| x.to_le_bytes()).collect();
-                if write_msg(w, 0, &out).is_err() {
-                    return;
-                }
-                continue;
+        if op == OP_PROCESS {
+            let mut buf: Vec<f32> = payload
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect();
+            if let Some(p) = lock(&plugin).as_mut() {
+                p.process(&mut buf);
             }
-            OP_OPEN => {
-                let req: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
+            let out: Vec<u8> = buf.iter().flat_map(|x| x.to_le_bytes()).collect();
+            if write_msg(w, 0, &out).is_err() {
+                return;
+            }
+            continue;
+        }
+        let req: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
+        let slot = plugin.clone();
+        let job: Job = match op {
+            OP_OPEN => Box::new(move || {
                 let path = req.get("path").and_then(Value::as_str).unwrap_or("");
-                match load(path) {
-                    Ok(mut p) => {
-                        p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req));
-                        let state = p.state();
-                        plugin = Some(p);
-                        Ok(state)
+                let mut p = load(path)?;
+                p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req));
+                let state = p.state();
+                *lock(&slot) = Some(p);
+                Ok(state)
+            }),
+            OP_APPLY | OP_SET_PARAM | OP_STATE => Box::new(move || {
+                let mut guard = lock(&slot);
+                let p = guard.as_mut().ok_or("aucun plugin chargé")?;
+                match op {
+                    OP_APPLY => p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req)),
+                    OP_SET_PARAM => {
+                        let index = req.get("index").and_then(Value::as_i64).unwrap_or(-1) as i32;
+                        let value = req.get("value").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                        p.set_param(index, value);
                     }
-                    Err(e) => Err(e),
+                    _ => p.sync_copies(),
                 }
-            }
-            OP_APPLY | OP_SET_PARAM => {
-                let req: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
-                match plugin.as_mut() {
-                    Some(p) => {
-                        if op == OP_APPLY {
-                            p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req));
-                        } else {
-                            let index =
-                                req.get("index").and_then(Value::as_i64).unwrap_or(-1) as i32;
-                            let value =
-                                req.get("value").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                            p.set_param(index, value);
-                        }
-                        Ok(p.state())
-                    }
-                    None => Err("aucun plugin chargé".to_string()),
+                Ok(p.state())
+            }),
+            OP_EDITOR => Box::new(move || {
+                // Verrou relâché avant d'ouvrir : le son continue pendant ce temps.
+                let (effect, title, has_editor) = {
+                    let guard = lock(&slot);
+                    let p = guard.as_ref().ok_or("aucun plugin chargé")?;
+                    (
+                        p.instances[0].effect as usize,
+                        format!("{} — low-musical", p.name),
+                        p.has_editor(),
+                    )
+                };
+                if !has_editor {
+                    return Err("ce plugin n'a pas de panneau".into());
                 }
-            }
-            OP_EDITOR => match plugin.as_ref() {
-                Some(p) if p.has_editor() => editor(
-                    p.instances[0].effect as usize,
-                    format!("{} — low-musical", p.name),
-                )
-                .map(|_| json!({ "ok": true })),
-                Some(_) => Err("ce plugin n'a pas de panneau".to_string()),
-                None => Err("aucun plugin chargé".to_string()),
-            },
-            OP_STATE => match plugin.as_mut() {
-                Some(p) => {
-                    p.sync_copies();
-                    Ok(p.state())
-                }
-                None => Err("aucun plugin chargé".to_string()),
-            },
-            _ => Err("demande inconnue".to_string()),
+                open_editor(effect, title)?;
+                Ok(json!({ "ok": true }))
+            }),
+            _ => Box::new(|| Err("demande inconnue".into())),
         };
-        let (tag, body) = match reply {
+        let (tag, body) = match on_plugin_thread(job) {
             Ok(v) => (0, v.to_string()),
             Err(e) => (1, e),
         };
@@ -633,25 +632,48 @@ pub fn serve(
     }
 }
 
-/// Point d'entrée du processus hôte : les messages du moteur sur un fil, la
-/// fenêtre du panneau (boucle de messages Windows) sur le fil principal.
+#[cfg(windows)]
+fn open_editor_window(effect: usize, title: String) -> Result<(), String> {
+    gui::open(effect, &title)
+}
+
+#[cfg(not(windows))]
+fn open_editor_window(_: usize, _: String) -> Result<(), String> {
+    Err("panneau disponible seulement sous Windows".into())
+}
+
+/// Point d'entrée du processus hôte : les messages du moteur sur un fil, le
+/// plugin et sa fenêtre (boucle de messages Windows) sur le fil principal.
 pub fn host_main() {
-    let (tx, rx) = mpsc::channel::<(usize, String)>();
+    let plugin: PluginSlot = Arc::new(Mutex::new(None));
+    let (tx, rx) = mpsc::channel::<(Job, mpsc::Sender<Result<Value, String>>)>();
+    let reader_slot = plugin.clone();
     std::thread::spawn(move || {
         let stdin = std::io::stdin();
         let stdout = std::io::stdout();
-        let open = move |effect: usize, title: String| {
-            tx.send((effect, title))
-                .map_err(|_| "fenêtre indisponible".to_string())
+        let run = move |job: Job| -> Result<Value, String> {
+            let (reply_tx, reply_rx) = mpsc::channel();
+            tx.send((job, reply_tx))
+                .map_err(|_| "hôte arrêté".to_string())?;
+            reply_rx.recv().map_err(|_| "hôte arrêté".to_string())?
         };
-        serve(&mut stdin.lock(), &mut stdout.lock(), Plugin::load, &open);
+        serve(
+            &mut stdin.lock(),
+            &mut stdout.lock(),
+            reader_slot,
+            Plugin::load,
+            open_editor_window,
+            &run,
+        );
         // Entrée fermée : le moteur ne veut plus de ce plugin.
         std::process::exit(0);
     });
     #[cfg(windows)]
-    gui::run(rx);
+    gui::run(rx, plugin);
     #[cfg(not(windows))]
-    while rx.recv().is_ok() {}
+    for (job, reply) in rx {
+        let _ = reply.send(job());
+    }
 }
 
 // ── Côté moteur : un plugin dans son processus ──────────────────────────────
@@ -1099,8 +1121,10 @@ mod tests {
             serve(
                 &mut to_host_r,
                 &mut from_host_w,
+                Arc::new(Mutex::new(None)),
                 |_| Plugin::open(test_plugin::entry, None),
-                &|_, _| Err("pas de panneau".to_string()),
+                |_, _| Err("pas de panneau".to_string()),
+                &|job| job(),
             );
         });
         write_msg(
@@ -1189,8 +1213,10 @@ mod gui {
     };
 
     use super::{
-        AEffect, EDITOR_OPEN, EFF_EDIT_CLOSE, EFF_EDIT_GET_RECT, EFF_EDIT_IDLE, EFF_EDIT_OPEN,
+        AEffect, Job, PluginSlot, EDITOR_OPEN, EFF_EDIT_CLOSE, EFF_EDIT_GET_RECT, EFF_EDIT_IDLE,
+        EFF_EDIT_OPEN,
     };
+    use serde_json::Value;
 
     const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
 
@@ -1289,14 +1315,14 @@ mod gui {
         unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
     }
 
-    fn open(effect: usize, title: &str) {
+    pub fn open(effect: usize, title: &str) -> Result<(), String> {
         EFFECT.store(effect, Ordering::Relaxed);
         let existing = WINDOW.load(Ordering::Relaxed) as HWND;
         if !existing.is_null() {
             // Déjà ouvert : on le ramène devant.
             // SAFETY : fenêtre de ce processus.
             unsafe { SetForegroundWindow(existing) };
-            return;
+            return Ok(());
         }
         let class = wide("LowMusicalVstPanel");
         let title = wide(title);
@@ -1333,7 +1359,7 @@ mod gui {
                 std::ptr::null(),
             );
             if hwnd.is_null() {
-                return;
+                return Err("fenêtre du panneau impossible à créer".into());
             }
             WINDOW.store(hwnd as isize, Ordering::Relaxed);
             EDITOR_OPEN.store(true, Ordering::Relaxed);
@@ -1341,6 +1367,9 @@ mod gui {
             // Certains plugins ne connaissent leur taille qu'une fois ouverts.
             let (w2, h2) = editor_size();
             resize(w2, h2);
+            // Le premier ShowWindow d'un processus peut suivre le mode « caché »
+            // hérité du lancement : le second affiche à coup sûr.
+            ShowWindow(hwnd, SW_SHOWNORMAL);
             ShowWindow(hwnd, SW_SHOWNORMAL);
             // Devant tout le reste (la fenêtre du panneau low-musical peut être
             // « toujours au premier plan »), puis comportement normal.
@@ -1348,13 +1377,20 @@ mod gui {
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             SetForegroundWindow(hwnd);
         }
+        Ok(())
     }
 
-    /// Boucle de messages : fenêtre du panneau et « idle » du plugin (~30 fois/s).
-    pub fn run(rx: Receiver<(usize, String)>) {
+    /// Boucle du fil du plugin : messages Windows en continu (les plugins en
+    /// ont besoin même sans panneau ouvert), travaux demandés par le moteur,
+    /// « idle » du panneau (~30 fois/s) et recopie des réglages (plugin mono).
+    pub fn run(
+        rx: Receiver<(Job, std::sync::mpsc::Sender<Result<Value, String>>)>,
+        plugin: PluginSlot,
+    ) {
         let mut last_idle = Instant::now();
+        let mut last_sync = Instant::now();
         loop {
-            // SAFETY : boucle de messages standard du fil qui possède la fenêtre.
+            // SAFETY : boucle de messages standard du fil qui possède les fenêtres.
             unsafe {
                 let mut msg: MSG = std::mem::zeroed();
                 while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
@@ -1362,18 +1398,27 @@ mod gui {
                     DispatchMessageW(&msg);
                 }
             }
-            match rx.try_recv() {
-                Ok((effect, title)) => open(effect, &title),
-                Err(TryRecvError::Disconnected) => return,
-                Err(TryRecvError::Empty) => {}
+            loop {
+                match rx.try_recv() {
+                    Ok((job, reply)) => {
+                        let _ = reply.send(job());
+                    }
+                    Err(TryRecvError::Disconnected) => return,
+                    Err(TryRecvError::Empty) => break,
+                }
             }
-            if WINDOW.load(Ordering::Relaxed) != 0
-                && last_idle.elapsed() >= Duration::from_millis(30)
-            {
+            let open = WINDOW.load(Ordering::Relaxed) != 0;
+            if open && last_idle.elapsed() >= Duration::from_millis(30) {
                 last_idle = Instant::now();
                 dispatch(EFF_EDIT_IDLE, std::ptr::null_mut());
             }
-            std::thread::sleep(Duration::from_millis(8));
+            if open && last_sync.elapsed() >= Duration::from_millis(500) {
+                last_sync = Instant::now();
+                if let Some(p) = crate::lock(&plugin).as_mut() {
+                    p.sync_copies();
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
         }
     }
 }
