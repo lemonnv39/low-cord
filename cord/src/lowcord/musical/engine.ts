@@ -91,7 +91,7 @@ export interface MusicalPrefs {
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.5.0";
+export const MIN_ENGINE = "0.6.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -153,12 +153,32 @@ export const isOutdated = () => !!state.installed && olderThan(state.installed, 
 export const isActive = (a?: AccountState) => !!a?.state && a.state !== "disconnected" && a.state !== "error";
 export const isReady = (a?: AccountState) => a?.state === "connected" || a?.state === "connected_left" || a?.state === "in_voice";
 
+// ── Mesures du son (visualisation) ─────────────────────────────────────────
+// Gardées hors de React : elles arrivent 20 fois par seconde et sont lues
+// directement par l'animation, sans refaire le rendu du panneau.
+export interface Meter { level: number; peak: number; bands: number[]; at: number; }
+let meter: Meter | null = null;
+export const getMeter = () => meter;
+
+let meterWanted = false;
+
+/** Le panneau demande (ou plus) les mesures au moteur. */
+export function wantMeter(on: boolean) {
+    meterWanted = on;
+    if (!on) meter = null;
+    if (state.running) call("set_meter", { on }).catch(() => { });
+}
+
 let wired = false;
 
 function wire() {
     if (wired) return;
     wired = true;
     VencordNative.lowMusical.onEvent(msg => {
+        if (msg?.event === "meter" && Array.isArray(msg.bands)) {
+            meter = { level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands, at: performance.now() };
+            return;
+        }
         if (msg?.event === "status" && msg.data && typeof msg.data === "object") {
             if (typeof msg.account !== "string") {
                 set({ running: true, ...msg.data });
@@ -254,6 +274,7 @@ async function applyAudio() {
         call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }),
         call("set_eq", { bands: prefs.eq }),
         call("set_processing", processingArgs()),
+        call("set_meter", { on: meterWanted }),
     ]);
     // La source n'est relancée que si elle a été choisie à la main avant.
     if (prefs.source && !state.sourceOn) await setInput(prefs.source).catch(() => { });

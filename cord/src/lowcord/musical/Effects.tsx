@@ -54,6 +54,7 @@ export function SignalCard({ act }: { act: Act; }) {
     return (
         <Card
             title="Signal"
+            className={cl("card-signal")}
             icon={icon("M2 12h3l3-8 4 16 3-8h7")}
             extra={<button type="button" className={cl("icon-btn", "icon-btn-sm")} disabled={!music.running} onClick={loadInputs} title="Rafraîchir les sources"><RefreshIcon /></button>}
         >
@@ -125,6 +126,7 @@ export function EqCard() {
     return (
         <Card
             title="Égaliseur"
+            className={cl("card-eq")}
             icon={icon("M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6")}
             extra={
                 <span className={cl("card-actions")}>
@@ -219,7 +221,7 @@ export function SpaceCard() {
     const dotY = (1 - p.reverbDistance) * 100;
 
     return (
-        <Card title="Espace" icon={icon("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z")}>
+        <Card title="Espace" className={cl("card-space")} icon={icon("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z")}>
             <Segmented label="Mode 8D" value={p.eightdMode} options={MODES} onChange={m => set8d({ eightdMode: m })} />
 
             <div

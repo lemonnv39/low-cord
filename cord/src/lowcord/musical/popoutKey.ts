@@ -9,8 +9,8 @@
 import { PopoutActions, PopoutWindowStore, useStateFromStores } from "@webpack/common";
 
 // Les fenêtres de Discord portent toutes une clé « DISCORD_… ».
-// (« _2 » : nouvelle mise en page, on oublie la taille retenue pour l'ancienne.)
-export const WINDOW_KEY = "DISCORD_LOWMUSICAL_2";
+// (« _3 » : fenêtre transparente et nouvelle taille, on oublie l'ancienne.)
+export const WINDOW_KEY = "DISCORD_LOWMUSICAL_3";
 
 export const usePanelOpen = () => useStateFromStores([PopoutWindowStore], () => PopoutWindowStore.getWindowOpen(WINDOW_KEY));
 export const useAlwaysOnTop = () => useStateFromStores([PopoutWindowStore], () => PopoutWindowStore.getIsAlwaysOnTop(WINDOW_KEY));

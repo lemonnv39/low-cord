@@ -5,8 +5,10 @@
  */
 
 // low-musical — panneau de gestion. Il vit dans sa propre fenêtre (voir
-// window.tsx), sur une seule page en 4 blocs :
-//   Session (ta vocale, volume, comptes) · Signal · Égaliseur · Espace.
+// window.tsx), sur une seule page :
+//   Session · [titre + visualisation du son en direct] · Espace
+//             [ Signal ][ Égaliseur ]
+// Fond transparent : seuls les blocs sont visibles.
 // La fenêtre s'attrape n'importe où sur un fond vide pour la déplacer, y
 // compris sur un autre écran. La fermer ne coupe rien.
 
@@ -14,17 +16,17 @@ import "./panel.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
-import { ChannelStore, GuildStore, SelectedChannelStore, useEffect, useMemo, useState, useStateFromStores } from "@webpack/common";
+import { ChannelStore, GuildStore, SelectedChannelStore, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { Card, cl, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, connectAccounts, disconnect, type EngineState, errorText, followMe, getPrefs, isActive,
-    isOutdated, isReady, PREF_DEFAULTS, savePrefs, setFakeDeafen, setVolume, stopFollowing, useMusical,
+    isOutdated, isReady, PREF_DEFAULTS, savePrefs, setFakeDeafen, setVolume, stopFollowing, useMusical, wantMeter,
 } from "./engine";
-import { MusicalIcon } from "./LowMusicalTab";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
+import { Visualizer } from "./Visualizer";
 
 type Act = (fn: () => Promise<unknown>) => void;
 
@@ -327,8 +329,27 @@ function StatusPill() {
     return <span className={cl("pill", `pill-${tone}`)}><span className={cl("pill-dot")} />{text}</span>;
 }
 
+/** Fond transparent : on retire le fond de tout ce qui entoure le panneau dans sa fenêtre. */
+function useTransparentWindow(ref: React.RefObject<HTMLElement | null>) {
+    useEffect(() => {
+        const touched: [HTMLElement, string][] = [];
+        for (let el = ref.current?.parentElement; el; el = el.parentElement) {
+            touched.push([el, el.style.getPropertyValue("background")]);
+            el.style.setProperty("background", "transparent", "important");
+        }
+        return () => touched.forEach(([el, bg]) => el.style.setProperty("background", bg));
+    }, []);
+}
+
 function PanelBody({ onClose }: { onClose(): void; }) {
     useMusical();
+    const rootRef = useRef<HTMLDivElement>(null);
+    useTransparentWindow(rootRef);
+    // Mesures du son seulement tant que le panneau est ouvert.
+    useEffect(() => {
+        wantMeter(true);
+        return () => wantMeter(false);
+    }, []);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const onTop = useAlwaysOnTop();
@@ -347,35 +368,35 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     }
 
     return (
-        <div className={cl("panel")} onPointerDown={startDrag}>
-            <header className={cl("head")}>
-                <span className={cl("logo")}><MusicalIcon width={18} height={18} /></span>
-                <div className={cl("brand")}>
-                    <span className={cl("title")}>low-musical</span>
-                    <span className={cl("subtitle")}>diffusion audio · low-cord</span>
-                </div>
-                <StatusPill />
-                <span className={cl("head-space")} />
-                <button
-                    type="button"
-                    className={cl("icon-btn", onTop && "icon-btn-on")}
-                    onClick={() => setAlwaysOnTop(!onTop)}
-                    aria-label="Toujours au premier plan"
-                    aria-pressed={onTop}
-                    title="Toujours au premier plan"
-                ><PinIcon /></button>
-                <button type="button" className={cl("icon-btn")} onClick={onClose} aria-label="Fermer" title="Fermer (la diffusion continue)"><CloseIcon /></button>
-            </header>
-
-            {isOutdated() && (
-                <div className={cl("banner")}>
-                    Le moteur installé est trop ancien : Paramètres → low-musical → Mettre à jour, puis redémarre Discord.
-                </div>
-            )}
-            {error && <div className={cl("banner")} onClick={() => setError(null)} title="Cliquer pour masquer">{error}</div>}
-
+        <div ref={rootRef} className={cl("panel")} onPointerDown={startDrag}>
             <main className={cl("grid")}>
                 <SessionCard act={act} pending={pending} />
+
+                {/* Scène : titre + visualisation du son en direct */}
+                <div className={cl("stage")}>
+                    <Visualizer />
+                    <div className={cl("stage-text")}>
+                        <span className={cl("title")}>low-musical</span>
+                        <StatusPill />
+                    </div>
+                    <div className={cl("window-btns")}>
+                        <button
+                            type="button"
+                            className={cl("icon-btn", "icon-btn-glass", onTop && "icon-btn-on")}
+                            onClick={() => setAlwaysOnTop(!onTop)}
+                            aria-label="Toujours au premier plan"
+                            aria-pressed={onTop}
+                            title="Toujours au premier plan"
+                        ><PinIcon /></button>
+                        <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={onClose} aria-label="Fermer" title="Fermer (la diffusion continue)"><CloseIcon /></button>
+                    </div>
+                    {(isOutdated() || error) && (
+                        <div className={cl("banner")} onClick={() => setError(null)} title={error ? "Cliquer pour masquer" : undefined}>
+                            {isOutdated() ? "Moteur trop ancien : Paramètres → low-musical → Mettre à jour, puis redémarre Discord." : error}
+                        </div>
+                    )}
+                </div>
+
                 <SignalCard act={act} />
                 <EqCard />
                 <SpaceCard />

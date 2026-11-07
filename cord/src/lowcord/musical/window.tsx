@@ -20,7 +20,7 @@ import { WINDOW_KEY } from "./popoutKey";
 const PopoutWindow = findComponentByCodeLazy('"Missing guestWindow reference"');
 
 const WIDTH = 1240;
-const HEIGHT = 740;
+const HEIGHT = 800;
 
 export const closePanel = () => PopoutActions.close(WINDOW_KEY);
 
@@ -40,6 +40,7 @@ export function openPanel() {
                 <MusicalPanel onClose={closePanel} />
             </PopoutWindow>
         ),
-        { defaultWidth: WIDTH, defaultHeight: HEIGHT, left, top },
+        // Fond transparent : seuls les blocs du panneau sont visibles.
+        { defaultWidth: WIDTH, defaultHeight: HEIGHT, left, top, transparent: true, backgroundColor: "#00000000" } as any,
     );
 }

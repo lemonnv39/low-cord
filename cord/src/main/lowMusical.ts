@@ -163,7 +163,7 @@ async function uninstall(): Promise<MusicalStatus> {
 const ENGINE_COMMANDS = new Set([
     "version", "status", "devices",
     "connect", "disconnect", "leave", "set_follow", "set_fake_deafen", "set_bitrate", "set_volume",
-    "set_input", "set_gain", "set_latency", "set_8d", "set_reverb", "set_reverb_params", "set_eq", "set_processing",
+    "set_input", "set_gain", "set_latency", "set_8d", "set_reverb", "set_reverb_params", "set_eq", "set_processing", "set_meter",
 ]);
 const CALL_TIMEOUT = 15_000;
 
