@@ -47,10 +47,47 @@ export interface MusicalPrefs {
     bitrate: number;
     latency: number;
     accountId?: string;
+    /** 8D : 0 off, 1 auto (rotation), 2 manuel */
+    eightdMode: 0 | 1 | 2;
+    /** vitesse de rotation (Hz) */
+    eightdSpeed: number;
+    /** position gauche → droite [0..1] */
+    eightdPos: number;
+    reverb: boolean;
+    /** taille de la salle [0..1] */
+    reverbRoom: number;
+    /** distance (dosage réverbéré) [0..1] */
+    reverbDistance: number;
+    /** 10 bandes, en dB [-12..12] */
+    eq: number[];
+    eqPreset: string;
+    /** préréglage « Perso » enregistré */
+    eqCustom?: number[];
 }
 
 export const DEFAULT_INPUT = "__default__";
-export const PREF_DEFAULTS: MusicalPrefs = { gain: 0, bitrate: 128, latency: 200 };
+export const PREF_DEFAULTS: MusicalPrefs = {
+    gain: 0, bitrate: 128, latency: 200,
+    eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
+    reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
+    eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
+};
+
+export const EQ_LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+export const EQ_PRESETS: Record<string, number[]> = {
+    "Flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "Bass boost": [6, 5, 4, 2, 0, 0, 0, 0, 0, 0],
+    "Méga bass": [10, 9, 7, 4, 1, 0, 0, 0, 0, 0],
+    "Aigus boost": [0, 0, 0, 0, 0, 2, 4, 6, 7, 8],
+    "Voix": [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1],
+    "Jazz": [3, 2, 1, 2, -1, -1, 0, 1, 2, 3],
+    "Rap": [5, 4, 2, 1, -1, -1, 1, 2, 3, 2],
+    "Rock": [4, 3, 1, -1, -2, 0, 2, 3, 4, 4],
+    "Pop": [-1, 0, 2, 3, 3, 1, 0, -1, -1, -1],
+    "Électro": [4, 3, 0, -1, -2, 1, 1, 3, 4, 5],
+    "Loudness": [6, 4, 0, 0, -1, 0, 2, 4, 6, 3],
+};
+export const EQ_CUSTOM = "Perso";
 const PREFS_KEY = "lowmusical-prefs";
 
 let state: MusicalState = { running: false };
@@ -89,7 +126,10 @@ function wire() {
     });
     VencordNative.lowMusical.isInstalled().then(installed => set({ installed })).catch(() => { });
     DataStore.get<Partial<MusicalPrefs>>(PREFS_KEY).then(saved => {
-        if (saved && typeof saved === "object") prefs = { ...PREF_DEFAULTS, ...saved };
+        if (saved && typeof saved === "object") {
+            prefs = { ...PREF_DEFAULTS, ...saved };
+            if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
+        }
         emit();
     }).catch(() => { });
     refresh();
@@ -159,6 +199,10 @@ export async function connect(account: SavedAccount) {
         call("set_gain", { db: prefs.gain }),
         call("set_bitrate", { kbps: prefs.bitrate }),
         call("set_latency", { ms: prefs.latency }),
+        call("set_8d", { mode: prefs.eightdMode, speed: prefs.eightdSpeed, position: prefs.eightdPos }),
+        call("set_reverb", { on: prefs.reverb }),
+        call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }),
+        call("set_eq", { bands: prefs.eq }),
     ]);
     // La source n'est relancée que si elle a été choisie à la main avant.
     if (prefs.source) await setInput(prefs.source).catch(() => { });
@@ -193,6 +237,37 @@ export function setBitrate(kbps: number) {
 export function setLatency(ms: number) {
     savePrefs({ latency: ms });
     live(() => call("set_latency", { ms }));
+}
+
+export function set8d(patch: Partial<Pick<MusicalPrefs, "eightdMode" | "eightdSpeed" | "eightdPos">>) {
+    savePrefs(patch);
+    live(() => call("set_8d", { mode: prefs.eightdMode, speed: prefs.eightdSpeed, position: prefs.eightdPos }));
+}
+
+export function setReverb(on: boolean) {
+    savePrefs({ reverb: on });
+    live(() => call("set_reverb", { on }));
+}
+
+export function setReverbParams(patch: Partial<Pick<MusicalPrefs, "reverbRoom" | "reverbDistance">>) {
+    savePrefs(patch);
+    live(() => call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }));
+}
+
+/** Bandes de l'égaliseur ; `preset` = nom affiché (une bande touchée à la main repasse en « Perso »). */
+export function setEq(bands: number[], preset: string) {
+    savePrefs({ eq: bands, eqPreset: preset });
+    live(() => call("set_eq", { bands }));
+}
+
+export function applyEqPreset(name: string) {
+    const bands = name === EQ_CUSTOM ? prefs.eqCustom : EQ_PRESETS[name];
+    if (bands) setEq([...bands], name);
+}
+
+/** Enregistre les bandes actuelles comme préréglage « Perso ». */
+export function saveEqCustom() {
+    savePrefs({ eqCustom: [...prefs.eq], eqPreset: EQ_CUSTOM });
 }
 
 export const setFakeDeafen = (on: boolean) => call("set_fake_deafen", { on });

@@ -13,17 +13,17 @@ import "./panel.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
-import { classNameFactory } from "@utils/css";
 import { useEffect, useMemo, useRef, useState } from "@webpack/common";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
+import { cl, Section, Slider, Toggle } from "./controls";
+import { EqSection, SpatialSection } from "./Effects";
 import {
     connect, DEFAULT_INPUT, devices, disconnect, type EngineState, errorText, getPrefs, join, leave,
     PREF_DEFAULTS, setBitrate, setFakeDeafen, setFollow, setGain, setInput, setLatency, setPresence, useMusical,
 } from "./engine";
 import { MusicalIcon } from "./LowMusicalTab";
 
-const cl = classNameFactory("lc-mp-");
 
 const STATE_LABEL: Record<EngineState, string> = {
     connecting: "connexion…",
@@ -34,48 +34,6 @@ const STATE_LABEL: Record<EngineState, string> = {
     error: "erreur",
     disconnected: "déconnecté",
 };
-
-// ── Petits composants ───────────────────────────────────────────────────────
-
-function Slider({ label, value, display, min, max, step, reset, onChange }: {
-    label: string; value: number; display: string; min: number; max: number; step: number; reset: number;
-    onChange(v: number): void;
-}) {
-    return (
-        <label className={cl("slider")}>
-            <span className={cl("slider-head")}>
-                <span>{label}</span>
-                <span className={cl("value")}>{display}</span>
-            </span>
-            <input
-                type="range" min={min} max={max} step={step} value={value}
-                onChange={e => onChange(Number(e.currentTarget.value))}
-                onDoubleClick={() => onChange(reset)}
-                title="Double-clic : valeur par défaut"
-            />
-        </label>
-    );
-}
-
-function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): void; label: string; }) {
-    return (
-        <button role="switch" aria-checked={on} aria-label={label} className={cl("switch", on && "switch-on")} onClick={() => onChange(!on)}>
-            <span className={cl("knob")} />
-        </button>
-    );
-}
-
-function Section({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode; }) {
-    return (
-        <div className={cl("sec")}>
-            <div className={cl("sec-head")}>
-                <span>{title}</span>
-                {extra}
-            </div>
-            {children}
-        </div>
-    );
-}
 
 const HeadsetIcon = () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -157,6 +115,9 @@ function AudioColumn({ act }: { act(fn: () => Promise<unknown>): void; }) {
                     Le débit dépend aussi du salon : Discord peut le limiter.
                 </p>
             </Section>
+
+            <SpatialSection />
+            <EqSection />
         </div>
     );
 }
