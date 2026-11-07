@@ -164,7 +164,7 @@ const ENGINE_COMMANDS = new Set([
     "version", "status", "devices",
     "connect", "disconnect", "leave", "set_follow", "set_fake_deafen", "set_bitrate", "set_volume",
     "set_input", "set_gain", "set_latency", "set_space", "set_eq", "set_processing", "set_meter",
-    "join", "set_apo", "vst_param", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
+    "join", "set_apo", "vst_param", "vst_editor", "vst_state", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
 ]);
 const CALL_TIMEOUT = 15_000;
 

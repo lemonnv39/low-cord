@@ -164,7 +164,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.12.0";
+export const MIN_ENGINE = "0.13.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -885,6 +885,9 @@ export interface VstInfo {
     file?: string;
     error?: string | null;
     chunks?: boolean;
+    /** le plugin a un panneau (interface) et il est ouvert */
+    editor?: boolean;
+    editorOpen?: boolean;
     params?: { name: string; value: number; display: string; }[];
 }
 let apoVst: VstInfo[] = [];
@@ -1006,12 +1009,47 @@ export function getIrResponse(file: string): [number[], number[]] | undefined {
  * dans le set (ChunkData ou paramètres), comme APO : il est donc gardé.
  */
 export async function setVstParam(slot: number, index: number, value: number) {
-    const state = await call<VstInfo & { chunk?: string | null; }>("vst_param", { slot, index, value });
-    apoVst = apoVst.map((v, i) => (i === slot ? { ...v, params: state.params } : v));
+    adoptVstState(slot, await call<VstState>("vst_param", { slot, index, value }));
+}
+
+type VstState = VstInfo & { chunk?: string | null; };
+
+/** Nouvel état d'un plugin : affiché, et réécrit dans le set s'il a changé. */
+function adoptVstState(slot: number, state: VstState) {
+    apoVst = apoVst.map((v, i) => (i === slot ? { ...v, params: state.params, editorOpen: state.editorOpen } : v));
     const stage = apoStages().filter(s => s.t === "vst")[slot];
     if (stage?.t === "vst") {
         const line = vstLine(stage.lib, state.chunks ? state.chunk ?? null : null, state.chunks ? null : state.params ?? []);
-        savePrefs({ apoText: replaceLine(prefs.apoText, stage.line, line) });
+        const rows = prefs.apoText.split(/\r?\n/);
+        if (rows[stage.line - 1] !== line) savePrefs({ apoText: replaceLine(prefs.apoText, stage.line, line) });
     }
     emit();
+}
+
+const editorPolls = new Map<number, ReturnType<typeof setInterval>>();
+
+/**
+ * Ouvre le panneau du plugin (sa vraie fenêtre, comme « Open panel » dans
+ * APO). Tant qu'il est ouvert, ses réglages sont relus chaque seconde et
+ * gardés dans le set ; une dernière fois à sa fermeture.
+ */
+export async function openVstEditor(slot: number) {
+    await call("vst_editor", { slot });
+    apoVst = apoVst.map((v, i) => (i === slot ? { ...v, editorOpen: true } : v));
+    emit();
+    if (editorPolls.has(slot)) return;
+    const timer = setInterval(async () => {
+        try {
+            const state = await call<VstState>("vst_state", { slot });
+            adoptVstState(slot, state);
+            if (!state.editorOpen) {
+                clearInterval(timer);
+                editorPolls.delete(slot);
+            }
+        } catch {
+            clearInterval(timer);
+            editorPolls.delete(slot);
+        }
+    }, 1000);
+    editorPolls.set(slot, timer);
 }

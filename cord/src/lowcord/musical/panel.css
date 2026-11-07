@@ -2221,10 +2221,26 @@
     background: rgb(0 0 0 / 22%);
 }
 
+.lc-mp-apo-vst-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.lc-mp-apo-vst-panel {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    font-size: 11.5px;
+}
+
 .lc-mp-apo-vst-head {
     display: flex;
+    overflow: hidden;
+    flex: 1;
     align-items: baseline;
     gap: 8px;
+    min-width: 0;
     padding: 0;
     border: 0;
     background: none;

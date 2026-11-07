@@ -15,8 +15,8 @@ import { useEffect, useMemo, useRef, useState } from "@webpack/common";
 import { APO_EXAMPLE, APO_FREQS as FREQS, apoResponse, type ApoStage, parseApo, removeLine, toggleFilterLine } from "./apo";
 import { cl, Dropdown, Toggle } from "./controls";
 import {
-    deleteApoSet, deleteIr, getApoError, getApoVst, getIrResponse, getPrefs, getVstFiles, importIrs, loadApoSet, openVstFolder,
-    refreshVstFiles, saveApoSet, setApoOn, setApoText, setVstParam, useMusical, type VstInfo,
+    deleteApoSet, deleteIr, getApoError, getApoVst, getIrResponse, getPrefs, getVstFiles, importIrs, loadApoSet, openVstEditor, openVstFolder,
+refreshVstFiles, saveApoSet, setApoOn, setApoText, setVstParam, useMusical, type VstInfo,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -339,11 +339,21 @@ function VstSection({ act, files, stages, append, error }: {
                 if (s.t !== "vst") return null;
                 return (
                     <div key={`${s.line}-${s.lib}`} className={cl("apo-vst")}>
-                        <button type="button" className={cl("apo-vst-head")} onClick={() => setOpen(open === slot ? null : slot)} aria-expanded={open === slot}>
-                            <span className={cl("apo-vst-name")}>{info?.name || s.lib}</span>
-                            {info?.vendor && <span className={cl("apo-vst-vendor")}>{info.vendor}</span>}
-                            <span className={cl("apo-vst-count")}>{info?.error ? "erreur" : `${info?.params?.length ?? 0} réglages`}</span>
-                        </button>
+                        <div className={cl("apo-vst-top")}>
+                            <button type="button" className={cl("apo-vst-head")} onClick={() => setOpen(open === slot ? null : slot)} aria-expanded={open === slot}>
+                                <span className={cl("apo-vst-name")}>{info?.name || s.lib}</span>
+                                {info?.vendor && <span className={cl("apo-vst-vendor")}>{info.vendor}</span>}
+                                <span className={cl("apo-vst-count")}>{info?.error ? "erreur" : `${info?.params?.length ?? 0} réglages`}</span>
+                            </button>
+                            {info?.editor && !info.error && (
+                                <button
+                                    type="button"
+                                    className={cl("btn", "btn-sm", "apo-vst-panel", info.editorOpen && "btn-on")}
+                                    onClick={() => act(() => openVstEditor(slot))}
+                                    title="Ouvre l'interface du plugin (comme « Open panel » dans Equalizer APO). Tes réglages sont gardés dans le set."
+                                >{info.editorOpen ? "Panneau ouvert" : "Ouvrir le panneau"}</button>
+                            )}
+                        </div>
                         {info?.error && <p className={cl("error-line")}>{info.error}</p>}
                         {open === slot && !info?.error && (
                             <div className={cl("apo-vst-params", "scroll")}>
