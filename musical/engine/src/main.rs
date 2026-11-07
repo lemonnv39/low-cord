@@ -21,6 +21,7 @@ mod audio;
 mod dsp;
 mod engine;
 mod proto;
+mod sound;
 mod space;
 
 use serde_json::{json, Value};
@@ -130,6 +131,26 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
 
         // Audio
         "set_input" => done(audio::set_input(text(r, "name"))),
+        // Soundboard
+        "sb_load" => sound::load(&need(r, "sound")?, &need(r, "path")?).map(|ms| json!(ms)),
+        "sb_unload" => {
+            sound::unload(&need(r, "sound")?);
+            Ok(Value::Null)
+        }
+        "sb_play" => done(sound::play(
+            &need(r, "sound")?,
+            r.get("volume")
+                .and_then(Value::as_f64)
+                .map_or(1.0, |v| v as f32),
+        )),
+        "sb_stop" => {
+            sound::stop_all();
+            Ok(Value::Null)
+        }
+        "sb_volume" => {
+            sound::set_volume(num(r, "volume")? as f32);
+            Ok(Value::Null)
+        }
         "set_meter" => {
             audio::set_meter(flag(r, "on")?);
             Ok(Value::Null)

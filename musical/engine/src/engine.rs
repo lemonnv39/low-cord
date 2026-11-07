@@ -642,7 +642,13 @@ async fn run_session(
             }
 
             maybe_cmd = cmd_rx.recv() => match maybe_cmd {
-                Some(Cmd::Join { guild, channel }) => go_to!(guild, channel),
+                Some(Cmd::Join { guild, channel }) => {
+                    // Déjà dans ce salon (ou en route) : rien à refaire.
+                    let tgt = (guild, channel);
+                    if st.current.as_ref() != Some(&tgt) && pending.as_ref() != Some(&tgt) {
+                        go_to!(tgt.0, tgt.1);
+                    }
+                }
                 Some(Cmd::Leave) => {
                     if let Some((g, _)) = st.current.take() {
                         send(leave_voice(&g));

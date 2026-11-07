@@ -112,6 +112,24 @@ impl Biquad {
             1.0 - alpha,
         );
     }
+    /// Étagère basse (pente 1) : gain appliqué sous f0.
+    pub fn set_lowshelf(&mut self, f0: f32, fs: f32, gain_db: f32) {
+        let a = 10f32.powf(gain_db / 40.0);
+        let w0 = std::f32::consts::TAU * f0 / fs;
+        let cw = w0.cos();
+        let alpha = w0.sin() / 2.0 * std::f32::consts::SQRT_2;
+        let sa = 2.0 * a.sqrt() * alpha;
+        self.set(
+            [
+                a * ((a + 1.0) - (a - 1.0) * cw + sa),
+                2.0 * a * ((a - 1.0) - (a + 1.0) * cw),
+                a * ((a + 1.0) - (a - 1.0) * cw - sa),
+            ],
+            (a + 1.0) + (a - 1.0) * cw + sa,
+            -2.0 * ((a - 1.0) + (a + 1.0) * cw),
+            (a + 1.0) + (a - 1.0) * cw - sa,
+        );
+    }
     /// Étagère haute (pente 1) : gain appliqué au-dessus de f0.
     pub fn set_highshelf(&mut self, f0: f32, fs: f32, gain_db: f32) {
         let a = 10f32.powf(gain_db / 40.0);
@@ -220,6 +238,10 @@ pub struct Params {
     pub mb_amount: f32,
     /// Écrêteur doux [0..1] (0 = off).
     pub clipper: f32,
+    /// Molettes de tonalité (dB, ±12) : graves, médiums, aigus.
+    pub bass: f32,
+    pub mid: f32,
+    pub treble: f32,
 }
 
 impl Default for Params {
@@ -245,6 +267,9 @@ impl Default for Params {
             multiband: false,
             mb_amount: 0.5,
             clipper: 0.0,
+            bass: 0.0,
+            mid: 0.0,
+            treble: 0.0,
         }
     }
 }
@@ -283,6 +308,9 @@ impl Params {
             multiband: b("multiband", d.multiband),
             mb_amount: n("mbAmount", d.mb_amount).clamp(0.0, 1.0),
             clipper: n("clipper", d.clipper).clamp(0.0, 1.0),
+            bass: n("bass", d.bass).clamp(-12.0, 12.0),
+            mid: n("mid", d.mid).clamp(-12.0, 12.0),
+            treble: n("treble", d.treble).clamp(-12.0, 12.0),
         }
     }
 
@@ -295,6 +323,7 @@ impl Params {
             "balance": self.balance, "bassMono": self.bass_mono, "bassPlus": self.bass_plus,
             "clarity": self.clarity, "deesser": self.deesser, "multiband": self.multiband,
             "mbAmount": self.mb_amount, "clipper": self.clipper,
+            "bass": self.bass, "mid": self.mid, "treble": self.treble,
         })
     }
 }
@@ -426,10 +455,6 @@ impl Env {
             a: coef(attack_ms),
             r: coef(release_ms),
         }
-    }
-    fn set(&mut self, attack_ms: f32, release_ms: f32) {
-        self.a = coef(attack_ms);
-        self.r = coef(release_ms);
     }
     fn next(&mut self, x: f32) -> f32 {
         let c = if x > self.v { self.a } else { self.r };
@@ -673,12 +698,56 @@ impl Deesser {
     }
 }
 
+// ── Réduction de gain douce ─────────────────────────────────────────────────
+// Le niveau est mesuré en valeur efficace (pas crête par crête) et la
+// réduction elle-même varie en douceur : le gain ne suit jamais l'onde, donc
+// aucune distorsion « ampli » sur les basses, aucun grésillement.
+
+struct SmoothComp {
+    power: f32,
+    k: f32,
+    red: f32,
+    atk: f32,
+    rel: f32,
+}
+
+impl SmoothComp {
+    fn new(attack_ms: f32, release_ms: f32) -> Self {
+        SmoothComp {
+            power: 0.0,
+            k: 1.0 - coef(20.0),
+            red: 0.0,
+            atk: 1.0 - coef(attack_ms),
+            rel: 1.0 - coef(release_ms),
+        }
+    }
+    fn set(&mut self, attack_ms: f32, release_ms: f32) {
+        self.atk = 1.0 - coef(attack_ms);
+        self.rel = 1.0 - coef(release_ms);
+    }
+    /// Réduction (dB) pour un échantillon stéréo, stéréo liée.
+    fn reduction(&mut self, l: f32, r: f32, threshold: f32, ratio: f32) -> f32 {
+        let m = (l * l + r * r) * 0.5;
+        self.power += (m - self.power) * self.k;
+        // +3 dB : niveau ramené à l'échelle des crêtes (une sinusoïde à 0 dBFS vaut 0 dB).
+        let level = 10.0 * self.power.max(1e-12).log10() + 3.0;
+        let target = reduction_db(level, threshold, ratio);
+        let c = if target > self.red {
+            self.atk
+        } else {
+            self.rel
+        };
+        self.red += (target - self.red) * c;
+        self.red
+    }
+}
+
 // ── Compression multibande (graves / médiums / aigus) ───────────────────────
 // Séparation Linkwitz-Riley à 150 Hz et 3 kHz (les bandes se ressomment sans
 // creux), une compression par bande, stéréo liée.
 
 struct Band {
-    env: Env,
+    comp: SmoothComp,
     threshold: f32,
     ratio: f32,
 }
@@ -708,17 +777,17 @@ impl Multiband {
             ap_hp: [Lr4::highpass(MB_F2); 2],
             bands: [
                 Band {
-                    env: Env::new(30.0, 250.0),
+                    comp: SmoothComp::new(40.0, 300.0),
                     threshold: -20.0,
                     ratio: 3.0,
                 },
                 Band {
-                    env: Env::new(15.0, 150.0),
+                    comp: SmoothComp::new(20.0, 200.0),
                     threshold: -22.0,
                     ratio: 3.0,
                 },
                 Band {
-                    env: Env::new(5.0, 80.0),
+                    comp: SmoothComp::new(10.0, 120.0),
                     threshold: -24.0,
                     ratio: 3.0,
                 },
@@ -728,7 +797,7 @@ impl Multiband {
     fn configure(&mut self, amount: f32) {
         for (i, b) in self.bands.iter_mut().enumerate() {
             b.threshold = -14.0 - 2.0 * i as f32 - 16.0 * amount;
-            b.ratio = 2.0 + 2.5 * amount;
+            b.ratio = 1.5 + 2.0 * amount;
         }
     }
     fn split(&mut self, x: f32, ch: usize) -> [f32; 3] {
@@ -745,8 +814,9 @@ impl Multiband {
         let br = self.split(r, 1);
         let (mut ol, mut or, mut most) = (0.0, 0.0, 0.0f32);
         for (i, band) in self.bands.iter_mut().enumerate() {
-            let level = lin_to_db(band.env.next(bl[i].abs().max(br[i].abs())));
-            let red = reduction_db(level, band.threshold, band.ratio);
+            let red = band
+                .comp
+                .reduction(bl[i], br[i], band.threshold, band.ratio);
             most = most.max(red);
             let g = db_to_lin(-red);
             ol += bl[i] * g;
@@ -759,38 +829,37 @@ impl Multiband {
 // ── Compresseur (3 modes) ───────────────────────────────────────────────────
 
 struct Compressor {
-    env: Env,
+    comp: SmoothComp,
     mode: u8,
 }
 
-/// (seuil à intensité 0, seuil à intensité 1, rapport, attaque ms, relâchement ms, poussée dB)
-fn comp_mode(mode: u8) -> (f32, f32, f32, f32, f32, f32) {
+/// (seuil à intensité 0, seuil à intensité 1, rapport, attaque ms, relâchement ms)
+fn comp_mode(mode: u8) -> (f32, f32, f32, f32, f32) {
     match mode {
-        // Fort & propre : tient le niveau très haut, pousse vers le limiteur.
-        1 => (-14.0, -34.0, 4.0, 6.0, 120.0, 4.0),
+        // Fort & propre : tient le niveau haut et régulier.
+        1 => (-14.0, -32.0, 3.0, 12.0, 200.0),
         // Punch : attaque lente, les coups de batterie passent avant la compression.
-        2 => (-12.0, -30.0, 3.0, 35.0, 80.0, 2.0),
+        2 => (-12.0, -28.0, 2.5, 35.0, 150.0),
         // Propre : léger, pour « coller » le son sans qu'on l'entende travailler.
-        _ => (-12.0, -30.0, 2.0, 25.0, 300.0, 0.0),
+        _ => (-12.0, -30.0, 2.0, 20.0, 250.0),
     }
 }
 
 impl Compressor {
     fn new() -> Self {
         Compressor {
-            env: Env::new(25.0, 300.0),
+            comp: SmoothComp::new(20.0, 250.0),
             mode: 255,
         }
     }
     fn process(&mut self, l: f32, r: f32, p: &Params) -> (f32, f32, f32) {
-        let (t0, t1, ratio, attack, release, _) = comp_mode(p.comp_mode);
+        let (t0, t1, ratio, attack, release) = comp_mode(p.comp_mode);
         if self.mode != p.comp_mode {
             self.mode = p.comp_mode;
-            self.env.set(attack, release);
+            self.comp.set(attack, release);
         }
         let threshold = t0 + (t1 - t0) * p.comp_amount;
-        let level = lin_to_db(self.env.next(l.abs().max(r.abs())));
-        let red = reduction_db(level, threshold, ratio);
+        let red = self.comp.reduction(l, r, threshold, ratio);
         let g = db_to_lin(-red);
         (l * g, r * g, red)
     }
@@ -798,8 +867,8 @@ impl Compressor {
 
 // ── Compensation automatique du volume ──────────────────────────────────────
 // Compare le niveau avant et après la compression (sur ~2 s) et rattrape la
-// différence : activer un compresseur ne baisse plus le son. Le mode ajoute
-// ensuite sa poussée (Fort & propre +4 dB, Punch +2 dB).
+// différence : activer un compresseur ne baisse plus le son, et ne le monte
+// pas non plus (aucune poussée qui ferait saturer).
 
 struct Loudness {
     pre: f32,
@@ -820,9 +889,9 @@ impl Loudness {
         *slot += (m - *slot) * (1.0 - coef(2000.0));
     }
     /// Gain de compensation, recalculé une fois par bloc.
-    fn update(&mut self, push_db: f32) {
+    fn update(&mut self) {
         let target = if self.pre > 1e-9 && self.post > 1e-9 {
-            ((self.pre / self.post).sqrt() * db_to_lin(push_db)).clamp(1.0, 32.0)
+            (self.pre / self.post).sqrt().clamp(1.0, 32.0)
         } else {
             self.gain
         };
@@ -868,10 +937,14 @@ impl Clipper {
 // compris entre les échantillons). Plafond −1 dBFS, jamais dépassé.
 
 pub const CEILING: f32 = 0.891;
+/// Protection toujours active quand le limiteur est éteint : jamais au-delà de
+/// ~0 dBFS, donc jamais d'écrêtage dur (grésillement) dans Discord.
+pub const SAFETY: f32 = 0.98;
 const LOOK: usize = (OUT_RATE as usize * 4) / 1000;
 const LIMIT_DELAY: usize = LOOK - 1 + OS_DELAY;
 
 struct Limiter {
+    ceiling: f32,
     detect: [Oversampler; 2],
     delay: VecDeque<(f32, f32)>,
     // Minimum glissant des gains voulus : (indice, gain), croissant.
@@ -884,8 +957,9 @@ struct Limiter {
 }
 
 impl Limiter {
-    fn new() -> Self {
+    fn new(ceiling: f32) -> Self {
         Limiter {
+            ceiling,
             detect: [Oversampler::new(), Oversampler::new()],
             delay: VecDeque::from(vec![(0.0, 0.0); LIMIT_DELAY]),
             mins: VecDeque::new(),
@@ -902,7 +976,11 @@ impl Limiter {
             .iter()
             .chain(self.detect[1].upsample(r).iter())
             .fold(0.0f32, |m, v| m.max(v.abs()));
-        let want = if peak > CEILING { CEILING / peak } else { 1.0 };
+        let want = if peak > self.ceiling {
+            self.ceiling / peak
+        } else {
+            1.0
+        };
 
         // Minimum des gains voulus sur la fenêtre d'anticipation.
         self.n += 1;
@@ -933,11 +1011,44 @@ impl Limiter {
         self.delay.push_back((l, r));
         let (dl, dr) = self.delay.pop_front().unwrap_or((0.0, 0.0));
         // Filet de sécurité : jamais au-delà du plafond.
-        (
-            (dl * g).clamp(-CEILING, CEILING),
-            (dr * g).clamp(-CEILING, CEILING),
-            -lin_to_db(g),
-        )
+        let c = self.ceiling;
+        ((dl * g).clamp(-c, c), (dr * g).clamp(-c, c), -lin_to_db(g))
+    }
+}
+
+// ── Tonalité (molettes graves / médiums / aigus) ────────────────────────────
+
+struct Tone {
+    low: [Biquad; 2],
+    mid: [Biquad; 2],
+    high: [Biquad; 2],
+    at: (f32, f32, f32),
+}
+
+impl Tone {
+    fn new() -> Self {
+        Tone {
+            low: [Biquad::default(); 2],
+            mid: [Biquad::default(); 2],
+            high: [Biquad::default(); 2],
+            at: (0.0, 0.0, 0.0),
+        }
+    }
+    fn update(&mut self, p: &Params) {
+        if self.at == (p.bass, p.mid, p.treble) {
+            return;
+        }
+        self.at = (p.bass, p.mid, p.treble);
+        for ch in 0..2 {
+            self.low[ch].set_lowshelf(120.0, FS, p.bass);
+            self.mid[ch].set_peaking(1000.0, FS, 0.8, p.mid);
+            self.high[ch].set_highshelf(6000.0, FS, p.treble);
+        }
+    }
+    fn channel(&mut self, x: f32, ch: usize) -> f32 {
+        let a = self.low[ch].process(x);
+        let b = self.mid[ch].process(a);
+        self.high[ch].process(b)
     }
 }
 
@@ -954,6 +1065,8 @@ pub struct Chain {
     loudness: Loudness,
     clipper: Clipper,
     limiter: Limiter,
+    safety: Limiter,
+    tone: Tone,
     mb_amount: f32,
 }
 
@@ -969,7 +1082,9 @@ impl Chain {
             comp: Compressor::new(),
             loudness: Loudness::new(),
             clipper: Clipper::new(),
-            limiter: Limiter::new(),
+            limiter: Limiter::new(CEILING),
+            safety: Limiter::new(SAFETY),
+            tone: Tone::new(),
             mb_amount: -1.0,
         };
         c.multiband.configure(0.5);
@@ -999,17 +1114,25 @@ impl Chain {
             self.mb_amount = p.mb_amount;
             self.multiband.configure(p.mb_amount);
         }
-        let push = if p.compressor {
-            comp_mode(p.comp_mode).5 * p.comp_amount
-        } else {
-            0.0
-        };
-        self.loudness.update(push);
+        self.loudness.update();
+        self.tone.update(p);
     }
 
-    /// Fin de chaîne, échantillon par échantillon.
-    pub fn back(&mut self, l: f32, r: f32, p: &Params, volume: f32) -> (f32, f32) {
+    /// Fin de chaîne, échantillon par échantillon. `extra` = soundboard,
+    /// ajoutée juste avant le volume et la protection.
+    pub fn back(
+        &mut self,
+        l: f32,
+        r: f32,
+        p: &Params,
+        volume: f32,
+        extra: (f32, f32),
+    ) -> (f32, f32) {
         let (mut l, mut r) = (l, r);
+        if p.bass != 0.0 || p.mid != 0.0 || p.treble != 0.0 {
+            l = self.tone.channel(l, 0);
+            r = self.tone.channel(r, 1);
+        }
         if p.bass_plus > 0.0 {
             (l, r) = self.bass_plus.process(l, r, p.bass_plus);
         }
@@ -1053,14 +1176,17 @@ impl Chain {
             r = self.clipper.channel(r, 1, p.clipper);
         }
 
-        l *= volume;
-        r *= volume;
-        if p.limiter {
-            let (a, b, red) = self.limiter.process(l, r);
-            note_gr(limit_gr(), red);
-            (l, r) = (a, b);
-        }
-        (l, r)
+        l = (l + extra.0) * volume;
+        r = (r + extra.1) * volume;
+        // Limiteur à −1 dB, ou à défaut la protection à 0 dB : jamais de saturation.
+        let lim = if p.limiter {
+            &mut self.limiter
+        } else {
+            &mut self.safety
+        };
+        let (a, b, red) = lim.process(l, r);
+        note_gr(limit_gr(), red);
+        (a, b)
     }
 }
 
@@ -1089,7 +1215,7 @@ mod tests {
         for block in input.chunks(480) {
             c.begin_block(p);
             for &x in block {
-                out.push(c.back(x, x, p, 1.0).0);
+                out.push(c.back(x, x, p, 1.0, (0.0, 0.0)).0);
             }
         }
         out
@@ -1179,6 +1305,68 @@ mod tests {
     }
 
     #[test]
+    fn compresseur_sans_distorsion_sur_les_basses() {
+        // Une basse à 60 Hz bien compressée ne doit pas gagner d'harmoniques
+        // (c'était la saturation « ampli »).
+        let p = Params {
+            compressor: true,
+            comp_mode: 1,
+            comp_amount: 1.0,
+            ..Params::default()
+        };
+        let out = run_back(&p, &sine(60.0, 0.8, 3.0));
+        // Trois passe-bandes en cascade : la mesure à 180 Hz ne voit plus le 60 Hz.
+        let band = |hz: f32| {
+            let mut f = [Biquad::default(); 3];
+            for b in f.iter_mut() {
+                b.set_bandpass(hz, FS, 8.0);
+            }
+            let filtered: Vec<f32> = out
+                .iter()
+                .map(|&x| {
+                    let a = f[0].process(x);
+                    let b = f[1].process(a);
+                    f[2].process(b)
+                })
+                .collect();
+            rms(tail(&filtered))
+        };
+        let (fundamental, third) = (band(60.0), band(180.0));
+        assert!(
+            third < fundamental * 0.01,
+            "harmonique {third} / {fundamental}"
+        );
+        assert!(peak(tail(&out)) <= SAFETY + 1e-6);
+    }
+
+    #[test]
+    fn protection_même_sans_limiteur() {
+        let p = Params {
+            limiter: false,
+            ..Params::default()
+        };
+        let mut c = Chain::new();
+        let out: Vec<f32> = sine(300.0, 2.5, 0.5)
+            .iter()
+            .map(|&x| c.back(x, x, &p, 1.0, (0.0, 0.0)).0)
+            .collect();
+        assert!(peak(&out) <= SAFETY + 1e-6);
+    }
+
+    #[test]
+    fn molettes_de_tonalité() {
+        let p = Params {
+            bass: 12.0,
+            treble: -12.0,
+            ..Params::default()
+        };
+        let low = run_back(&p, &sine(50.0, 0.05, 0.5));
+        let high = run_back(&p, &sine(12000.0, 0.05, 0.5));
+        assert!(rms(tail(&low)) > 0.05 / std::f32::consts::SQRT_2 * 3.0);
+        assert!(rms(tail(&high)) < 0.05 / std::f32::consts::SQRT_2 * 0.35);
+    }
+
+    #[test]
     fn compresseur_resserre_les_écarts() {
         let p = Params {
             compressor: true,
@@ -1191,7 +1379,7 @@ mod tests {
         let mut level = |amp: f32| {
             let out: Vec<f32> = sine(440.0, amp, 0.5)
                 .iter()
-                .map(|&x| c.back(x, x, &p, 1.0).0)
+                .map(|&x| c.back(x, x, &p, 1.0, (0.0, 0.0)).0)
                 .collect();
             rms(tail(&out))
         };
@@ -1356,7 +1544,7 @@ mod tests {
             c.front(block, &p);
             c.begin_block(&p);
             for f in block.as_chunks_mut::<2>().0 {
-                (f[0], f[1]) = c.back(f[0], f[1], &p, 1.0);
+                (f[0], f[1]) = c.back(f[0], f[1], &p, 1.0, (0.0, 0.0));
             }
         }
         let took = start.elapsed().as_secs_f32();

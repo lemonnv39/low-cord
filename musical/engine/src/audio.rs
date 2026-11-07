@@ -6,7 +6,7 @@
 
 use std::collections::VecDeque;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -82,6 +82,9 @@ pub fn set_gain(db: f32) {
 /// Active ou coupe l'envoi des mesures du son (niveau, spectre) au panneau.
 pub fn set_meter(on: bool) {
     meter_on().store(on, Ordering::Relaxed);
+    if on {
+        wake_pump();
+    }
 }
 
 /// Volume général (0 à 2, soit 0 à 200 %), commun à tous les comptes.
@@ -190,15 +193,88 @@ impl Dsp {
         // Espace (position 360°, pièce), puis couleur et traitement « fort et propre ».
         self.space.process(buf, &space::current());
         self.chain.begin_block(&p);
-        for frame in buf.as_chunks_mut::<2>().0 {
+        let sb = crate::sound::mix(buf.len() / 2);
+        for (i, frame) in buf.as_chunks_mut::<2>().0.iter_mut().enumerate() {
             let (mut l, mut r) = self.width.process(frame[0], frame[1], &p);
             if eq_active {
                 l = self.eq.process(l, 0);
                 r = self.eq.process(r, 1);
             }
-            (frame[0], frame[1]) = self.chain.back(l, r, &p, vol);
+            (frame[0], frame[1]) = self.chain.back(l, r, &p, vol, sb_frame(&sb, i));
         }
     }
+}
+
+/// Échantillon stéréo de la soundboard (silence s'il n'y a pas de son en cours).
+fn sb_frame(sb: &Option<Vec<f32>>, i: usize) -> (f32, f32) {
+    sb.as_ref().map_or((0.0, 0.0), |v| (v[i * 2], v[i * 2 + 1]))
+}
+
+/// Traitement complet d'un bloc : effets, mesures, envoi aux comptes.
+struct Pipeline {
+    dsp: Dsp,
+    meter: Meter,
+}
+
+impl Pipeline {
+    fn new() -> Self {
+        Pipeline {
+            dsp: Dsp::new(),
+            meter: Meter::new(),
+        }
+    }
+    fn run(&mut self, block: &mut [f32]) {
+        self.dsp.process(block);
+        if meter_on().load(Ordering::Relaxed) {
+            for reading in self.meter.feed(block) {
+                send_meter(&reading);
+            }
+        }
+        distribute(block);
+    }
+}
+
+// ── Horloge de secours ──────────────────────────────────────────────────────
+// Sans source audio (aucune capture), personne ne fait avancer le son : la
+// soundboard resterait muette. Ce fil prend alors le relais, au rythme réel
+// (10 ms à la fois), avec du silence en entrée. Il ne travaille que si une
+// capture est absente ET que quelqu'un écoute (comptes en vocal, panneau
+// ouvert ou sons en cours).
+
+global!(active_captures: AtomicUsize = AtomicUsize::new(0));
+
+pub fn wake_pump() {
+    static STARTED: OnceLock<()> = OnceLock::new();
+    STARTED.get_or_init(|| {
+        std::thread::Builder::new()
+            .name("low-musical-horloge".into())
+            .spawn(|| {
+                const FRAMES: usize = OUT_RATE as usize / 100;
+                let period = std::time::Duration::from_millis(10);
+                let mut pipeline = Pipeline::new();
+                let mut block = vec![0.0f32; FRAMES * 2];
+                let mut next = std::time::Instant::now();
+                loop {
+                    next += period;
+                    let needed = active_captures().load(Ordering::Relaxed) == 0
+                        && (crate::sound::playing()
+                            || meter_on().load(Ordering::Relaxed)
+                            || !lock(consumers()).is_empty());
+                    if needed {
+                        block.fill(0.0);
+                        pipeline.run(&mut block);
+                    }
+                    let now = std::time::Instant::now();
+                    if next > now {
+                        std::thread::sleep(next - now);
+                    } else if now - next > period * 10 {
+                        // Trop de retard (PC en veille…) : on repart de maintenant.
+                        next = now;
+                    }
+                }
+            })
+            .ok();
+    });
 }
 
 // ── Mesures du son ──────────────────────────────────────────────────────────
@@ -338,6 +414,7 @@ impl LiveSource {
     pub fn new() -> Self {
         let ring: Ring = Arc::new(Mutex::new(VecDeque::new()));
         lock(consumers()).push(Arc::downgrade(&ring));
+        wake_pump();
         LiveSource { ring }
     }
 }
@@ -447,10 +524,13 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
             return capture_error(format!("Capture impossible : {e}"));
         }
         crate::engine::emit_global(json!({ "captureError": Value::Null }));
+        active_captures().fetch_add(1, Ordering::Relaxed);
         while running.load(Ordering::Relaxed) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
         // running = false → le stream est libéré, la capture s'arrête.
+        drop(stream);
+        active_captures().fetch_sub(1, Ordering::Relaxed);
     });
 }
 
@@ -467,8 +547,7 @@ where
     T: cpal::SizedSample + Send + 'static,
 {
     let scfg: cpal::StreamConfig = cfg.clone().into();
-    let mut dsp = Dsp::new();
-    let mut meter = Meter::new();
+    let mut pipeline = Pipeline::new();
     let mut block: Vec<f32> = Vec::new();
     let mut pos = 0.0f32;
     let mut last_l = 0.0f32;
@@ -490,13 +569,7 @@ where
                 last_l = l;
                 last_r = r;
             }
-            dsp.process(&mut block);
-            if meter_on().load(Ordering::Relaxed) {
-                for reading in meter.feed(&block) {
-                    send_meter(&reading);
-                }
-            }
-            distribute(&block);
+            pipeline.run(&mut block);
         },
         |e| capture_error(format!("Capture interrompue : {e}")),
         None,

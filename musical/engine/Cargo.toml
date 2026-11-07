@@ -1,6 +1,6 @@
 [package]
 name = "low-musical-engine"
-version = "0.8.0"
+version = "0.9.0"
 description = "Moteur audio de low-musical : diffuse de l'audio dans un salon vocal Discord"
 authors = ["shitday"]
 edition = "2021"
@@ -28,7 +28,7 @@ cpal = "0.15"
 # songbird embarque symphonia SANS codec : "pcm" est requis par RawAdapter
 # (notre source live est du PCM f32), l'unification des features de Cargo
 # l'active pour songbird aussi.
-symphonia = { version = "0.5", default-features = false, features = ["pcm"] }
+symphonia = { version = "0.5", default-features = false, features = ["pcm", "wav", "mp3", "ogg", "vorbis", "flac"] }
 # driver = vocal + chiffrement DAVE + Opus ; native = TLS Windows (schannel) ;
 # tungstenite = backend WebSocket du driver. Pas de serenity : on fait notre
 # propre gateway.
