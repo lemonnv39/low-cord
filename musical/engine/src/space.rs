@@ -370,12 +370,14 @@ impl Space {
             return;
         }
         self.filters_at = (back, dist);
+        // Doux : on doit sentir la position sans perdre la brillance du son.
         for b in self.back.iter_mut() {
-            b.set_highshelf(3500.0, FS, -9.0 * back);
+            b.set_highshelf(4000.0, FS, -4.0 * back);
         }
-        let cutoff = 19000.0 * 0.28f32.powf(dist);
+        // Air : les aigus baissent un peu, surtout tout au loin (−4 dB au
+        // maximum), sans jamais être coupés.
         for a in self.air.iter_mut() {
-            a.set_lowpass(cutoff, FS, std::f32::consts::FRAC_1_SQRT_2);
+            a.set_highshelf(6000.0, FS, -4.0 * dist * dist * dist);
         }
     }
 
@@ -445,13 +447,13 @@ impl Space {
                 let pan = side_amt.signum() * lateral;
                 // Oreille opposée : retard, niveau et aigus en moins ; oreille proche un peu plus fort.
                 let far_gain = db_to_lin(-7.0 * lateral);
-                let near_gain = db_to_lin(1.5 * lateral);
+                let near_gain = db_to_lin(2.0 * lateral);
                 let itd = ITD_MAX * lateral;
                 let (dl, dr) = if pan > 0.0 { (itd, 0.0) } else { (0.0, itd) };
                 let el = self.delay[0].process(mid, dl);
                 let er = self.delay[1].process(mid, dr);
-                // Passe-bas « ombre » : coupure de ~16 kHz (face) à ~1,4 kHz (oreille cachée).
-                let shade = |amt: f32| 1.0 - (-TAU * (16000.0 * 0.088f32.powf(amt)) / FS).exp();
+                // Passe-bas « ombre » : coupure de ~16 kHz (face) à ~6 kHz (oreille cachée).
+                let shade = |amt: f32| 1.0 - (-TAU * (16000.0 * 0.375f32.powf(amt)) / FS).exp();
                 let (sl, sr) = if pan > 0.0 {
                     (shade(lateral), 1.0)
                 } else {
@@ -465,8 +467,8 @@ impl Space {
                     (near_gain, far_gain)
                 };
                 // Largeur de la source, réduite quand elle s'éloigne.
-                let width = side * p.spread * (1.0 - 0.6 * dist);
-                let level = db_to_lin(-9.0 * dist);
+                let width = side * p.spread * (1.0 - 0.3 * dist);
+                let level = db_to_lin(-2.0 * dist);
                 let bl = self.back[0].process(self.shadow[0] * gl + width);
                 let br = self.back[1].process(self.shadow[1] * gr - width);
                 (
@@ -544,9 +546,9 @@ mod tests {
     #[test]
     fn à_droite_l_oreille_droite_domine() {
         let (l, r) = levels(&run(&manual(0.5, 0.0), 2000.0, 0.5));
-        assert!(r > l * 3.0, "g {l} d {r}");
+        assert!(r > l * 2.5, "g {l} d {r}");
         let (l, r) = levels(&run(&manual(-0.5, 0.0), 2000.0, 0.5));
-        assert!(l > r * 3.0, "g {l} d {r}");
+        assert!(l > r * 2.5, "g {l} d {r}");
     }
 
     #[test]
@@ -554,7 +556,7 @@ mod tests {
         let front = levels(&run(&manual(0.0, 0.5), 8000.0, 0.5));
         let back = levels(&run(&manual(0.0, -0.5), 8000.0, 0.5));
         assert!(
-            front.0 > back.0 * 1.8,
+            front.0 > back.0 * 1.4,
             "devant {} derrière {}",
             front.0,
             back.0
@@ -569,7 +571,23 @@ mod tests {
     fn loin_moins_fort_et_plus_feutré() {
         let near = levels(&run(&manual(0.0, 0.15), 6000.0, 0.5));
         let far = levels(&run(&manual(0.0, 1.0), 6000.0, 0.5));
-        assert!(near.0 > far.0 * 3.0, "proche {} loin {}", near.0, far.0);
+        assert!(near.0 > far.0 * 1.3, "proche {} loin {}", near.0, far.0);
+    }
+
+    #[test]
+    fn orbite_ne_étouffe_pas() {
+        // Réglages par défaut en mouvement auto : les aigus (8 kHz) gardent
+        // l'essentiel de leur énergie (deux oreilles, sur deux tours).
+        let p = SpaceParams {
+            mode: 1,
+            speed: 1.0,
+            ..SpaceParams::default()
+        };
+        let off = levels(&run(&SpaceParams::default(), 8000.0, 2.0));
+        let auto = levels(&run(&p, 8000.0, 2.0));
+        let db =
+            10.0 * ((auto.0.powi(2) + auto.1.powi(2)) / (off.0.powi(2) + off.1.powi(2))).log10();
+        assert!(db > -4.0, "aigus : {db} dB");
     }
 
     #[test]
