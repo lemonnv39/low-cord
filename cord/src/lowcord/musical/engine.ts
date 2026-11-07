@@ -162,7 +162,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.10.0";
+export const MIN_ENGINE = "0.11.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
