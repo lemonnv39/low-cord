@@ -87,11 +87,36 @@ export interface MusicalPrefs {
     /** intensité du compresseur [0..1] */
     compAmount: number;
     limiter: boolean;
+    /** compresseur : 0 Propre, 1 Fort & propre, 2 Punch */
+    compMode: 0 | 1 | 2;
+    /** porte anti-souffle et son seuil (dB) */
+    gate: boolean;
+    gateThreshold: number;
+    /** nivellement automatique et niveau visé (dB) */
+    agc: boolean;
+    agcTarget: number;
+    /** 0 stéréo, 1 mono, 2 gauche ↔ droite */
+    stereoMode: 0 | 1 | 2;
+    /** balance −1 (gauche) .. 1 (droite) */
+    balance: number;
+    /** graves en mono sous cette fréquence (Hz, 0 = off) */
+    bassMono: number;
+    /** Basses+, Clarté, dé-esseur, écrêteur : 0..1 (0 = off) */
+    bassPlus: number;
+    clarity: number;
+    deesser: number;
+    clipper: number;
+    multiband: boolean;
+    mbAmount: number;
+    /** profil de traitement choisi (ou PROFILE_CUSTOM après un réglage à la main) */
+    profile: string;
+    /** débit calé sur le plafond de ta vocale */
+    autoBitrate: boolean;
 }
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.6.0";
+export const MIN_ENGINE = "0.7.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -99,7 +124,46 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
     reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
-    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: false,
+    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true,
+    compMode: 0, gate: false, gateThreshold: -60, agc: false, agcTarget: -16, stereoMode: 0, balance: 0,
+    bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, clipper: 0, multiband: false, mbAmount: 0.5,
+    profile: "Naturel", autoBitrate: true,
+};
+
+type ProcessingKey =
+    "highpass" | "width" | "saturation" | "compressor" | "compMode" | "compAmount" | "limiter" | "gate" | "gateThreshold"
+    | "agc" | "agcTarget" | "stereoMode" | "balance" | "bassMono" | "bassPlus" | "clarity" | "deesser" | "clipper"
+    | "multiband" | "mbAmount";
+export type ProcessingPrefs = Pick<MusicalPrefs, ProcessingKey>;
+const PROCESSING_KEYS: ProcessingKey[] = [
+    "highpass", "width", "saturation", "compressor", "compMode", "compAmount", "limiter", "gate", "gateThreshold",
+    "agc", "agcTarget", "stereoMode", "balance", "bassMono", "bassPlus", "clarity", "deesser", "clipper",
+    "multiband", "mbAmount",
+];
+
+export const PROFILE_CUSTOM = "Perso";
+
+/**
+ * Profils de traitement : un clic règle toute la chaîne « fort et propre ».
+ * Les réglages qu'un profil ne cite pas (largeur, balance, coupe-bas…) restent tels quels.
+ */
+export const PROFILES: Record<string, { desc: string; set: Partial<ProcessingPrefs>; }> = {
+    "Naturel": {
+        desc: "Le son tel quel, juste protégé",
+        set: { agc: false, multiband: false, compressor: true, compMode: 0, compAmount: 0.3, bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, saturation: 0, clipper: 0, limiter: true },
+    },
+    "Radio": {
+        desc: "Niveau constant, clair, voix en avant",
+        set: { agc: true, agcTarget: -16, multiband: true, mbAmount: 0.6, compressor: true, compMode: 1, compAmount: 0.5, bassMono: 120, bassPlus: 0.2, clarity: 0.3, deesser: 0.4, saturation: 0, clipper: 0.3, limiter: true },
+    },
+    "Club": {
+        desc: "Basses puissantes, punch",
+        set: { agc: true, agcTarget: -14, multiband: true, mbAmount: 0.5, compressor: true, compMode: 2, compAmount: 0.6, bassMono: 120, bassPlus: 0.6, clarity: 0.2, deesser: 0.3, saturation: 0.1, clipper: 0.4, limiter: true },
+    },
+    "Ultra fort": {
+        desc: "Le plus fort possible, toujours propre",
+        set: { agc: true, agcTarget: -12, multiband: true, mbAmount: 1, compressor: true, compMode: 1, compAmount: 1, bassMono: 120, bassPlus: 0.5, clarity: 0.4, deesser: 0.6, saturation: 0.15, clipper: 0.8, limiter: true },
+    },
 };
 
 export const EQ_LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
@@ -156,7 +220,15 @@ export const isReady = (a?: AccountState) => a?.state === "connected" || a?.stat
 // ── Mesures du son (visualisation) ─────────────────────────────────────────
 // Gardées hors de React : elles arrivent 20 fois par seconde et sont lues
 // directement par l'animation, sans refaire le rendu du panneau.
-export interface Meter { level: number; peak: number; bands: number[]; at: number; }
+export interface Meter {
+    level: number;
+    peak: number;
+    bands: number[];
+    /** réduction de gain (dB) du compresseur et du limiteur */
+    comp: number;
+    limit: number;
+    at: number;
+}
 let meter: Meter | null = null;
 export const getMeter = () => meter;
 
@@ -176,7 +248,10 @@ function wire() {
     wired = true;
     VencordNative.lowMusical.onEvent(msg => {
         if (msg?.event === "meter" && Array.isArray(msg.bands)) {
-            meter = { level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands, at: performance.now() };
+            meter = {
+                level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands,
+                comp: Number(msg.comp) || 0, limit: Number(msg.limit) || 0, at: performance.now(),
+            };
             return;
         }
         if (msg?.event === "status" && msg.data && typeof msg.data === "object") {
@@ -201,6 +276,8 @@ function wire() {
             prefs = { ...PREF_DEFAULTS, ...saved };
             if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
+            // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
+            if (!("profile" in saved)) prefs.profile = PROFILE_CUSTOM;
         }
         emit();
     }).catch(() => { });
@@ -402,17 +479,26 @@ export function saveEqCustom() {
     savePrefs({ eqCustom: [...prefs.eq], eqPreset: EQ_CUSTOM });
 }
 
-type ProcessingPrefs = Pick<MusicalPrefs, "highpass" | "width" | "saturation" | "compressor" | "compAmount" | "limiter">;
+const processingArgs = () => Object.fromEntries(PROCESSING_KEYS.map(k => [k, prefs[k]]));
 
-const processingArgs = () => ({
-    highpass: prefs.highpass, width: prefs.width, saturation: prefs.saturation,
-    compressor: prefs.compressor, compAmount: prefs.compAmount, limiter: prefs.limiter,
-});
-
-/** Coupe-bas, largeur stéréo, saturation, compresseur, limiteur. */
+/** Un réglage de traitement touché à la main : le profil passe en « Perso ». */
 export function setProcessing(patch: Partial<ProcessingPrefs>) {
-    savePrefs(patch);
+    savePrefs({ ...patch, profile: PROFILE_CUSTOM });
     live(() => call("set_processing", processingArgs()));
+}
+
+export function applyProfile(name: string) {
+    const profile = PROFILES[name];
+    if (!profile) return;
+    savePrefs({ ...profile.set, profile: name });
+    live(() => call("set_processing", processingArgs()));
+}
+
+/** Débit calé sur le plafond de ta vocale (kbps), si l'option est active. */
+export function syncBitrate(channelBps: number | undefined) {
+    if (!prefs.autoBitrate || !channelBps) return;
+    const kbps = Math.max(32, Math.min(512, Math.round(channelBps / 1000)));
+    if (kbps !== prefs.bitrate) setBitrate(kbps);
 }
 
 /** Arrête le moteur : les comptes quittent le vocal et se déconnectent. */

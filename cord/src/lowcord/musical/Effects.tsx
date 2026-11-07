@@ -5,6 +5,9 @@
  */
 
 // low-musical — blocs « Signal », « Égaliseur » et « Espace » du panneau.
+// Signal : profils de traitement (Naturel, Radio, Club, Ultra fort), les
+// interrupteurs principaux, la réduction de gain en direct, et les réglages
+// fins repliés par défaut pour garder un panneau épuré.
 // Tout s'applique en direct et reste mémorisé pour les prochaines connexions.
 //
 // Le carré de l'espace règle deux choses avec un seul point :
@@ -16,9 +19,9 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import { Card, Chip, cl, Dropdown, Group, Segmented, Slider, ToggleRow } from "./controls";
 import {
-    applyEqPreset, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getPrefs, isActive, PREF_DEFAULTS,
-    saveEqCustom, set8d, setBitrate, setEq, setGain, setInput, setLatency, setProcessing, setReverb, setReverbParams,
-    useMusical,
+    applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive,
+    PREF_DEFAULTS, PROFILES, saveEqCustom, savePrefs, set8d, setBitrate, setEq, setGain, setInput, setLatency,
+    setProcessing, setReverb, setReverbParams, useMusical,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -37,19 +40,74 @@ const RefreshIcon = () => icon("M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6");
 
 // ── Signal ──────────────────────────────────────────────────────────────────
 
+const COMP_MODES = [
+    { value: 0, label: "Propre", title: "Léger : colle le son sans qu'on l'entende travailler" },
+    { value: 1, label: "Fort", title: "Fort et propre : tient le niveau très haut" },
+    { value: 2, label: "Punch", title: "Laisse passer les coups de batterie avant de compresser" },
+] as const;
+
+const STEREO_MODES = [
+    { value: 0, label: "Stéréo" },
+    { value: 1, label: "Mono" },
+    { value: 2, label: "Inversé" },
+] as const;
+
+const off = (v: number, text: string) => v === 0 ? "off" : text;
+
+/** Réduction de gain du compresseur et du limiteur, en direct (barres). */
+function ReductionMeter() {
+    const compRef = useRef<HTMLSpanElement>(null);
+    const limitRef = useRef<HTMLSpanElement>(null);
+    const compText = useRef<HTMLSpanElement>(null);
+    const limitText = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        const win = compRef.current!.ownerDocument.defaultView!;
+        let raf = 0;
+        let comp = 0, limit = 0;
+        const draw = () => {
+            raf = win.requestAnimationFrame(draw);
+            const m = getMeter();
+            const fresh = m && performance.now() - m.at < 400;
+            // Montée immédiate, retour doux : lisible à l'œil.
+            const c = fresh ? m!.comp : 0, l = fresh ? m!.limit : 0;
+            comp = c > comp ? c : comp + (c - comp) * 0.08;
+            limit = l > limit ? l : limit + (l - limit) * 0.08;
+            compRef.current!.style.width = `${Math.min(100, comp / 24 * 100)}%`;
+            limitRef.current!.style.width = `${Math.min(100, limit / 12 * 100)}%`;
+            compText.current!.textContent = `−${comp.toFixed(1)} dB`;
+            limitText.current!.textContent = `−${limit.toFixed(1)} dB`;
+        };
+        raf = win.requestAnimationFrame(draw);
+        return () => win.cancelAnimationFrame(raf);
+    }, []);
+
+    return (
+        <div className={cl("gr")} title="Combien le compresseur et le limiteur baissent le son en ce moment">
+            <div className={cl("gr-row")}>
+                <span>Compression</span>
+                <span className={cl("gr-track")}><span ref={compRef} className={cl("gr-fill")} /></span>
+                <span ref={compText} className={cl("gr-value")} />
+            </div>
+            <div className={cl("gr-row")}>
+                <span>Limiteur</span>
+                <span className={cl("gr-track")}><span ref={limitRef} className={cl("gr-fill", "gr-fill-limit")} /></span>
+                <span ref={limitText} className={cl("gr-value")} />
+            </div>
+        </div>
+    );
+}
+
 export function SignalCard({ act }: { act: Act; }) {
     const music = useMusical();
     const p = getPrefs();
     const [inputs, setInputs] = useState<string[] | null>(null);
+    const [fine, setFine] = useState(false);
 
     const loadInputs = () => act(() => devices().then(setInputs));
     useEffect(() => { if (music.running && !inputs) loadInputs(); }, [music.running]);
 
     const connected = music.running && Object.values(music.accounts).some(isActive);
-    const resetProcessing = () => setProcessing({
-        highpass: PREF_DEFAULTS.highpass, width: PREF_DEFAULTS.width, saturation: PREF_DEFAULTS.saturation,
-        compressor: PREF_DEFAULTS.compressor, compAmount: PREF_DEFAULTS.compAmount, limiter: PREF_DEFAULTS.limiter,
-    });
 
     return (
         <Card
@@ -76,36 +134,67 @@ export function SignalCard({ act }: { act: Act; }) {
                 <Slider label="Gain" value={p.gain} display={signed(p.gain, "dB")} min={-64} max={64} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain} center />
             </Group>
 
-            <Group title="Diffusion">
-                <Slider label="Débit Opus" value={p.bitrate} display={`${p.bitrate} kbps`} min={32} max={512} step={8} reset={PREF_DEFAULTS.bitrate} onChange={setBitrate} />
-                <Slider label="Latence" value={p.latency} display={`${p.latency} ms`} min={40} max={1000} step={10} reset={PREF_DEFAULTS.latency} onChange={setLatency} />
-            </Group>
-
-            <Group title="Traitement">
-                <Slider
-                    label="Coupe-bas" value={p.highpass} display={p.highpass < 20 ? "off" : `${p.highpass} Hz`}
-                    min={0} max={300} step={10} reset={PREF_DEFAULTS.highpass} onChange={v => setProcessing({ highpass: v < 20 ? 0 : v })}
-                />
-                <Slider
-                    label="Largeur stéréo" value={p.width} display={p.width === 0 ? "mono" : pct(p.width)}
-                    min={0} max={2} step={0.05} reset={PREF_DEFAULTS.width} onChange={v => setProcessing({ width: v })}
-                />
-                <Slider
-                    label="Saturation" value={p.saturation} display={p.saturation === 0 ? "off" : pct(p.saturation)}
-                    min={0} max={1} step={0.05} reset={PREF_DEFAULTS.saturation} onChange={v => setProcessing({ saturation: v })}
-                />
+            <Group title="Son">
+                <div className={cl("chips", "chips-grid-2")}>
+                    {Object.entries(PROFILES).map(([name, profile]) => (
+                        <Chip key={name} on={p.profile === name} onClick={() => applyProfile(name)} title={profile.desc}>{name}</Chip>
+                    ))}
+                </div>
                 <div className={cl("chips")}>
-                    <Chip on={p.compressor} onClick={() => setProcessing({ compressor: !p.compressor })} title="Rapproche les passages forts et faibles">Compresseur</Chip>
-                    <Chip on={p.limiter} onClick={() => setProcessing({ limiter: !p.limiter })} title="Empêche le son de saturer (plafond à −1 dB)">Limiteur</Chip>
-                    <Chip onClick={resetProcessing} title="Remettre le traitement par défaut">Reset</Chip>
+                    <Chip on={p.compressor} onClick={() => setProcessing({ compressor: !p.compressor })} title="Rapproche les passages forts et faibles, sans baisser le son">Compresseur</Chip>
+                    <Chip on={p.multiband} onClick={() => setProcessing({ multiband: !p.multiband })} title="Compression séparée des graves, médiums et aigus">Multibande</Chip>
+                    <Chip on={p.agc} onClick={() => setProcessing({ agc: !p.agc })} title="Monte les morceaux trop faibles, baisse les trop forts">Nivellement</Chip>
+                    <Chip on={p.limiter} onClick={() => setProcessing({ limiter: !p.limiter })} title="Le son ne dépasse jamais −1 dB : aucune saturation">Limiteur</Chip>
+                    <Chip on={p.gate} onClick={() => setProcessing({ gate: !p.gate })} title="Coupe le léger souffle du câble virtuel quand la musique s'arrête">Anti-souffle</Chip>
                 </div>
                 {p.compressor && (
-                    <Slider
-                        label="Intensité du compresseur" value={p.compAmount} display={pct(p.compAmount)}
-                        min={0} max={1} step={0.05} reset={PREF_DEFAULTS.compAmount} onChange={v => setProcessing({ compAmount: v })}
-                    />
+                    <>
+                        <Segmented label="Mode du compresseur" value={p.compMode} options={COMP_MODES} onChange={m => setProcessing({ compMode: m })} />
+                        <Slider
+                            label="Intensité" value={p.compAmount} display={pct(p.compAmount)}
+                            min={0} max={1} step={0.05} reset={PREF_DEFAULTS.compAmount} onChange={v => setProcessing({ compAmount: v })}
+                        />
+                    </>
                 )}
+                <ReductionMeter />
             </Group>
+
+            <button type="button" className={cl("fold", fine && "fold-open")} onClick={() => setFine(!fine)} aria-expanded={fine}>
+                <span>Réglages fins</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+            {fine && (
+                <>
+                    <Group title="Diffusion">
+                        <Slider label="Débit Opus" value={p.bitrate} display={`${p.bitrate} kbps`} min={32} max={512} step={8} reset={PREF_DEFAULTS.bitrate} onChange={v => { savePrefs({ autoBitrate: false }); setBitrate(v); }} />
+                        <div className={cl("chips")}>
+                            <Chip on={p.autoBitrate} onClick={() => savePrefs({ autoBitrate: !p.autoBitrate })} title="Règle le débit au maximum que permet ta vocale">Débit auto (salon)</Chip>
+                        </div>
+                    </Group>
+                    <Group title="Couleur">
+                        <Slider label="Basses+" value={p.bassPlus} display={off(p.bassPlus, pct(p.bassPlus))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ bassPlus: v })} />
+                        <Slider label="Clarté" value={p.clarity} display={off(p.clarity, pct(p.clarity))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ clarity: v })} />
+                        <Slider label="Dé-esseur" value={p.deesser} display={off(p.deesser, pct(p.deesser))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ deesser: v })} />
+                        <Slider label="Saturation" value={p.saturation} display={off(p.saturation, pct(p.saturation))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ saturation: v })} />
+                    </Group>
+                    <Group title="Dynamique">
+                        <Slider label="Multibande" value={p.mbAmount} display={pct(p.mbAmount)} min={0} max={1} step={0.05} reset={PREF_DEFAULTS.mbAmount} onChange={v => setProcessing({ mbAmount: v })} />
+                        <Slider label="Écrêteur doux" value={p.clipper} display={off(p.clipper, pct(p.clipper))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ clipper: v })} />
+                        <Slider label="Niveau visé (nivellement)" value={p.agcTarget} display={`${p.agcTarget} dB`} min={-30} max={-8} step={1} reset={PREF_DEFAULTS.agcTarget} onChange={v => setProcessing({ agcTarget: v })} />
+                        <Slider label="Seuil anti-souffle" value={p.gateThreshold} display={`${p.gateThreshold} dB`} min={-90} max={-20} step={1} reset={PREF_DEFAULTS.gateThreshold} onChange={v => setProcessing({ gateThreshold: v })} />
+                    </Group>
+                    <Group title="Stéréo">
+                        <Segmented label="Mode stéréo" value={p.stereoMode} options={STEREO_MODES} onChange={m => setProcessing({ stereoMode: m })} />
+                        <Slider label="Balance" value={p.balance} display={p.balance === 0 ? "centre" : p.balance < 0 ? `G ${pct(-p.balance)}` : `D ${pct(p.balance)}`} min={-1} max={1} step={0.05} reset={0} onChange={v => setProcessing({ balance: v })} center />
+                        <Slider label="Largeur" value={p.width} display={p.width === 0 ? "mono" : pct(p.width)} min={0} max={2} step={0.05} reset={PREF_DEFAULTS.width} onChange={v => setProcessing({ width: v })} />
+                        <Slider label="Graves en mono" value={p.bassMono} display={p.bassMono < 20 ? "off" : `< ${p.bassMono} Hz`} min={0} max={250} step={10} reset={0} onChange={v => setProcessing({ bassMono: v < 20 ? 0 : v })} />
+                    </Group>
+                    <Group title="Filtre & latence">
+                        <Slider label="Coupe-bas" value={p.highpass} display={p.highpass < 20 ? "off" : `${p.highpass} Hz`} min={0} max={300} step={10} reset={0} onChange={v => setProcessing({ highpass: v < 20 ? 0 : v })} />
+                        <Slider label="Latence" value={p.latency} display={`${p.latency} ms`} min={40} max={1000} step={10} reset={PREF_DEFAULTS.latency} onChange={setLatency} />
+                    </Group>
+                </>
+            )}
         </Card>
     );
 }

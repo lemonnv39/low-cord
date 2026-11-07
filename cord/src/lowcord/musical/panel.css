@@ -485,7 +485,10 @@
 }
 
 .lc-mp-segment {
+    overflow: hidden;
     flex: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     height: 28px;
     border: 0;
     border-radius: 7px;
@@ -1116,4 +1119,86 @@
     .lc-mp-pill-live .lc-mp-pill-dot {
         animation: none;
     }
+}
+
+/* ── Signal : profils, réduction de gain, réglages fins ──────────────────── */
+.lc-mp-chips-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lc-mp-gr {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 10px;
+    border: 1px solid var(--mp-line);
+    border-radius: 9px;
+    background: rgb(0 0 0 / 22%);
+}
+
+.lc-mp-gr-row {
+    display: grid;
+    grid-template-columns: 76px 1fr 54px;
+    align-items: center;
+    gap: 8px;
+    color: var(--mp-muted);
+    font-size: 11px;
+}
+
+.lc-mp-gr-track {
+    overflow: hidden;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--mp-track);
+}
+
+.lc-mp-gr-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--mp-text);
+}
+
+.lc-mp-gr-fill-limit {
+    background: var(--mp-warn);
+}
+
+.lc-mp-gr-value {
+    color: var(--mp-text);
+    font-family: var(--mp-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.lc-mp-fold {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 2px 0;
+    border: 0;
+    border-top: 1px solid var(--mp-line);
+    background: none;
+    color: var(--mp-muted);
+    font-family: var(--mp-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.lc-mp-fold:hover {
+    color: var(--mp-strong);
+}
+
+.lc-mp-fold svg {
+    transition: transform 150ms ease;
+}
+
+.lc-mp-fold-open svg {
+    transform: rotate(180deg);
 }

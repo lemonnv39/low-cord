@@ -89,7 +89,7 @@ export function ToggleRow({ name, desc, on, onChange, extra }: {
 
 /** Choix exclusif sur une ligne (Off / Auto / Manuel…). */
 export function Segmented<T extends string | number>({ value, options, onChange, label }: {
-    value: T; options: readonly { value: T; label: string; }[]; onChange(v: T): void; label: string;
+    value: T; options: readonly { value: T; label: string; title?: string; }[]; onChange(v: T): void; label: string;
 }) {
     return (
         <div className={cl("segmented")} role="radiogroup" aria-label={label}>
@@ -100,6 +100,7 @@ export function Segmented<T extends string | number>({ value, options, onChange,
                     role="radio"
                     aria-checked={o.value === value}
                     className={cl("segment", o.value === value && "segment-on")}
+                    title={o.title}
                     onClick={() => onChange(o.value)}
                 >{o.label}</button>
             ))}

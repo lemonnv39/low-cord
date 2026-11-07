@@ -23,7 +23,7 @@ import { Card, cl, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, connectAccounts, disconnect, type EngineState, errorText, followMe, getPrefs, isActive,
-    isOutdated, isReady, PREF_DEFAULTS, savePrefs, setFakeDeafen, setVolume, stopFollowing, useMusical, wantMeter,
+    isOutdated, isReady, PREF_DEFAULTS, savePrefs, setFakeDeafen, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
 } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
 import { Visualizer } from "./Visualizer";
@@ -185,7 +185,12 @@ function useMyVoice() {
         const id = SelectedChannelStore.getVoiceChannelId();
         const channel = id ? ChannelStore.getChannel(id) : null;
         if (!channel) return null;
-        return { id: channel.id, name: channel.name, guild: channel.guild_id ? GuildStore.getGuild(channel.guild_id)?.name : undefined };
+        return {
+            id: channel.id,
+            name: channel.name,
+            guild: channel.guild_id ? GuildStore.getGuild(channel.guild_id)?.name : undefined,
+            bitrate: (channel as { bitrate?: number; }).bitrate,
+        };
     });
 }
 
@@ -202,6 +207,8 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
     const [movedAt, setMovedAt] = useState(Date.now());
     const [, tick] = useState(0);
     useEffect(() => { setMovedAt(Date.now()); }, [voice?.id]);
+    // Débit calé sur le plafond de ta vocale (option « Débit auto »).
+    useEffect(() => { syncBitrate(voice?.bitrate); }, [voice?.bitrate, getPrefs().autoBitrate]);
     useEffect(() => {
         const timer = setInterval(() => tick(n => n + 1), 1000);
         return () => clearInterval(timer);
