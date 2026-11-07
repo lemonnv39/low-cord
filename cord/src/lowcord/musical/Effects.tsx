@@ -20,7 +20,7 @@ import { Card, Chip, cl, Dropdown, Group, Knob, Segmented, Slider, ToggleRow } f
 import {
     applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive,
     PREF_DEFAULTS, PROFILES, resetSound, saveEqCustom, savePrefs, setBitrate, setEq, setGain, setInput, setLatency,
-    setProcessing, setSpace, setTone, TONE_PRESETS, useMusical,
+    setProcessing, setSpace, setTone, sourceLabel, TONE_PRESETS, useMusical,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -52,9 +52,9 @@ const STEREO_MODES = [
 const off = (v: number, text: string) => v === 0 ? "off" : text;
 
 /** Réduction de gain du compresseur et du limiteur, en direct (barres). */
-function ReductionMeter({ limiter }: { limiter: boolean; }) {
+function ReductionMeter({ limiter, protect }: { limiter: boolean; protect: boolean; }) {
     const compRef = useRef<HTMLSpanElement>(null);
-    const hotRef = useRef<HTMLParagraphElement>(null);
+
     const limitRef = useRef<HTMLSpanElement>(null);
     const compText = useRef<HTMLSpanElement>(null);
     const limitText = useRef<HTMLSpanElement>(null);
@@ -75,8 +75,6 @@ function ReductionMeter({ limiter }: { limiter: boolean; }) {
             limitRef.current!.style.width = `${Math.min(100, limit / 12 * 100)}%`;
             compText.current!.textContent = `−${comp.toFixed(1)} dB`;
             limitText.current!.textContent = `−${limit.toFixed(1)} dB`;
-            // Plus de 6 dB retirés en permanence : le son arrive bien trop fort.
-            hotRef.current!.hidden = limit < 6;
         };
         raf = win.requestAnimationFrame(draw);
         return () => win.cancelAnimationFrame(raf);
@@ -85,18 +83,19 @@ function ReductionMeter({ limiter }: { limiter: boolean; }) {
     return (
         <div className={cl("gr")} title={limiter
             ? "Combien le compresseur et le limiteur baissent le son en ce moment"
-            : "Limiteur coupé : une protection empêche quand même le son de dépasser 0 dB (sinon il grésille dans Discord)"}>
+            : protect
+                ? "Limiteur coupé : l'anti-grésillement empêche quand même le son de dépasser 0 dB"
+                : "Limiteur et anti-grésillement coupés : le son passe tel quel"}>
             <div className={cl("gr-row")}>
                 <span>Compression</span>
                 <span className={cl("gr-track")}><span ref={compRef} className={cl("gr-fill")} /></span>
                 <span ref={compText} className={cl("gr-value")} />
             </div>
             <div className={cl("gr-row")}>
-                <span>{limiter ? "Limiteur" : "Protection"}</span>
+                <span>{!limiter && protect ? "Protection" : "Limiteur"}</span>
                 <span className={cl("gr-track")}><span ref={limitRef} className={cl("gr-fill", "gr-fill-limit")} /></span>
                 <span ref={limitText} className={cl("gr-value")} />
             </div>
-            <p ref={hotRef} className={cl("gr-hot")} hidden>Son trop fort : baisse le gain ou le volume.</p>
         </div>
     );
 }
@@ -145,9 +144,9 @@ export function SignalCard({ act }: { act: Act; }) {
                     onOpen={loadInputs}
                     choices={[
                         { value: DEFAULT_INPUT, label: "Entrée par défaut" },
-                        ...(inputs ?? []).map(n => ({ value: n, label: n })),
+                        ...(inputs ?? []).map(n => ({ value: n, label: sourceLabel(n) })),
                         ...(p.source && p.source !== DEFAULT_INPUT && inputs && !inputs.includes(p.source)
-                            ? [{ value: p.source, label: `${p.source} (absent)`, disabled: true }]
+                            ? [{ value: p.source, label: `${sourceLabel(p.source)} (absent)`, disabled: true }]
                             : []),
                     ]}
                     onChange={v => act(() => setInput(v))}
@@ -169,7 +168,13 @@ export function SignalCard({ act }: { act: Act; }) {
                     <Chip on={p.compressor} onClick={() => setProcessing({ compressor: !p.compressor })} title="Rapproche les passages forts et faibles, sans baisser le son">Compresseur</Chip>
                     <Chip on={p.multiband} onClick={() => setProcessing({ multiband: !p.multiband })} title="Compression séparée des graves, médiums et aigus">Multibande</Chip>
                     <Chip on={p.agc} onClick={() => setProcessing({ agc: !p.agc })} title="Monte les morceaux trop faibles, baisse les trop forts">Nivellement</Chip>
-                    <Chip on={p.limiter} onClick={() => setProcessing({ limiter: !p.limiter })} title="Le son ne dépasse jamais −1 dB. Coupé, une protection à 0 dB reste active pour éviter le grésillement">Limiteur</Chip>
+                    <Chip on={p.limiter} onClick={() => setProcessing({ limiter: !p.limiter })} title="Le son ne dépasse jamais −1 dB">Limiteur</Chip>
+                    <Chip
+                        on={p.limiter || p.protect}
+                        disabled={p.limiter}
+                        onClick={() => setProcessing({ protect: !p.protect })}
+                        title={p.limiter ? "Inclus dans le limiteur" : "Limiteur coupé : empêche le son de dépasser 0 dB (sinon il grésille). Coupé : aucun traitement"}
+                    >Anti-grésillement</Chip>
                 </div>
                 {p.compressor && (
                     <>
@@ -183,7 +188,7 @@ export function SignalCard({ act }: { act: Act; }) {
                 {p.multiband && <Slider label="Multibande" value={p.mbAmount} display={pct(p.mbAmount)} min={0} max={1} step={0.05} reset={PREF_DEFAULTS.mbAmount} onChange={v => setProcessing({ mbAmount: v })} />}
                 {p.agc && <Slider label="Niveau visé" value={p.agcTarget} display={`${p.agcTarget} dB`} min={-30} max={-8} step={1} reset={PREF_DEFAULTS.agcTarget} onChange={v => setProcessing({ agcTarget: v })} />}
                 <Slider label="Écrêteur doux" value={p.clipper} display={off(p.clipper, pct(p.clipper))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ clipper: v })} />
-                <ReductionMeter limiter={p.limiter} />
+                <ReductionMeter limiter={p.limiter} protect={p.protect} />
             </Group>
 
             <Group title="Couleur">

@@ -94,6 +94,8 @@ export interface MusicalPrefs {
     /** intensité du compresseur [0..1] */
     compAmount: number;
     limiter: boolean;
+    /** protection anti-grésillement (0 dB) quand le limiteur est coupé */
+    protect: boolean;
     /** compresseur : 0 Propre, 1 Fort & propre, 2 Punch */
     compMode: 0 | 1 | 2;
     /** porte anti-souffle et son seuil (dB) */
@@ -139,8 +141,12 @@ export interface SoundPad { id: string; name: string; file: string; }
 export interface UserPreset { name: string; data: Partial<MusicalPrefs>; }
 
 export const DEFAULT_INPUT = "__default__";
+/** Sorties audio captées en boucle (ce qui est joué dessus, ex. « CABLE Input »). */
+export const LOOPBACK = "loopback:";
+/** Nom affiché d'une source. */
+export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.9.1";
+export const MIN_ENGINE = "0.9.2";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -148,7 +154,7 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     spaceMode: 0, motion: 0, speed: 0.15, posX: 0, posY: 0.5, radius: 0.6, spread: 0.3,
     reverb: false, room: 0.5, mix: 0.5,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
-    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true,
+    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true, protect: true,
     compMode: 0, gate: false, gateThreshold: -60, agc: false, agcTarget: -16, stereoMode: 0, balance: 0,
     bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, clipper: 0, multiband: false, mbAmount: 0.5,
     profile: "Naturel", autoBitrate: true,
@@ -157,12 +163,12 @@ export const PREF_DEFAULTS: MusicalPrefs = {
 };
 
 type ProcessingKey =
-    "highpass" | "width" | "saturation" | "compressor" | "compMode" | "compAmount" | "limiter" | "gate" | "gateThreshold"
+    "highpass" | "width" | "saturation" | "compressor" | "compMode" | "compAmount" | "limiter" | "protect" | "gate" | "gateThreshold"
     | "agc" | "agcTarget" | "stereoMode" | "balance" | "bassMono" | "bassPlus" | "clarity" | "deesser" | "clipper"
     | "multiband" | "mbAmount" | "bass" | "mid" | "treble";
 export type ProcessingPrefs = Pick<MusicalPrefs, ProcessingKey>;
 const PROCESSING_KEYS: ProcessingKey[] = [
-    "highpass", "width", "saturation", "compressor", "compMode", "compAmount", "limiter", "gate", "gateThreshold",
+    "highpass", "width", "saturation", "compressor", "compMode", "compAmount", "limiter", "protect", "gate", "gateThreshold",
     "agc", "agcTarget", "stereoMode", "balance", "bassMono", "bassPlus", "clarity", "deesser", "clipper",
     "multiband", "mbAmount", "bass", "mid", "treble",
 ];
@@ -616,10 +622,10 @@ const SPACE_OFF = { spaceMode: 0, reverb: false } as const;
 
 export const PRESETS: Record<string, { desc: string; data: Partial<MusicalPrefs>; }> = {
     "Aucun effet": {
-        desc: "Le son brut, sans aucun traitement (tout à 0, limiteur coupé)",
+        desc: "Le son brut, sans aucun traitement (tout à 0, limiteur et anti-grésillement coupés)",
         data: {
             ...Object.fromEntries(SOUND_KEYS.map(k => [k, PREF_DEFAULTS[k]])),
-            eq: [...PREF_DEFAULTS.eq], eqPreset: "Flat", limiter: false, compressor: false, profile: PROFILE_CUSTOM,
+            eq: [...PREF_DEFAULTS.eq], eqPreset: "Flat", limiter: false, protect: false, compressor: false, profile: PROFILE_CUSTOM,
         },
     },
     "Écoute casque": {
