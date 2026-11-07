@@ -25,7 +25,7 @@ function MusicalButton(props: { nameplate?: unknown; }) {
     const [open, setOpen] = useState(false);
     if (!music.installed) return null;
 
-    const live = music.state === "in_voice";
+    const live = Object.values(music.accounts).some(a => a.state === "in_voice");
     return (
         <>
             <PanelButton

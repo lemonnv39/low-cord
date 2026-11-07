@@ -162,7 +162,7 @@ window.VencordNative = {
         openFolder: async () => { },
         call: async () => { throw new Error("Disponible seulement dans Discord sur PC"); },
         isRunning: async () => false,
-        isInstalled: async () => false,
+        installedVersion: async () => null,
         stop: async () => { },
         onEvent: () => { },
     },

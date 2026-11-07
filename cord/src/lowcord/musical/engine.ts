@@ -7,6 +7,9 @@
 // low-musical — côté Discord : état du moteur (tenu à jour par ses
 // événements), réglages mémorisés et commandes. Le moteur tourne dans le
 // processus principal (src/main/lowMusical.ts) ; ici, on ne fait que lui parler.
+//
+// Plusieurs comptes du Token Importer peuvent être connectés en même temps.
+// Chacun est identifié auprès du moteur par son id dans le Token Importer.
 
 import * as DataStore from "@api/DataStore";
 import type { SavedAccount } from "@lowplugins/tokenImporter";
@@ -18,11 +21,7 @@ export interface MusicalGuild { id: string; name: string; icon?: string | null; 
 
 export type EngineState = "connecting" | "connected" | "reconnecting" | "in_voice" | "connected_left" | "error" | "disconnected";
 
-export interface MusicalState {
-    /** le moteur est installé (vérifié au démarrage de Discord) */
-    installed?: boolean;
-    /** le processus du moteur tourne */
-    running: boolean;
+export interface AccountState {
     state?: EngineState;
     error?: string;
     user?: { id: string; username: string; avatar?: string | null; };
@@ -31,10 +30,19 @@ export interface MusicalState {
     follow?: string | null;
     presence?: boolean;
     fakeDeafen?: boolean;
+}
+
+export interface MusicalState {
+    /** version du moteur installé (null = pas installé), lue au démarrage de Discord */
+    installed?: string | null;
+    /** le processus du moteur tourne */
+    running: boolean;
+    /** comptes connus du moteur, par id Token Importer */
+    accounts: Record<string, AccountState>;
     input?: string | null;
+    /** une source a été lancée depuis ce panneau depuis le démarrage du moteur */
+    sourceOn?: boolean;
     captureError?: string | null;
-    /** compte du Token Importer connecté */
-    accountId?: string;
     /** raison du dernier arrêt du moteur */
     exitReason?: string;
 }
@@ -46,7 +54,10 @@ export interface MusicalPrefs {
     gain: number;
     bitrate: number;
     latency: number;
-    accountId?: string;
+    /** comptes cochés la dernière fois */
+    selection: string[];
+    /** délai entre deux comptes (connexion, salon), en ms */
+    delay: number;
     /** 8D : 0 off, 1 auto (rotation), 2 manuel */
     eightdMode: 0 | 1 | 2;
     /** vitesse de rotation (Hz) */
@@ -66,8 +77,12 @@ export interface MusicalPrefs {
 }
 
 export const DEFAULT_INPUT = "__default__";
+/** Plus ancienne version du moteur compatible avec ce panneau. */
+export const MIN_ENGINE = "0.2.0";
+
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, bitrate: 128, latency: 200,
+    selection: [], delay: 500,
     eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
     reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
@@ -90,7 +105,7 @@ export const EQ_PRESETS: Record<string, number[]> = {
 export const EQ_CUSTOM = "Perso";
 const PREFS_KEY = "lowmusical-prefs";
 
-let state: MusicalState = { running: false };
+let state: MusicalState = { running: false, accounts: {} };
 let prefs: MusicalPrefs = { ...PREF_DEFAULTS };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(fn => fn());
@@ -100,12 +115,29 @@ function set(patch: Partial<MusicalState>) {
     emit();
 }
 
+function setAccount(key: string, patch: Partial<AccountState>) {
+    set({ accounts: { ...state.accounts, [key]: { ...state.accounts[key], ...patch } } });
+}
+
 export const getState = () => state;
 export const getPrefs = () => prefs;
 
 /** Message d'erreur lisible (Electron préfixe les erreurs du processus principal). */
 export const errorText = (e: unknown) =>
     String((e as any)?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+
+/** a < b, pour des versions « x.y.z ». */
+export function olderThan(a: string, b: string) {
+    const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0);
+    return false;
+}
+
+export const isOutdated = () => !!state.installed && olderThan(state.installed, MIN_ENGINE);
+
+// Comptes « en ligne » : ni arrêtés, ni en erreur.
+export const isActive = (a?: AccountState) => !!a?.state && a.state !== "disconnected" && a.state !== "error";
+export const isReady = (a?: AccountState) => a?.state === "connected" || a?.state === "connected_left" || a?.state === "in_voice";
 
 let wired = false;
 
@@ -114,21 +146,27 @@ function wire() {
     wired = true;
     VencordNative.lowMusical.onEvent(msg => {
         if (msg?.event === "status" && msg.data && typeof msg.data === "object") {
-            const patch: Partial<MusicalState> = { running: true, ...msg.data };
+            if (typeof msg.account !== "string") {
+                set({ running: true, ...msg.data });
+                return;
+            }
+            const patch: Partial<AccountState> = { ...msg.data };
             // Même règle que le moteur : `current` n'existe qu'en vocal.
             if (typeof msg.data.state === "string" && msg.data.state !== "in_voice" && !("current" in msg.data)) patch.current = undefined;
             if (msg.data.state === "connecting") patch.error = undefined;
-            set(patch);
+            state = { ...state, running: true };
+            setAccount(msg.account, patch);
         } else if (msg?.event === "exit") {
-            state = { installed: state.installed, running: false, exitReason: String(msg.reason ?? "") };
+            state = { installed: state.installed, running: false, accounts: {}, exitReason: String(msg.reason ?? "") };
             emit();
         }
     });
-    VencordNative.lowMusical.isInstalled().then(installed => set({ installed })).catch(() => { });
+    VencordNative.lowMusical.installedVersion().then(installed => set({ installed })).catch(() => { });
     DataStore.get<Partial<MusicalPrefs>>(PREFS_KEY).then(saved => {
         if (saved && typeof saved === "object") {
             prefs = { ...PREF_DEFAULTS, ...saved };
             if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
+            if (!Array.isArray(prefs.selection)) prefs.selection = [];
         }
         emit();
     }).catch(() => { });
@@ -139,8 +177,8 @@ function wire() {
 export async function refresh() {
     try {
         if (!await VencordNative.lowMusical.isRunning()) return set({ running: false });
-        const snap = await VencordNative.lowMusical.call("status");
-        set({ running: true, ...snap });
+        const { accounts, ...snap } = await VencordNative.lowMusical.call("status");
+        set({ running: true, ...snap, accounts: accounts && typeof accounts === "object" ? accounts : {} });
     } catch { }
 }
 
@@ -157,7 +195,7 @@ export function useMusical() {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function savePrefs(patch: Partial<MusicalPrefs>) {
+export function savePrefs(patch: Partial<MusicalPrefs>) {
     prefs = { ...prefs, ...patch };
     emit();
     if (saveTimer) clearTimeout(saveTimer);
@@ -165,11 +203,12 @@ function savePrefs(patch: Partial<MusicalPrefs>) {
 }
 
 const call = <T = any>(cmd: string, args?: Record<string, unknown>) => VencordNative.lowMusical.call<T>(cmd, args);
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // ── Identité du client ───────────────────────────────────────────────────────
-// Le compte se présente avec la version, le système et la langue du vrai
+// Les comptes se présentent avec la version, le système et la langue du vrai
 // Discord. On ne garde QUE ces champs fixes : jamais les identifiants de
-// session ou d'installation, qui relieraient le compte à ton compte principal.
+// session ou d'installation, qui relieraient les comptes à ton compte principal.
 const SuperProperties = findByPropsLazy("getSuperProperties", "getSuperPropertiesBase64");
 const IDENTITY_KEYS = [
     "os", "browser", "release_channel", "client_version", "os_version", "os_arch", "app_arch",
@@ -187,14 +226,10 @@ function identity(): Record<string, unknown> | undefined {
     }
 }
 
-// ── Commandes ───────────────────────────────────────────────────────────────
+// ── Comptes ─────────────────────────────────────────────────────────────────
 
-export async function connect(account: SavedAccount) {
-    if (!account.token) throw new Error("token indisponible sur ce PC");
-    set({ accountId: account.id, state: "connecting", error: undefined, exitReason: undefined, user: undefined, guilds: undefined, current: undefined });
-    savePrefs({ accountId: account.id });
-    await call("connect", { token: account.token, properties: identity() });
-    // Réglages mémorisés : appliqués à chaque connexion.
+/** Renvoie au moteur les réglages audio mémorisés (communs à tous les comptes). */
+async function applyAudio() {
     await Promise.all([
         call("set_gain", { db: prefs.gain }),
         call("set_bitrate", { kbps: prefs.bitrate }),
@@ -205,20 +240,63 @@ export async function connect(account: SavedAccount) {
         call("set_eq", { bands: prefs.eq }),
     ]);
     // La source n'est relancée que si elle a été choisie à la main avant.
-    if (prefs.source) await setInput(prefs.source).catch(() => { });
+    if (prefs.source && !state.sourceOn) await setInput(prefs.source).catch(() => { });
 }
 
-export const disconnect = () => call("disconnect");
-export const join = (guild: string, channel: string) => call("join", { guild, channel });
-export const leave = () => call("leave");
+/** Connecte des comptes l'un après l'autre, espacés du délai choisi. */
+export async function connectAccounts(accounts: SavedAccount[]) {
+    if (isOutdated()) throw new Error("Mets à jour le moteur : Paramètres → low-musical → Mettre à jour.");
+    const usable = accounts.filter(a => a.token);
+    if (!usable.length) throw new Error("aucun compte utilisable sur ce PC");
+    set({ exitReason: undefined });
+
+    let first = true;
+    for (const account of usable) {
+        if (!first) await sleep(prefs.delay);
+        setAccount(account.id, { state: "connecting", error: undefined, user: undefined, guilds: undefined, current: undefined });
+        try {
+            await call("connect", { account: account.id, token: account.token, properties: identity() });
+        } catch (e) {
+            setAccount(account.id, { state: "error", error: errorText(e) });
+        }
+        if (first) await applyAudio();
+        first = false;
+    }
+}
+
+export async function disconnect(key?: string) {
+    await call("disconnect", key ? { account: key } : {});
+    if (!key) return set({ accounts: {} });
+    const { [key]: _, ...rest } = state.accounts;
+    set({ accounts: rest });
+}
+
+const readyKeys = () => Object.entries(state.accounts).filter(([, a]) => isReady(a)).map(([k]) => k);
+
+/** Fait rejoindre le salon à tous les comptes prêts, espacés du délai choisi. */
+export async function joinAll(guild: string, channel: string) {
+    let first = true;
+    for (const key of readyKeys()) {
+        if (!first) await sleep(prefs.delay);
+        first = false;
+        await call("join", { account: key, guild, channel }).catch(e => setAccount(key, { error: errorText(e) }));
+    }
+}
+
+export const leave = (key?: string) => call("leave", key ? { account: key } : {});
+export const setFakeDeafen = (on: boolean, key?: string) => call("set_fake_deafen", { on, ...(key ? { account: key } : {}) });
+export const setPresence = (on: boolean) => call("set_presence", { on });
+export const setFollow = (target: string | null) => call("set_follow", { target });
 export const devices = () => call<string[]>("devices");
+
+// ── Audio ───────────────────────────────────────────────────────────────────
 
 /** Démarre la capture : jamais automatique au premier usage, pour ne pas diffuser un micro par surprise. */
 export async function setInput(source: string) {
     const name = source === DEFAULT_INPUT ? null : source;
     await call("set_input", { name });
     savePrefs({ source });
-    set({ input: name });
+    set({ input: name, sourceOn: true });
 }
 
 // Réglages audio : mémorisés tout de suite, envoyés au moteur s'il tourne.
@@ -270,9 +348,5 @@ export function saveEqCustom() {
     savePrefs({ eqCustom: [...prefs.eq], eqPreset: EQ_CUSTOM });
 }
 
-export const setFakeDeafen = (on: boolean) => call("set_fake_deafen", { on });
-export const setPresence = (on: boolean) => call("set_presence", { on });
-export const setFollow = (target: string | null) => call("set_follow", { target });
-
-/** Arrête le moteur : le compte quitte le vocal et se déconnecte. */
+/** Arrête le moteur : les comptes quittent le vocal et se déconnectent. */
 export const stopEngine = () => VencordNative.lowMusical.stop();
