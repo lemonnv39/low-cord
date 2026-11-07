@@ -1,4 +1,4 @@
-// Vencord f39d4c3
+// Vencord 0f2787e
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
