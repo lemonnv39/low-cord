@@ -124,8 +124,8 @@ export function Visualizer() {
             const fade = ctx.createLinearGradient(0, 0, w, 0);
             fade.addColorStop(0, `rgba(${TINT},0)`);
             fade.addColorStop(0.15, `rgba(${TINT},1)`);
-            fade.addColorStop(0.38, `rgba(${TINT},0.45)`);
-            fade.addColorStop(0.62, `rgba(${TINT},0.45)`);
+            fade.addColorStop(0.38, `rgba(${TINT},0.6)`);
+            fade.addColorStop(0.62, `rgba(${TINT},0.6)`);
             fade.addColorStop(0.85, `rgba(${TINT},1)`);
             fade.addColorStop(1, `rgba(${TINT},0)`);
             ctx.strokeStyle = fade;

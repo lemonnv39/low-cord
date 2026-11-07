@@ -389,7 +389,7 @@ function PresetBar({ act }: { act: Act; }) {
 // ── Fenêtre ─────────────────────────────────────────────────────────────────
 
 /** Éléments où un clic n'attrape pas la fenêtre. */
-const INTERACTIVE = "button, input, label, a, textarea, [role=listbox], [role=option], .lc-mp-pad, .lc-mp-scroll";
+const INTERACTIVE = "button, input, label, a, textarea, canvas, form, [role=listbox], [role=option], [role=slider], [role=menu], .lc-mp-pad, .lc-mp-scroll, .lc-mp-modal-back";
 
 /** Attraper un fond vide déplace la fenêtre (elle suit la souris tant que le bouton est tenu). */
 function useWindowDrag() {

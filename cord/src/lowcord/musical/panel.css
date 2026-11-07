@@ -82,40 +82,39 @@
 }
 
 .lc-mp-title {
-    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
     margin: 0;
-    font-family: var(--font-display, "ABC Ginto Nord", var(--font-primary, sans-serif));
     line-height: 1;
-    filter:
-        drop-shadow(0 0 1px rgb(0 0 0))
-        drop-shadow(0 8px 18px rgb(0 0 0 / 90%))
-        drop-shadow(0 0 22px rgb(214 224 240 / 12%));
+    filter: drop-shadow(0 0 18px rgb(0 0 0 / 95%)) drop-shadow(0 0 3px rgb(0 0 0 / 80%));
 }
 
-/* Encre noire, liseré argent, et un reflet qui traverse le mot à l'ouverture
-   (même lumière que la bannière low-cord). */
+/* Argent poli, et un reflet de lumière qui traverse le titre à l'ouverture
+   (même effet que la bannière low-cord). */
 .lc-mp-title-ink {
     background:
-        linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 70%) 50%, transparent 60%) 130% 0 / 250% 100% no-repeat,
-        linear-gradient(180deg, #303037 0%, #0c0c0f 72%);
+        linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 85%) 50%, transparent 60%) 130% 0 / 250% 100% no-repeat,
+        var(--mp-ink);
     background-clip: text;
     color: transparent;
-    -webkit-text-stroke: 1.2px rgb(214 224 240 / 58%);
 }
 
+/* « low » fin et discret, « musical » plein. */
 .lc-mp-title-low {
+    --mp-ink: linear-gradient(#c3cad6, #c3cad6);
+
     font-size: 34px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    font-weight: 400;
+    letter-spacing: 0.02em;
 }
 
 .lc-mp-title-musical {
+    --mp-ink: linear-gradient(180deg, #fff 15%, #c9d1de 60%, #8e97a6 100%);
+
     font-size: 40px;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.035em;
 }
 
 .lc-mp-title-dash {
@@ -126,68 +125,26 @@
     box-shadow: 0 0 10px rgb(214 224 240 / 60%);
 }
 
-/* Voile sombre derrière le titre : l'encre noire se lit sur les fibres. */
-.lc-mp-title::after {
-    position: absolute;
-    z-index: -2;
-    inset: -18px -46px;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(5 5 7 / 88%), rgb(5 5 7 / 55%) 55%, transparent);
-    content: "";
-}
-
-/* Éclat de lumière derrière le titre, à l'ouverture seulement. */
-.lc-mp-title::before {
-    position: absolute;
-    z-index: -1;
-    inset: -30px -60px;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(214 224 240 / 22%), transparent);
-    content: "";
-    opacity: 0;
-}
-
-.lc-mp-panel-intro .lc-mp-title::before {
-    animation: lc-mp-flare 1800ms ease-out 400ms both;
-}
-
 .lc-mp-panel-intro .lc-mp-title-ink {
     animation:
-        lc-mp-title-in 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
-        lc-mp-sheen 1700ms cubic-bezier(0.45, 0, 0.25, 1) 650ms both;
+        lc-mp-title-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards,
+        lc-mp-sheen 1700ms cubic-bezier(0.45, 0, 0.25, 1) 550ms backwards;
 }
 
 .lc-mp-panel-intro .lc-mp-title-musical {
-    animation-delay: 120ms, 780ms;
-}
-
-.lc-mp-panel-intro .lc-mp-title-dash {
-    animation: lc-mp-dash-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms both;
+    animation-delay: 100ms, 680ms;
 }
 
 @keyframes lc-mp-title-in {
     from {
         opacity: 0;
-        filter: blur(6px);
-        transform: translateY(6px) scale(0.97);
+        transform: translateY(4px);
     }
 }
 
 @keyframes lc-mp-sheen {
     from { background-position: 130% 0, 0 0; }
     to { background-position: -30% 0, 0 0; }
-}
-
-@keyframes lc-mp-dash-in {
-    from {
-        opacity: 0;
-        transform: scaleX(0);
-    }
-}
-
-@keyframes lc-mp-flare {
-    35% { opacity: 1; }
-    100% { opacity: 0; }
 }
 
 .lc-mp-window-btns {
@@ -1701,7 +1658,8 @@
 /* ── Ouverture (première fois seulement) : les blocs arrivent en douceur ── */
 .lc-mp-panel-intro .lc-mp-card,
 .lc-mp-panel-intro .lc-mp-stage-bar {
-    animation: lc-mp-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    /* Opacité seulement : un décalage ferait passer les menus sous les blocs. */
+    animation: lc-mp-fade 520ms ease backwards;
 }
 
 .lc-mp-panel-intro .lc-mp-card-session { animation-delay: 60ms; }
@@ -1712,7 +1670,7 @@
 .lc-mp-panel-intro .lc-mp-card-sb { animation-delay: 360ms; }
 
 .lc-mp-panel-intro .lc-mp-visualizer {
-    animation: lc-mp-fade 1200ms ease 200ms both;
+    animation: lc-mp-fade 1200ms ease 200ms backwards;
 }
 
 @keyframes lc-mp-rise {
@@ -1741,7 +1699,7 @@
 .lc-mp-dropdown-ctx,
 .lc-mp-stage-pop,
 .lc-mp-stage-note {
-    animation: lc-mp-pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: lc-mp-pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 /* Les deux bulles centrées gardent leur décalage pendant l'animation. */
@@ -1800,7 +1758,7 @@
     padding: 24px;
     background: rgb(0 0 0 / 55%);
     backdrop-filter: blur(3px);
-    animation: lc-mp-fade 160ms ease both;
+    animation: lc-mp-fade 160ms ease backwards;
 }
 
 .lc-mp-modal {
@@ -1813,7 +1771,7 @@
     border-radius: 14px;
     background: #0e0e11;
     box-shadow: 0 30px 80px rgb(0 0 0 / 70%);
-    animation: lc-mp-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: lc-mp-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 .lc-mp-modal-head {
