@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde_json::{json, Map, Value};
 
+use crate::dsp::{self, Biquad, Chain, Params, StereoWidth};
 use crate::lock;
 
 pub const OUT_RATE: u32 = 48000;
@@ -60,14 +61,6 @@ global!(eq_gains: Mutex<[f32; 10]> = Mutex::new([0.0; 10]));
 global!(current_input: Mutex<Option<String>> = Mutex::new(None));
 // Drapeau d'arrêt de la capture en cours.
 global!(capture_stop: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None));
-// Traitement : coupe-bas (Hz, 0 = off), largeur stéréo (1 = normale),
-// saturation [0..1], compresseur (on + intensité [0..1]), limiteur.
-global!(highpass_hz: AtomicU32 = f32_atomic(0.0));
-global!(width: AtomicU32 = f32_atomic(1.0));
-global!(saturation: AtomicU32 = f32_atomic(0.0));
-global!(comp_on: AtomicBool = AtomicBool::new(false));
-global!(comp_amount: AtomicU32 = f32_atomic(0.5));
-global!(limiter_on: AtomicBool = AtomicBool::new(false));
 // Mesures du son envoyées au panneau (seulement quand il est ouvert).
 global!(meter_on: AtomicBool = AtomicBool::new(false));
 
@@ -89,17 +82,7 @@ pub fn snapshot(map: &mut Map<String, Value>) {
     map.insert("reverbDistance".into(), json!(load_f32(reverb_distance())));
     map.insert("eq".into(), json!(lock(eq_gains()).to_vec()));
     map.insert("volume".into(), json!(load_f32(volume())));
-    map.insert(
-        "processing".into(),
-        json!({
-            "highpass": load_f32(highpass_hz()),
-            "width": load_f32(width()),
-            "saturation": load_f32(saturation()),
-            "compressor": comp_on().load(Ordering::Relaxed),
-            "compAmount": load_f32(comp_amount()),
-            "limiter": limiter_on().load(Ordering::Relaxed),
-        }),
-    );
+    map.insert("processing".into(), dsp::current().to_json());
 }
 
 // ── Réglages ────────────────────────────────────────────────────────────────
@@ -142,29 +125,6 @@ pub fn set_eq(bands: Vec<f32>) {
     for (i, slot) in g.iter_mut().enumerate() {
         *slot = bands.get(i).copied().unwrap_or(0.0).clamp(-12.0, 12.0);
     }
-}
-
-/// Traitement : coupe-bas, largeur stéréo, saturation, compresseur, limiteur.
-pub fn set_processing(
-    highpass: f32,
-    stereo_width: f32,
-    drive: f32,
-    compressor: bool,
-    amount: f32,
-    limiter: bool,
-) {
-    // En dessous de 20 Hz, le coupe-bas est coupé.
-    let hz = if highpass < 20.0 {
-        0.0
-    } else {
-        highpass.min(400.0)
-    };
-    store_f32(highpass_hz(), hz);
-    store_f32(width(), stereo_width.clamp(0.0, 2.0));
-    store_f32(saturation(), drive.clamp(0.0, 1.0));
-    comp_on().store(compressor, Ordering::Relaxed);
-    store_f32(comp_amount(), amount.clamp(0.0, 1.0));
-    limiter_on().store(limiter, Ordering::Relaxed);
 }
 
 // ── 8D ──────────────────────────────────────────────────────────────────────
@@ -302,74 +262,6 @@ const EQ_FREQS: [f32; 10] = [
     31.0, 62.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
 ];
 
-#[derive(Clone, Copy)]
-struct Biquad {
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    a1: f32,
-    a2: f32,
-    z1: f32,
-    z2: f32,
-}
-impl Default for Biquad {
-    fn default() -> Self {
-        Biquad {
-            b0: 1.0,
-            b1: 0.0,
-            b2: 0.0,
-            a1: 0.0,
-            a2: 0.0,
-            z1: 0.0,
-            z2: 0.0,
-        }
-    }
-}
-impl Biquad {
-    fn set_peaking(&mut self, f0: f32, fs: f32, q: f32, gain_db: f32) {
-        let a = 10f32.powf(gain_db / 40.0);
-        let w0 = std::f32::consts::TAU * f0 / fs;
-        let cw = w0.cos();
-        let alpha = w0.sin() / (2.0 * q);
-        let a0 = 1.0 + alpha / a;
-        self.b0 = (1.0 + alpha * a) / a0;
-        self.b1 = (-2.0 * cw) / a0;
-        self.b2 = (1.0 - alpha * a) / a0;
-        self.a1 = (-2.0 * cw) / a0;
-        self.a2 = (1.0 - alpha / a) / a0;
-    }
-    /// Passe-bande à gain unitaire au centre (formules RBJ), pour les mesures.
-    fn set_bandpass(&mut self, f0: f32, fs: f32, q: f32) {
-        let w0 = std::f32::consts::TAU * f0 / fs;
-        let alpha = w0.sin() / (2.0 * q);
-        let a0 = 1.0 + alpha;
-        self.b0 = alpha / a0;
-        self.b1 = 0.0;
-        self.b2 = -alpha / a0;
-        self.a1 = (-2.0 * w0.cos()) / a0;
-        self.a2 = (1.0 - alpha) / a0;
-    }
-    /// Passe-haut (coupe-bas) d'ordre 2, Q = 0,707 (formules RBJ).
-    fn set_highpass(&mut self, f0: f32, fs: f32) {
-        let w0 = std::f32::consts::TAU * f0 / fs;
-        let cw = w0.cos();
-        let alpha = w0.sin() / (2.0 * std::f32::consts::FRAC_1_SQRT_2);
-        let a0 = 1.0 + alpha;
-        self.b0 = (1.0 + cw) / 2.0 / a0;
-        self.b1 = -(1.0 + cw) / a0;
-        self.b2 = (1.0 + cw) / 2.0 / a0;
-        self.a1 = (-2.0 * cw) / a0;
-        self.a2 = (1.0 - alpha) / a0;
-    }
-    fn process(&mut self, x: f32) -> f32 {
-        // Forme directe II transposée (stable).
-        let y = self.b0 * x + self.z1;
-        self.z1 = self.b1 * x - self.a1 * y + self.z2;
-        self.z2 = self.b2 * x - self.a2 * y;
-        y
-    }
-}
-
 struct Eq {
     bands: [[Biquad; 10]; 2],
     gains: [f32; 10],
@@ -398,44 +290,6 @@ impl Eq {
     }
 }
 
-// ── Dynamique (compresseur, limiteur) ───────────────────────────────────────
-// Suiveur d'enveloppe sur le maximum des deux canaux (stéréo liée : l'image
-// ne bouge pas quand un seul côté tape fort).
-
-struct Follower {
-    env: f32,
-    attack: f32,
-    release: f32,
-}
-
-impl Follower {
-    fn new(attack_ms: f32, release_ms: f32) -> Self {
-        let k = |ms: f32| (-1.0 / (ms * OUT_RATE as f32 / 1000.0)).exp();
-        Follower {
-            env: 0.0,
-            attack: k(attack_ms),
-            release: k(release_ms),
-        }
-    }
-    fn next(&mut self, level: f32) -> f32 {
-        let c = if level > self.env {
-            self.attack
-        } else {
-            self.release
-        };
-        self.env = level + c * (self.env - level);
-        self.env
-    }
-}
-
-fn db(x: f32) -> f32 {
-    20.0 * x.max(1e-9).log10()
-}
-
-fn from_db(d: f32) -> f32 {
-    10f32.powf(d / 20.0)
-}
-
 // ── Chaîne d'effets ─────────────────────────────────────────────────────────
 // Vit dans la capture : une seule par source, quel que soit le nombre de comptes.
 
@@ -445,8 +299,8 @@ struct Dsp {
     lfo: f32,
     highpass: [Biquad; 2],
     highpass_hz: f32,
-    comp: Follower,
-    limit: Follower,
+    width: StereoWidth,
+    chain: Chain,
 }
 
 impl Dsp {
@@ -457,13 +311,14 @@ impl Dsp {
             lfo: 0.0,
             highpass: [Biquad::default(); 2],
             highpass_hz: 0.0,
-            comp: Follower::new(10.0, 150.0),
-            limit: Follower::new(1.0, 80.0),
+            width: StereoWidth::new(),
+            chain: Chain::new(),
         }
     }
 
     /// Applique les effets à un bloc stéréo entrelacé (réglages relus à chaque bloc).
     fn process(&mut self, buf: &mut [f32]) {
+        let p: Params = dsp::current();
         let g = load_f32(gain());
         let gains = *lock(eq_gains());
         let eq_active = gains.iter().any(|g| g.abs() > 0.01);
@@ -475,38 +330,31 @@ impl Dsp {
             self.reverb
                 .update(load_f32(reverb_room()), load_f32(reverb_distance()));
         }
-        let hp = load_f32(highpass_hz());
-        if hp != self.highpass_hz {
-            self.highpass_hz = hp;
+        if p.highpass != self.highpass_hz {
+            self.highpass_hz = p.highpass;
             for b in self.highpass.iter_mut() {
-                b.set_highpass(hp.max(20.0), OUT_RATE as f32);
+                b.set_highpass(p.highpass.max(20.0), OUT_RATE as f32);
             }
         }
-        let w = load_f32(width());
-        let drive = load_f32(saturation());
-        // Saturation douce (tanh), niveau gardé : tanh(k·x) / tanh(k).
-        let k = 1.0 + drive * 9.0;
-        let norm = k.tanh();
-        let comp = comp_on().load(Ordering::Relaxed);
-        // Intensité → seuil de −10 à −40 dB, rapport 4:1, compensation de la moitié.
-        let threshold = -10.0 - 30.0 * load_f32(comp_amount());
-        let makeup = from_db(-threshold * 0.75 * 0.5);
         let vol = load_f32(volume());
-        let limit = limiter_on().load(Ordering::Relaxed);
-        const CEILING: f32 = 0.891; // −1 dBFS
 
+        // Entrée : gain, coupe-bas, puis porte / nivellement / mode stéréo.
         for frame in buf.as_chunks_mut::<2>().0 {
             let (mut l, mut r) = (frame[0] * g, frame[1] * g);
-            if hp > 0.0 {
+            if p.highpass > 0.0 {
                 l = self.highpass[0].process(l);
                 r = self.highpass[1].process(r);
             }
-            (l, r) = spatialize(l, r, &mut self.lfo);
-            if (w - 1.0).abs() > 0.01 {
-                let mid = (l + r) * 0.5;
-                let side = (l - r) * 0.5 * w;
-                (l, r) = (mid + side, mid - side);
-            }
+            frame[0] = l;
+            frame[1] = r;
+        }
+        self.chain.front(buf, &p);
+
+        // Espace et couleur, puis traitement « fort et propre ».
+        self.chain.begin_block(&p);
+        for frame in buf.as_chunks_mut::<2>().0 {
+            let (mut l, mut r) = spatialize(frame[0], frame[1], &mut self.lfo);
+            (l, r) = self.width.process(l, r, &p);
             if rvb {
                 (l, r) = self.reverb.process(l, r);
             }
@@ -514,36 +362,7 @@ impl Dsp {
                 l = self.eq.process(l, 0);
                 r = self.eq.process(r, 1);
             }
-            if drive > 0.001 {
-                l = (k * l).tanh() / norm;
-                r = (k * r).tanh() / norm;
-            }
-            if comp {
-                let env = self.comp.next(l.abs().max(r.abs()));
-                let over = db(env) - threshold;
-                let reduce = if over > 0.0 {
-                    from_db(-over * 0.75)
-                } else {
-                    1.0
-                };
-                l *= reduce * makeup;
-                r *= reduce * makeup;
-            }
-            l *= vol;
-            r *= vol;
-            if limit {
-                let env = self.limit.next(l.abs().max(r.abs()));
-                if env > CEILING {
-                    let reduce = CEILING / env;
-                    l *= reduce;
-                    r *= reduce;
-                }
-                // Filet de sécurité : jamais au-delà du plafond.
-                l = l.clamp(-CEILING, CEILING);
-                r = r.clamp(-CEILING, CEILING);
-            }
-            frame[0] = l;
-            frame[1] = r;
+            (frame[0], frame[1]) = self.chain.back(l, r, &p, vol);
         }
     }
 }
@@ -629,12 +448,16 @@ impl Meter {
 }
 
 fn send_meter(r: &Reading) {
+    // Réduction de gain (dB) du compresseur et du limiteur depuis la dernière mesure.
+    let (comp, limit) = dsp::take_reduction();
     let round = |x: f32| (x * 1000.0).round() / 1000.0;
     crate::proto::event(json!({
         "event": "meter",
         "level": round(r.level),
         "peak": round(r.peak),
         "bands": r.bands.iter().map(|&b| round(b)).collect::<Vec<_>>(),
+        "comp": round(comp),
+        "limit": round(limit),
     }));
 }
 
@@ -858,7 +681,7 @@ mod tests {
         set_8d(0, 0.15, 0.5);
         set_reverb(false);
         set_eq(vec![0.0; 10]);
-        set_processing(0.0, 1.0, 0.0, false, 0.5, false);
+        dsp::set_params(Params::default());
     }
 
     /// Une seconde de sinus stéréo (gauche, droite) passée dans la chaîne d'effets.
@@ -918,62 +741,6 @@ mod tests {
         // Gain borné à +64 dB : 0.0001 × 1585 ≈ 0.158.
         set_gain(80.0);
         assert!((peak(&run(440.0, 0.0001, 0.0001)) - 0.1585).abs() < 0.005);
-        reset();
-    }
-
-    #[test]
-    fn limiteur_plafonne_a_moins_1_dbfs() {
-        let _g = lock(&SERIAL);
-        reset();
-        set_processing(0.0, 1.0, 0.0, false, 0.5, true);
-        let out = run(440.0, 2.0, 2.0);
-        assert!(out.iter().all(|x| x.abs() <= 0.8911));
-        reset();
-    }
-
-    #[test]
-    fn coupe_bas_attenue_les_graves() {
-        let _g = lock(&SERIAL);
-        reset();
-        set_processing(200.0, 1.0, 0.0, false, 0.5, false);
-        assert!(peak(&run(30.0, 0.5, 0.5)) < 0.05);
-        assert!(peak(&run(2000.0, 0.5, 0.5)) > 0.45);
-        reset();
-    }
-
-    #[test]
-    fn largeur_zero_donne_du_mono() {
-        let _g = lock(&SERIAL);
-        reset();
-        set_processing(0.0, 0.0, 0.0, false, 0.5, false);
-        let out = run(440.0, 0.8, 0.0);
-        assert!(out
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .all(|[l, r]| (l - r).abs() < 1e-6));
-        reset();
-    }
-
-    #[test]
-    fn saturation_garde_le_niveau() {
-        let _g = lock(&SERIAL);
-        reset();
-        set_processing(0.0, 1.0, 1.0, false, 0.5, false);
-        let p = peak(&run(440.0, 1.0, 1.0));
-        assert!(p <= 1.0001 && p > 0.95);
-        reset();
-    }
-
-    #[test]
-    fn compresseur_resserre_l_ecart() {
-        let _g = lock(&SERIAL);
-        reset();
-        set_processing(0.0, 1.0, 0.0, true, 1.0, false);
-        let fort = peak(&run(440.0, 0.9, 0.9));
-        let faible = peak(&run(440.0, 0.09, 0.09));
-        // Sans compresseur, l'écart serait de 20 dB.
-        assert!(db(fort) - db(faible) < 12.0);
         reset();
     }
 }

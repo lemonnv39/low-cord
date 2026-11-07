@@ -17,6 +17,7 @@
 //! Client tiers en token utilisateur : à utiliser avec des comptes dédiés.
 
 mod audio;
+mod dsp;
 mod engine;
 mod proto;
 
@@ -176,14 +177,7 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "set_processing" => {
-            audio::set_processing(
-                num(r, "highpass")? as f32,
-                num(r, "width")? as f32,
-                num(r, "saturation")? as f32,
-                flag(r, "compressor")?,
-                num(r, "compAmount")? as f32,
-                flag(r, "limiter")?,
-            );
+            dsp::set_params(dsp::Params::from_json(r));
             Ok(Value::Null)
         }
 
