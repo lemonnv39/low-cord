@@ -76,7 +76,7 @@ pub fn snapshot(map: &mut Map<String, Value>) {
 // ── Réglages ────────────────────────────────────────────────────────────────
 
 pub fn set_gain(db: f32) {
-    store_f32(gain(), 10f32.powf(db.clamp(-64.0, 64.0) / 20.0));
+    store_f32(gain(), 10f32.powf(db.clamp(-64.0, 128.0) / 20.0));
 }
 
 /// Active ou coupe l'envoi des mesures du son (niveau, spectre) au panneau.
@@ -639,15 +639,15 @@ mod tests {
     }
 
     #[test]
-    fn volume_general_et_gain_64_db() {
+    fn volume_general_et_gain_128_db() {
         let _g = lock(&SERIAL);
         reset();
         set_volume(0.5);
         assert!((peak(&run(440.0, 0.8, 0.8)) - 0.4).abs() < 0.01);
         set_volume(1.0);
-        // Gain borné à +64 dB : 0.0001 × 1585 ≈ 0.158.
-        set_gain(80.0);
-        assert!((peak(&run(440.0, 0.0001, 0.0001)) - 0.1585).abs() < 0.005);
+        // Gain borné à +128 dB : 1e-7 × 2 511 886 ≈ 0.251.
+        set_gain(140.0);
+        assert!((peak(&run(440.0, 1e-7, 1e-7)) - 0.2512).abs() < 0.01);
         reset();
     }
 }

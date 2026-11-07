@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "low-musical-engine"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "cpal",
  "futures-util",
