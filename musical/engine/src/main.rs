@@ -2,7 +2,8 @@
 //!
 //! Un ou plusieurs comptes se connectent au gateway Discord, rejoignent un salon
 //! vocal et y DIFFUSENT de l'audio (émission seule) : capture d'un périphérique
-//! d'entrée → gain → coupe-bas → 8D → largeur → réverbe → égaliseur →
+//! d'entrée → gain → coupe-bas → espace 360° (position, pièce) → largeur →
+//! égaliseur →
 //! saturation → compresseur → volume → limiteur → Opus (songbird, chiffrement
 //! DAVE inclus).
 //!
@@ -20,6 +21,7 @@ mod audio;
 mod dsp;
 mod engine;
 mod proto;
+mod space;
 
 use serde_json::{json, Value};
 use std::io::BufRead;
@@ -144,20 +146,8 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
             audio::set_latency(num(r, "ms")? as u32);
             Ok(Value::Null)
         }
-        "set_8d" => {
-            audio::set_8d(
-                num(r, "mode")? as u8,
-                num(r, "speed")? as f32,
-                num(r, "position")? as f32,
-            );
-            Ok(Value::Null)
-        }
-        "set_reverb" => {
-            audio::set_reverb(flag(r, "on")?);
-            Ok(Value::Null)
-        }
-        "set_reverb_params" => {
-            audio::set_reverb_params(num(r, "room")? as f32, num(r, "distance")? as f32);
+        "set_space" => {
+            space::set_params(space::SpaceParams::from_json(r));
             Ok(Value::Null)
         }
         "set_eq" => {

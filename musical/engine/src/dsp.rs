@@ -112,6 +112,24 @@ impl Biquad {
             1.0 - alpha,
         );
     }
+    /// Étagère haute (pente 1) : gain appliqué au-dessus de f0.
+    pub fn set_highshelf(&mut self, f0: f32, fs: f32, gain_db: f32) {
+        let a = 10f32.powf(gain_db / 40.0);
+        let w0 = std::f32::consts::TAU * f0 / fs;
+        let cw = w0.cos();
+        let alpha = w0.sin() / 2.0 * std::f32::consts::SQRT_2;
+        let sa = 2.0 * a.sqrt() * alpha;
+        self.set(
+            [
+                a * ((a + 1.0) + (a - 1.0) * cw + sa),
+                -2.0 * a * ((a - 1.0) + (a + 1.0) * cw),
+                a * ((a + 1.0) + (a - 1.0) * cw - sa),
+            ],
+            (a + 1.0) - (a - 1.0) * cw + sa,
+            2.0 * ((a - 1.0) - (a + 1.0) * cw),
+            (a + 1.0) - (a - 1.0) * cw - sa,
+        );
+    }
     /// Passe-haut d'ordre 2, Q = 0,707 (Butterworth).
     pub fn set_highpass(&mut self, f0: f32, fs: f32) {
         self.set_highpass_q(f0, fs, std::f32::consts::FRAC_1_SQRT_2);

@@ -14,6 +14,7 @@ use serde_json::{json, Map, Value};
 
 use crate::dsp::{self, Biquad, Chain, Params, StereoWidth};
 use crate::lock;
+use crate::space::{self, Space};
 
 pub const OUT_RATE: u32 = 48000;
 type Ring = Arc<Mutex<VecDeque<f32>>>;
@@ -44,17 +45,6 @@ global!(volume: AtomicU32 = f32_atomic(1.0));
 // Latence cible (ms) = taille max du tampon. Plus bas = plus réactif, mais
 // risque de micro-coupures.
 global!(latency_ms: AtomicU32 = AtomicU32::new(200));
-// 8D : 0 = off (stéréo directe), 1 = auto (rotation), 2 = manuel.
-global!(eightd_mode: AtomicU32 = AtomicU32::new(0));
-// Vitesse de rotation auto (Hz). 0.15 Hz ≈ 7 s par tour.
-global!(eightd_speed: AtomicU32 = f32_atomic(0.15));
-// Position panoramique manuelle [0..1], 0.5 = centre.
-global!(eightd_pos: AtomicU32 = f32_atomic(0.5));
-global!(reverb_on: AtomicBool = AtomicBool::new(false));
-// Taille de la salle [0..1] : longueur de la réverbe.
-global!(reverb_room: AtomicU32 = f32_atomic(0.5));
-// Distance [0..1] : dosage son direct / réverbéré.
-global!(reverb_distance: AtomicU32 = f32_atomic(0.4));
 // Gains des 10 bandes de l'égaliseur, en dB [-12..12].
 global!(eq_gains: Mutex<[f32; 10]> = Mutex::new([0.0; 10]));
 // Périphérique choisi (None = entrée par défaut).
@@ -77,9 +67,7 @@ pub fn snapshot(map: &mut Map<String, Value>) {
         "latency".into(),
         json!(latency_ms().load(Ordering::Relaxed)),
     );
-    map.insert("reverb".into(), json!(reverb_on().load(Ordering::Relaxed)));
-    map.insert("reverbRoom".into(), json!(load_f32(reverb_room())));
-    map.insert("reverbDistance".into(), json!(load_f32(reverb_distance())));
+    map.insert("space".into(), space::current().to_json());
     map.insert("eq".into(), json!(lock(eq_gains()).to_vec()));
     map.insert("volume".into(), json!(load_f32(volume())));
     map.insert("processing".into(), dsp::current().to_json());
@@ -105,154 +93,10 @@ pub fn set_latency(ms: u32) {
     latency_ms().store(ms.clamp(40, 2000), Ordering::Relaxed);
 }
 
-pub fn set_8d(mode: u8, speed: f32, position: f32) {
-    eightd_mode().store(u32::from(mode.min(2)), Ordering::Relaxed);
-    store_f32(eightd_speed(), speed.clamp(0.0, 5.0));
-    store_f32(eightd_pos(), position.clamp(0.0, 1.0));
-}
-
-pub fn set_reverb(on: bool) {
-    reverb_on().store(on, Ordering::Relaxed);
-}
-
-pub fn set_reverb_params(room: f32, distance: f32) {
-    store_f32(reverb_room(), room.clamp(0.0, 1.0));
-    store_f32(reverb_distance(), distance.clamp(0.0, 1.0));
-}
-
 pub fn set_eq(bands: Vec<f32>) {
     let mut g = lock(eq_gains());
     for (i, slot) in g.iter_mut().enumerate() {
         *slot = bands.get(i).copied().unwrap_or(0.0).clamp(-12.0, 12.0);
-    }
-}
-
-// ── 8D ──────────────────────────────────────────────────────────────────────
-
-fn spatialize(l: f32, r: f32, phase: &mut f32) -> (f32, f32) {
-    match eightd_mode().load(Ordering::Relaxed) {
-        1 => {
-            *phase += std::f32::consts::TAU * load_f32(eightd_speed()) / OUT_RATE as f32;
-            if *phase > std::f32::consts::TAU {
-                *phase -= std::f32::consts::TAU;
-            }
-            pan_mono((l + r) * 0.5, (phase.sin() + 1.0) * 0.5)
-        }
-        2 => pan_mono((l + r) * 0.5, load_f32(eightd_pos())),
-        _ => (l, r),
-    }
-}
-
-/// Panoramique à puissance constante d'un signal mono, position p ∈ [0,1].
-fn pan_mono(mono: f32, p: f32) -> (f32, f32) {
-    let angle = p.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2;
-    (mono * angle.cos(), mono * angle.sin())
-}
-
-// ── Réverbe (Freeverb) ─────────────────────────────────────────────────────
-// 8 filtres en peigne + 4 passe-tout par canal, décalage stéréo de 23
-// échantillons : la réverbe « classique » de référence.
-
-struct Comb {
-    buf: Vec<f32>,
-    idx: usize,
-    filt: f32,
-    damp1: f32,
-    damp2: f32,
-    feedback: f32,
-}
-impl Comb {
-    fn new(len: usize, feedback: f32, damp: f32) -> Self {
-        Comb {
-            buf: vec![0.0; len.max(1)],
-            idx: 0,
-            filt: 0.0,
-            damp1: damp,
-            damp2: 1.0 - damp,
-            feedback,
-        }
-    }
-    fn process(&mut self, input: f32) -> f32 {
-        let out = self.buf[self.idx];
-        self.filt = out * self.damp2 + self.filt * self.damp1;
-        self.buf[self.idx] = input + self.filt * self.feedback;
-        self.idx = (self.idx + 1) % self.buf.len();
-        out
-    }
-}
-
-struct Allpass {
-    buf: Vec<f32>,
-    idx: usize,
-    feedback: f32,
-}
-impl Allpass {
-    fn new(len: usize, feedback: f32) -> Self {
-        Allpass {
-            buf: vec![0.0; len.max(1)],
-            idx: 0,
-            feedback,
-        }
-    }
-    fn process(&mut self, input: f32) -> f32 {
-        let buf = self.buf[self.idx];
-        self.buf[self.idx] = input + buf * self.feedback;
-        self.idx = (self.idx + 1) % self.buf.len();
-        buf - input
-    }
-}
-
-struct Reverb {
-    cl: Vec<Comb>,
-    cr: Vec<Comb>,
-    al: Vec<Allpass>,
-    ar: Vec<Allpass>,
-    wet: f32,
-    dry: f32,
-}
-impl Reverb {
-    fn new() -> Self {
-        // Accordages Freeverb (44,1 kHz) ré-échelonnés vers 48 kHz.
-        let scale = OUT_RATE as f32 / 44100.0;
-        let s = |n: usize| ((n as f32) * scale) as usize;
-        let combs = [1116usize, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
-        let aps = [556usize, 441, 341, 225];
-        let spread = s(23);
-        Reverb {
-            cl: combs.iter().map(|&n| Comb::new(s(n), 0.84, 0.2)).collect(),
-            cr: combs
-                .iter()
-                .map(|&n| Comb::new(s(n) + spread, 0.84, 0.2))
-                .collect(),
-            al: aps.iter().map(|&n| Allpass::new(s(n), 0.5)).collect(),
-            ar: aps
-                .iter()
-                .map(|&n| Allpass::new(s(n) + spread, 0.5))
-                .collect(),
-            wet: 0.24,
-            dry: 0.84,
-        }
-    }
-    fn update(&mut self, room: f32, distance: f32) {
-        let fb = room.clamp(0.0, 1.0) * 0.28 + 0.7;
-        for c in self.cl.iter_mut().chain(self.cr.iter_mut()) {
-            c.feedback = fb;
-        }
-        let d = distance.clamp(0.0, 1.0);
-        self.wet = d * 0.6;
-        self.dry = 1.0 - d * 0.4;
-    }
-    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
-        let input = (l + r) * 0.015; // gain d'entrée Freeverb (stabilité des peignes)
-        let mut wl: f32 = self.cl.iter_mut().map(|c| c.process(input)).sum();
-        let mut wr: f32 = self.cr.iter_mut().map(|c| c.process(input)).sum();
-        for a in self.al.iter_mut() {
-            wl = a.process(wl);
-        }
-        for a in self.ar.iter_mut() {
-            wr = a.process(wr);
-        }
-        (l * self.dry + wl * self.wet, r * self.dry + wr * self.wet)
     }
 }
 
@@ -295,8 +139,7 @@ impl Eq {
 
 struct Dsp {
     eq: Eq,
-    reverb: Reverb,
-    lfo: f32,
+    space: Space,
     highpass: [Biquad; 2],
     highpass_hz: f32,
     width: StereoWidth,
@@ -307,8 +150,7 @@ impl Dsp {
     fn new() -> Self {
         Dsp {
             eq: Eq::new(),
-            reverb: Reverb::new(),
-            lfo: 0.0,
+            space: Space::new(),
             highpass: [Biquad::default(); 2],
             highpass_hz: 0.0,
             width: StereoWidth::new(),
@@ -324,11 +166,6 @@ impl Dsp {
         let eq_active = gains.iter().any(|g| g.abs() > 0.01);
         if eq_active {
             self.eq.update(&gains);
-        }
-        let rvb = reverb_on().load(Ordering::Relaxed);
-        if rvb {
-            self.reverb
-                .update(load_f32(reverb_room()), load_f32(reverb_distance()));
         }
         if p.highpass != self.highpass_hz {
             self.highpass_hz = p.highpass;
@@ -350,14 +187,11 @@ impl Dsp {
         }
         self.chain.front(buf, &p);
 
-        // Espace et couleur, puis traitement « fort et propre ».
+        // Espace (position 360°, pièce), puis couleur et traitement « fort et propre ».
+        self.space.process(buf, &space::current());
         self.chain.begin_block(&p);
         for frame in buf.as_chunks_mut::<2>().0 {
-            let (mut l, mut r) = spatialize(frame[0], frame[1], &mut self.lfo);
-            (l, r) = self.width.process(l, r, &p);
-            if rvb {
-                (l, r) = self.reverb.process(l, r);
-            }
+            let (mut l, mut r) = self.width.process(frame[0], frame[1], &p);
             if eq_active {
                 l = self.eq.process(l, 0);
                 r = self.eq.process(r, 1);
@@ -450,7 +284,7 @@ impl Meter {
 fn send_meter(r: &Reading) {
     // Réduction de gain (dB) du compresseur et du limiteur depuis la dernière mesure.
     let (comp, limit) = dsp::take_reduction();
-    let round = |x: f32| (x * 1000.0).round() / 1000.0;
+    let round = |x: f32| (f64::from(x) * 1000.0).round() / 1000.0;
     crate::proto::event(json!({
         "event": "meter",
         "level": round(r.level),
@@ -458,6 +292,7 @@ fn send_meter(r: &Reading) {
         "bands": r.bands.iter().map(|&b| round(b)).collect::<Vec<_>>(),
         "comp": round(comp),
         "limit": round(limit),
+        "pos": space::position().map(|(x, y)| [round(x), round(y)]),
     }));
 }
 
@@ -678,8 +513,7 @@ mod tests {
     fn reset() {
         set_gain(0.0);
         set_volume(1.0);
-        set_8d(0, 0.15, 0.5);
-        set_reverb(false);
+        space::set_params(space::SpaceParams::default());
         set_eq(vec![0.0; 10]);
         dsp::set_params(Params::default());
     }
