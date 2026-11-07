@@ -16,14 +16,16 @@ import "./panel.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { type Folder, getAccounts, getFolders, type SavedAccount } from "@lowplugins/tokenImporter";
+import { copyToClipboard } from "@utils/clipboard";
 import { ChannelStore, GuildStore, SelectedChannelStore, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import { Card, cl, Slider } from "./controls";
+import { Card, Chip, cl, Dropdown, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
-    type AccountState, connectAccounts, disconnect, type EngineState, errorText, followMe, getPrefs, isActive,
-    isOutdated, isReady, PREF_DEFAULTS, savePrefs, setFakeDeafen, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
+    type AccountState, applyPreset, connectAccounts, deleteUserPreset, disconnect, type EngineState, errorText, exportPreset,
+    followMe, getPrefs, importPreset, isActive, isOutdated, isReady, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, savePrefs,
+    saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
 } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
 import { Visualizer } from "./Visualizer";
@@ -301,6 +303,75 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
     );
 }
 
+// ── Sous le titre : préréglages et options ──────────────────────────────────
+
+const SaveIcon = () => svg(<><path d="M5 3h11l3 3v15H5z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></>, 15);
+const MoreIcon = () => svg(<><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></>, 15);
+
+function PresetBar({ act, pending }: { act: Act; pending: boolean; }) {
+    const music = useMusical();
+    const prefs = getPrefs();
+    const [form, setForm] = useState<"save" | "import" | "menu" | null>(null);
+    const [text, setText] = useState("");
+    const [note, setNote] = useState<string | null>(null);
+
+    const ready = Object.values(music.accounts).filter(isReady);
+    const allDeaf = ready.length > 0 && ready.every(a => a.fakeDeafen);
+    const isUser = prefs.userPresets.some(p => p.name === prefs.preset);
+
+    const flash = (msg: string) => {
+        setNote(msg);
+        setTimeout(() => setNote(n => (n === msg ? null : n)), 2500);
+    };
+    const close = () => { setForm(null); setText(""); };
+
+    return (
+        <div className={cl("stage-bar")}>
+            <div className={cl("stage-row")}>
+                <div className={cl("preset-pick")}>
+                    <Dropdown
+                        value={prefs.preset}
+                        placeholder={prefs.preset === PRESET_CUSTOM ? "Perso (réglé à la main)" : "Préréglages low-musical"}
+                        choices={[
+                            ...Object.keys(PRESETS).map(name => ({ value: name, label: name })),
+                            ...prefs.userPresets.map(p => ({ value: p.name, label: `★ ${p.name}` })),
+                        ]}
+                        onChange={applyPreset}
+                    />
+                </div>
+                <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => setForm(form === "save" ? null : "save")} title="Enregistrer le son actuel comme préréglage" aria-label="Enregistrer"><SaveIcon /></button>
+                <button type="button" className={cl("icon-btn", "icon-btn-glass", form === "menu" && "icon-btn-on")} onClick={() => setForm(form === "menu" ? null : "menu")} title="Exporter, importer, supprimer" aria-label="Plus"><MoreIcon /></button>
+                <span className={cl("stage-sep")} />
+                <Chip on={prefs.streamProof} onClick={() => act(async () => { await setStreamProof(!prefs.streamProof); })} title="La fenêtre de low-musical devient invisible quand tu partages ton écran">Anti-stream</Chip>
+                <Chip on={allDeaf} disabled={pending || !ready.length} onClick={() => act(() => setFakeDeafen(!allDeaf))} title="Tous les comptes apparaissent sourds (casque coupé) mais continuent de diffuser">Comptes en sourdine</Chip>
+            </div>
+
+            {form === "menu" && (
+                <div className={cl("stage-pop")}>
+                    <button type="button" className={cl("link")} onClick={() => { copyToClipboard(exportPreset(prefs.preset)); close(); flash("Préréglage copié : colle-le à qui tu veux."); }}>Exporter (copier)</button>
+                    <button type="button" className={cl("link")} onClick={() => setForm("import")}>Importer (coller)</button>
+                    {isUser && <button type="button" className={cl("link", "link-danger")} onClick={() => { deleteUserPreset(prefs.preset); close(); flash("Préréglage supprimé."); }}>Supprimer « {prefs.preset} »</button>}
+                </div>
+            )}
+            {form === "save" && (
+                <form className={cl("stage-pop")} onSubmit={e => { e.preventDefault(); act(async () => { saveUserPreset(text); close(); flash("Préréglage enregistré."); }); }}>
+                    <input className={cl("text")} autoFocus maxLength={32} placeholder="Nom du préréglage" value={text} onChange={e => setText(e.currentTarget.value)} />
+                    <button type="submit" className={cl("btn", "btn-primary", "btn-sm")} disabled={!text.trim()}>Enregistrer</button>
+                    <button type="button" className={cl("link")} onClick={close}>Annuler</button>
+                </form>
+            )}
+            {form === "import" && (
+                <form className={cl("stage-pop")} onSubmit={e => { e.preventDefault(); act(async () => { const name = importPreset(text); close(); applyPreset(name); flash(`« ${name} » importé.`); }); }}>
+                    <input className={cl("text")} autoFocus placeholder="Colle ici le préréglage exporté" value={text} onChange={e => setText(e.currentTarget.value)} />
+                    <button type="submit" className={cl("btn", "btn-primary", "btn-sm")} disabled={!text.trim()}>Importer</button>
+                    <button type="button" className={cl("link")} onClick={close}>Annuler</button>
+                </form>
+            )}
+            {note && <div className={cl("stage-note")}>{note}</div>}
+        </div>
+    );
+}
+
 // ── Fenêtre ─────────────────────────────────────────────────────────────────
 
 /** Éléments où un clic n'attrape pas la fenêtre. */
@@ -357,6 +428,15 @@ function PanelBody({ onClose }: { onClose(): void; }) {
         wantMeter(true);
         return () => wantMeter(false);
     }, []);
+    // Titre de la fenêtre (sert aussi à la retrouver pour l'anti-stream), puis
+    // anti-stream réappliqué à chaque ouverture si l'option est active.
+    useEffect(() => {
+        const doc = rootRef.current?.ownerDocument;
+        if (doc) doc.title = "low-musical";
+        if (!getPrefs().streamProof) return;
+        const timer = setTimeout(() => setStreamProof(true).catch(() => { }), 400);
+        return () => clearTimeout(timer);
+    }, []);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const onTop = useAlwaysOnTop();
@@ -381,11 +461,14 @@ function PanelBody({ onClose }: { onClose(): void; }) {
 
                 {/* Scène : titre + visualisation du son en direct */}
                 <div className={cl("stage")}>
-                    <Visualizer />
-                    <div className={cl("stage-text")}>
-                        <span className={cl("title")}>low-musical</span>
-                        <StatusPill />
+                    <div className={cl("stage-hero")}>
+                        <Visualizer />
+                        <div className={cl("stage-text")}>
+                            <span className={cl("title")}>low-musical</span>
+                            <StatusPill />
+                        </div>
                     </div>
+                    <PresetBar act={act} pending={pending} />
                     <div className={cl("window-btns")}>
                         <button
                             type="button"

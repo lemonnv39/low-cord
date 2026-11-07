@@ -80,4 +80,5 @@ export const enum IpcEvents {
     LOWMUSICAL_INSTALLED = "LowMusicalInstalled",
     LOWMUSICAL_DRAG_START = "LowMusicalDragStart",
     LOWMUSICAL_DRAG_END = "LowMusicalDragEnd",
+    LOWMUSICAL_STREAM_PROOF = "LowMusicalStreamProof",
 }

@@ -165,6 +165,7 @@ window.VencordNative = {
         installedVersion: async () => null,
         dragStart: async () => false,
         dragEnd: async () => { },
+        setStreamProof: async () => 0,
         stop: async () => { },
         onEvent: () => { },
     },

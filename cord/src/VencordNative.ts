@@ -129,6 +129,8 @@ export default {
         /** Déplacement de la fenêtre du panneau : elle suit la souris jusqu'à dragEnd. */
         dragStart: () => invoke<boolean>(IpcEvents.LOWMUSICAL_DRAG_START),
         dragEnd: () => invoke<void>(IpcEvents.LOWMUSICAL_DRAG_END),
+        /** Fenêtre du panneau invisible en partage d'écran. */
+        setStreamProof: (on: boolean) => invoke<number>(IpcEvents.LOWMUSICAL_STREAM_PROOF, on),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

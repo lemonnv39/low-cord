@@ -291,6 +291,19 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_START, event => {
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_END, () => stopDrag());
 
+// Anti-stream : la fenêtre du panneau (titre « low-musical ») devient
+// invisible dans les partages d'écran et les captures. Renvoie le nombre de
+// fenêtres touchées (0 = panneau fermé : appliqué à sa prochaine ouverture).
+ipcMain.handle(IpcEvents.LOWMUSICAL_STREAM_PROOF, (_, on: unknown) => {
+    let n = 0;
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed() || win.getTitle() !== "low-musical" || !win.webContents.getURL().includes("/popout")) continue;
+        win.setContentProtection(on === true);
+        n++;
+    }
+    return n;
+});
+
 // Reste d'un téléchargement interrompu (Discord fermé en plein milieu).
 app.whenReady().then(() => {
     try {

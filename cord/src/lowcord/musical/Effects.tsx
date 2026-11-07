@@ -200,6 +200,66 @@ export function SignalCard({ act }: { act: Act; }) {
 
 // ── Égaliseur ───────────────────────────────────────────────────────────────
 
+/**
+ * Spectre du son en direct derrière les bandes, aux mêmes fréquences (échelle
+ * logarithmique de 31 Hz à 16 kHz) : on voit ce que chaque bande touche.
+ */
+function EqSpectrum() {
+    const ref = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const canvas = ref.current!;
+        const win = canvas.ownerDocument.defaultView!;
+        const ctx = canvas.getContext("2d")!;
+        const smooth = new Float32Array(24);
+        // Fréquence de chaque mesure (24 bandes de 40 Hz à 16 kHz) → position 0..1 sur les colonnes.
+        const xs = Array.from({ length: 24 }, (_, i) => {
+            const f = 40 * Math.pow(400, i / 23);
+            const t = Math.log(f / 31) / Math.log(16000 / 31);
+            return (0.5 + t * 9) / 10;
+        });
+        let raf = 0;
+        const draw = () => {
+            raf = win.requestAnimationFrame(draw);
+            const dpr = win.devicePixelRatio || 1;
+            const w = canvas.clientWidth, h = canvas.clientHeight;
+            if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+                canvas.width = Math.round(w * dpr);
+                canvas.height = Math.round(h * dpr);
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+            const m = getMeter();
+            const fresh = m && performance.now() - m.at < 400;
+            for (let i = 0; i < 24; i++) {
+                const v = fresh ? m!.bands[i] ?? 0 : 0;
+                smooth[i] += (v - smooth[i]) * (v > smooth[i] ? 0.5 : 0.1);
+            }
+            if (smooth.every(v => v < 0.01)) return;
+            const y = (v: number) => h - v * h * 0.92;
+            ctx.beginPath();
+            ctx.moveTo(xs[0] * w, h);
+            ctx.lineTo(xs[0] * w, y(smooth[0]));
+            for (let i = 1; i < 24; i++) {
+                const cx = (xs[i - 1] + xs[i]) / 2 * w;
+                ctx.quadraticCurveTo(xs[i - 1] * w, y(smooth[i - 1]), cx, (y(smooth[i - 1]) + y(smooth[i])) / 2);
+            }
+            ctx.lineTo(xs[23] * w, y(smooth[23]));
+            ctx.lineTo(xs[23] * w, h);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, "rgba(255,255,255,0.16)");
+            grad.addColorStop(1, "rgba(255,255,255,0.02)");
+            ctx.fillStyle = grad;
+            ctx.fill();
+        };
+        raf = win.requestAnimationFrame(draw);
+        return () => win.cancelAnimationFrame(raf);
+    }, []);
+
+    return <canvas ref={ref} className={cl("eq-spectrum")} aria-hidden="true" />;
+}
+
 export function EqCard() {
     useMusical();
     const p = getPrefs();
@@ -230,6 +290,7 @@ export function EqCard() {
             </div>
 
             <div className={cl("eq")}>
+                <EqSpectrum />
                 <div className={cl("eq-scale")}>
                     <span>+12</span>
                     <span>0</span>
@@ -240,9 +301,9 @@ export function EqCard() {
                     const style = { "--from": `${Math.min(from, to)}%`, "--to": `${Math.max(from, to)}%` } as CSSProperties;
                     return (
                         <label key={label} className={cl("eq-band")}>
-                            <span className={cl("eq-value", p.eq[i] !== 0 && "eq-value-on")}>{p.eq[i] > 0 ? "+" : ""}{p.eq[i]}</span>
+                            <span className={cl("eq-value", p.eq[i] !== 0 && "eq-value-on")}>{p.eq[i] > 0 ? "+" : ""}{Number.isInteger(p.eq[i]) ? p.eq[i] : p.eq[i].toFixed(1)}</span>
                             <input
-                                type="range" min={-12} max={12} step={1} value={p.eq[i]} style={style}
+                                type="range" min={-12} max={12} step={0.5} value={p.eq[i]} style={style}
                                 aria-label={`${label} Hz`}
                                 onChange={e => setBand(i, Number(e.currentTarget.value))}
                                 onDoubleClick={() => setBand(i, 0)}

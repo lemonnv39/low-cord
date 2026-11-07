@@ -119,7 +119,15 @@ export interface MusicalPrefs {
     profile: string;
     /** débit calé sur le plafond de ta vocale */
     autoBitrate: boolean;
+    /** préréglage low-musical choisi (ou PRESET_CUSTOM après un réglage à la main) */
+    preset: string;
+    /** tes préréglages enregistrés */
+    userPresets: UserPreset[];
+    /** fenêtre invisible en partage d'écran */
+    streamProof: boolean;
 }
+
+export interface UserPreset { name: string; data: Partial<MusicalPrefs>; }
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
@@ -135,6 +143,7 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     compMode: 0, gate: false, gateThreshold: -60, agc: false, agcTarget: -16, stereoMode: 0, balance: 0,
     bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, clipper: 0, multiband: false, mbAmount: 0.5,
     profile: "Naturel", autoBitrate: true,
+    preset: "", userPresets: [], streamProof: false,
 };
 
 type ProcessingKey =
@@ -174,18 +183,24 @@ export const PROFILES: Record<string, { desc: string; set: Partial<ProcessingPre
 };
 
 export const EQ_LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+// Courbes douces (les bandes voisines se chevauchent et s'additionnent) : au
+// plus +8 dB, avec un léger creux dans les médiums quand on pousse les graves,
+// pour garder de la clarté.
 export const EQ_PRESETS: Record<string, number[]> = {
     "Flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    "Bass boost": [6, 5, 4, 2, 0, 0, 0, 0, 0, 0],
-    "Méga bass": [10, 9, 7, 4, 1, 0, 0, 0, 0, 0],
-    "Aigus boost": [0, 0, 0, 0, 0, 2, 4, 6, 7, 8],
-    "Voix": [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1],
-    "Jazz": [3, 2, 1, 2, -1, -1, 0, 1, 2, 3],
-    "Rap": [5, 4, 2, 1, -1, -1, 1, 2, 3, 2],
-    "Rock": [4, 3, 1, -1, -2, 0, 2, 3, 4, 4],
-    "Pop": [-1, 0, 2, 3, 3, 1, 0, -1, -1, -1],
-    "Électro": [4, 3, 0, -1, -2, 1, 1, 3, 4, 5],
-    "Loudness": [6, 4, 0, 0, -1, 0, 2, 4, 6, 3],
+    "Bass boost": [5, 4.5, 3, 1, 0, 0, 0, 0, 0, 0],
+    "Méga bass": [8, 7, 5, 2, 0, -1, 0, 0, 0, 0],
+    "Aigus boost": [0, 0, 0, 0, 0, 0, 1, 3, 4.5, 5],
+    "Voix": [-3, -2, -1, 1, 2, 3, 3, 1.5, 0, -1],
+    "Jazz": [3, 2, 1, 1, -1, -1, 0, 1, 2, 2.5],
+    "Rap": [5, 4, 2, 0, -1, -1, 1, 1.5, 2, 1.5],
+    "Rock": [4, 3, 1, -1, -2, -1, 1, 2.5, 3, 3],
+    "Pop": [-1, 0, 1.5, 2.5, 2, 0.5, 0, 1, 1.5, 1],
+    "Électro": [5, 4, 1, -1, -2, 0, 1, 2.5, 3.5, 4],
+    "Loudness": [5, 3, 0, -1, -1.5, -1, 0, 2, 4, 4],
+    "Casque": [2, 1.5, 0.5, 0, -0.5, -1, 0, 1, 1.5, 1],
+    "Clarté": [-1, -1, -1, 0, 0, 1, 2, 3, 3, 2],
+    "Chill": [3, 2.5, 1.5, 0.5, 0, -0.5, -1, -1.5, -2, -2.5],
 };
 export const EQ_CUSTOM = "Perso";
 const PREFS_KEY = "lowmusical-prefs";
@@ -287,6 +302,7 @@ function wire() {
             prefs = { ...PREF_DEFAULTS, ...saved };
             if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
+            if (!Array.isArray(prefs.userPresets)) prefs.userPresets = [];
             // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
             if (!("profile" in saved)) prefs.profile = PROFILE_CUSTOM;
             // Réglages d'avant l'espace 360° : on reprend ce qui a un équivalent.
@@ -325,6 +341,8 @@ export function useMusical() {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function savePrefs(patch: Partial<MusicalPrefs>) {
+    // Toucher au son = on n'est plus sur le préréglage choisi.
+    if (!("preset" in patch) && Object.keys(patch).some(k => (SOUND_KEYS as readonly string[]).includes(k))) patch = { ...patch, preset: PRESET_CUSTOM };
     prefs = { ...prefs, ...patch };
     emit();
     if (saveTimer) clearTimeout(saveTimer);
@@ -517,3 +535,124 @@ export function syncBitrate(channelBps: number | undefined) {
 
 /** Arrête le moteur : les comptes quittent le vocal et se déconnectent. */
 export const stopEngine = () => VencordNative.lowMusical.stop();
+
+// ── Préréglages low-musical ─────────────────────────────────────────────────
+// Un préréglage règle TOUT le son d'un coup (comme un set Equalizer APO) :
+// gain, chaîne de traitement, égaliseur, espace. Jamais les comptes, le
+// volume général, le débit ni la latence.
+
+const SOUND_KEYS = [
+    "gain", ...PROCESSING_KEYS, "profile", "eq", "eqPreset",
+    "spaceMode", "motion", "speed", "posX", "posY", "radius", "spread", "reverb", "room", "mix",
+] as const satisfies readonly (keyof MusicalPrefs)[];
+
+export const PRESET_CUSTOM = "Perso";
+
+const eq = (name: string) => ({ eq: [...EQ_PRESETS[name]], eqPreset: name });
+const SPACE_OFF = { spaceMode: 0, reverb: false } as const;
+
+export const PRESETS: Record<string, { desc: string; data: Partial<MusicalPrefs>; }> = {
+    "Écoute casque": {
+        desc: "Naturel et doux, pour une longue écoute",
+        data: { gain: 0, ...PROFILES.Naturel.set, profile: "Naturel", ...eq("Casque"), ...SPACE_OFF },
+    },
+    "Soirée": {
+        desc: "Basses qui tapent, niveau de club",
+        data: { gain: 0, ...PROFILES.Club.set, profile: "Club", ...eq("Électro"), ...SPACE_OFF },
+    },
+    "8D immersif": {
+        desc: "Le son tourne autour de ta tête, dans une pièce",
+        data: {
+            gain: 0, ...PROFILES.Radio.set, profile: "Radio", ...eq("Casque"),
+            spaceMode: 1, motion: 0, speed: 0.12, radius: 0.7, spread: 0.2, reverb: true, room: 0.5, mix: 0.35,
+        },
+    },
+    "Radio FM": {
+        desc: "Niveau constant, voix claires",
+        data: { gain: 0, ...PROFILES.Radio.set, profile: "Radio", ...eq("Voix"), ...SPACE_OFF },
+    },
+    "Ultra fort": {
+        desc: "Le plus fort possible, toujours propre",
+        data: { gain: 0, ...PROFILES["Ultra fort"].set, profile: "Ultra fort", ...eq("Loudness"), ...SPACE_OFF },
+    },
+};
+
+/** Garde seulement les réglages de son valides (préréglage importé, ancien format…). */
+function soundOnly(data: Record<string, unknown>): Partial<MusicalPrefs> {
+    const out: Record<string, unknown> = {};
+    for (const k of SOUND_KEYS) {
+        const v = data[k], def = PREF_DEFAULTS[k];
+        if (k === "eq") {
+            if (Array.isArray(v) && v.length === 10 && v.every(n => typeof n === "number" && Number.isFinite(n))) out.eq = v.map(n => Math.max(-12, Math.min(12, n)));
+        } else if (typeof v === typeof def && (typeof v !== "number" || Number.isFinite(v))) {
+            out[k] = v;
+        }
+    }
+    return out as Partial<MusicalPrefs>;
+}
+
+/** Envoie au moteur tout le son (après un préréglage). */
+function sendSound() {
+    live(() => call("set_gain", { db: prefs.gain }));
+    live(() => call("set_processing", processingArgs()));
+    live(() => call("set_eq", { bands: prefs.eq }));
+    live(() => call("set_space", spaceArgs()));
+}
+
+export function applyPreset(name: string) {
+    const data = PRESETS[name]?.data ?? prefs.userPresets.find(p => p.name === name)?.data;
+    if (!data) return;
+    savePrefs({ ...soundOnly(data as Record<string, unknown>), preset: name });
+    sendSound();
+}
+
+/** Enregistre le son actuel comme préréglage (remplace celui du même nom). */
+export function saveUserPreset(rawName: string) {
+    const name = rawName.trim().slice(0, 32);
+    if (!name) throw new Error("donne un nom au préréglage");
+    if (PRESETS[name]) throw new Error("ce nom est déjà pris par un préréglage intégré");
+    const data = Object.fromEntries(SOUND_KEYS.map(k => [k, prefs[k]])) as Partial<MusicalPrefs>;
+    const others = prefs.userPresets.filter(p => p.name !== name);
+    savePrefs({ userPresets: [...others, { name, data }], preset: name });
+}
+
+export function deleteUserPreset(name: string) {
+    savePrefs({ userPresets: prefs.userPresets.filter(p => p.name !== name), ...(prefs.preset === name ? { preset: PRESET_CUSTOM } : {}) });
+}
+
+const EXPORT_FORMAT = "low-musical-preset";
+
+/** Préréglage au format texte (à partager, à coller ailleurs). */
+export function exportPreset(name: string) {
+    const data = PRESETS[name]?.data ?? prefs.userPresets.find(p => p.name === name)?.data
+        ?? Object.fromEntries(SOUND_KEYS.map(k => [k, prefs[k]]));
+    return JSON.stringify({ format: EXPORT_FORMAT, version: 1, name: name || PRESET_CUSTOM, data });
+}
+
+/** Ajoute un préréglage collé (texte exporté) ; renvoie son nom. */
+export function importPreset(text: string) {
+    let parsed: any;
+    try {
+        parsed = JSON.parse(text.trim());
+    } catch {
+        throw new Error("ce texte n'est pas un préréglage low-musical");
+    }
+    if (parsed?.format !== EXPORT_FORMAT || typeof parsed.data !== "object" || !parsed.data) {
+        throw new Error("ce texte n'est pas un préréglage low-musical");
+    }
+    const data = soundOnly(parsed.data);
+    if (!Object.keys(data).length) throw new Error("préréglage vide");
+    let name = String(parsed.name ?? "Importé").trim().slice(0, 32) || "Importé";
+    if (PRESETS[name]) name = `${name} (importé)`;
+    const others = prefs.userPresets.filter(p => p.name !== name);
+    savePrefs({ userPresets: [...others, { name, data }] });
+    return name;
+}
+
+// ── Options ─────────────────────────────────────────────────────────────────
+
+/** Fenêtre du panneau invisible en partage d'écran (et dans les captures). */
+export function setStreamProof(on: boolean) {
+    savePrefs({ streamProof: on });
+    return VencordNative.lowMusical.setStreamProof(on);
+}
