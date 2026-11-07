@@ -69,4 +69,8 @@ export const enum IpcEvents {
     LOWCORD_UPDATE_CHECK = "LowCordUpdateCheck",
     LOWCORD_UPDATE_RESTART = "LowCordUpdateRestart",
     LOWCORD_UPDATE_CHANGES = "LowCordUpdateChanges",
+    LOWMUSICAL_STATUS = "LowMusicalStatus",
+    LOWMUSICAL_INSTALL = "LowMusicalInstall",
+    LOWMUSICAL_UNINSTALL = "LowMusicalUninstall",
+    LOWMUSICAL_OPEN_FOLDER = "LowMusicalOpenFolder",
 }

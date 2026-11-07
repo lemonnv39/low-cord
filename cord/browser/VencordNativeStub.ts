@@ -155,6 +155,12 @@ window.VencordNative = {
         restart: async () => { },
         changes: async () => ({ commits: [] }),
     },
+    lowMusical: {
+        status: async () => ({ installed: false, updateAvailable: false, busy: false, error: "Disponible seulement dans Discord sur PC" }),
+        install: async () => { throw new Error("Disponible seulement dans Discord sur PC"); },
+        uninstall: async () => ({ installed: false, updateAvailable: false, busy: false }),
+        openFolder: async () => { },
+    },
     pluginHelpers: {} as any,
     csp: {} as any,
 };

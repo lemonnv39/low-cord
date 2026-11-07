@@ -831,3 +831,201 @@
     font-weight: 600;
     cursor: pointer;
 }
+
+/* ── low-musical (onglet des réglages) ─────────────────────────────────── */
+.lc-mu-card {
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-mu-head {
+    display: flex;
+    gap: 14px;
+    padding: 18px 16px;
+}
+
+.lc-mu-logo {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--header-primary, var(--text-strong));
+}
+
+.lc-mu-titles {
+    flex: 1;
+    min-width: 0;
+}
+
+.lc-mu-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--header-primary, var(--text-strong));
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.lc-mu-tag {
+    padding: 1px 7px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-family: var(--font-code);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.lc-mu-sub {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.lc-mu-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 14px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-mu-restart {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-mu-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.5;
+}
+
+.lc-mu-dot-on {
+    background: var(--header-primary, var(--text-strong));
+    opacity: 1;
+}
+
+.lc-mu-dot-update {
+    background: var(--status-positive, #23a55a);
+    opacity: 1;
+}
+
+.lc-mu-state {
+    flex: 1;
+    min-width: 180px;
+}
+
+.lc-mu-state-name {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.lc-mu-state-detail {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-mu-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.lc-mu-btn {
+    padding: 7px 16px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.lc-mu-btn:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.lc-mu-btn:hover:not(:disabled) {
+    border-color: var(--text-muted);
+}
+
+.lc-mu-btn-primary {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+    font-weight: 600;
+}
+
+.lc-mu-btn-primary:hover:not(:disabled) {
+    border-color: var(--header-primary, var(--text-strong));
+    opacity: 0.9;
+}
+
+.lc-mu-error {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    color: var(--text-feedback-critical, var(--text-danger, #f23f43));
+    font-size: 13px;
+}
+
+.lc-mu-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-mu-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.lc-mu-link:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.lc-mu-link:hover:not(:disabled) {
+    color: var(--text-normal, var(--text-default));
+    text-decoration: underline;
+}
+
+.lc-mu-danger:hover:not(:disabled) {
+    color: var(--text-feedback-critical, var(--text-danger, #f23f43));
+}
+
+.lc-mu-confirm {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+}
+
+.lc-mu-note {
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}

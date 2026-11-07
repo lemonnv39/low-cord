@@ -28,7 +28,8 @@ interface Item {
     points: string[];
 }
 
-const INTERNAL = /^(Merge |Squashed '|(\w+)\(injector\))/;
+// low-musical a ses propres mises à jour : ses commits (scope « musical ») ne sont pas ceux de low-cord.
+const INTERNAL = /^(Merge |Squashed '|(\w+)\((injector|musical)\))/;
 const BASE_UPDATE = /mise à jour Vencord upstream|Vencord upstream/i;
 
 /** « feat(cord): titre » / « Plugin : titre » → type + titre + points du corps. */

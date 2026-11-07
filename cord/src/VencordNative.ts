@@ -8,6 +8,7 @@ import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
 import type { Changes, UpdateStatus } from "@main/lowcordUpdater";
+import type { MusicalStatus } from "@main/lowMusical";
 import type { UserThemeHeader } from "@main/themes";
 import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
@@ -111,6 +112,15 @@ export default {
         restart: () => invoke<void>(IpcEvents.LOWCORD_UPDATE_RESTART),
         /** Version installée + changements depuis `since` (version vue la dernière fois). */
         changes: (since?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since),
+    },
+
+    /** low-musical : installation du moteur (voir src/main/lowMusical.ts). */
+    lowMusical: {
+        status: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_STATUS),
+        /** Installe ou met à jour vers la dernière version publiée. */
+        install: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_INSTALL),
+        uninstall: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_UNINSTALL),
+        openFolder: () => invoke<void>(IpcEvents.LOWMUSICAL_OPEN_FOLDER),
     },
 
     csp: {
