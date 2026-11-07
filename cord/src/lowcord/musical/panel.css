@@ -82,12 +82,37 @@
 }
 
 .lc-mp-title {
-    color: var(--mp-strong);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    line-height: 1;
+    filter: drop-shadow(0 0 18px rgb(0 0 0 / 95%)) drop-shadow(0 0 3px rgb(0 0 0 / 80%));
+}
+
+/* « low » fin et discret, « musical » plein, en argent poli. */
+.lc-mp-title-low {
+    color: #c3cad6;
+    font-size: 34px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+}
+
+.lc-mp-title-dash {
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgb(214 224 240 / 0%), rgb(214 224 240 / 90%));
+    box-shadow: 0 0 10px rgb(214 224 240 / 60%);
+}
+
+.lc-mp-title-musical {
+    background: linear-gradient(180deg, #fff 15%, #c9d1de 60%, #8e97a6 100%);
+    background-clip: text;
+    color: transparent;
     font-size: 40px;
     font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 1;
-    text-shadow: 0 0 24px rgb(0 0 0 / 90%), 0 0 4px rgb(0 0 0 / 80%), 0 0 30px rgb(255 255 255 / 25%);
+    letter-spacing: -0.035em;
 }
 
 .lc-mp-window-btns {
@@ -176,7 +201,23 @@
 .lc-mp-card-session { grid-area: session; }
 .lc-mp-card-signal { grid-area: signal; }
 .lc-mp-card-eq { grid-area: eq; }
-.lc-mp-card-space { grid-area: space; }
+
+.lc-mp-col-space {
+    display: flex;
+    flex-direction: column;
+    grid-area: space;
+    gap: 10px;
+    min-height: 0;
+}
+
+.lc-mp-col-space > .lc-mp-card-space {
+    flex: 1 1 0;
+}
+
+.lc-mp-col-space > .lc-mp-card-sb {
+    flex: 0 1 auto;
+    max-height: 48%;
+}
 
 @media (width <= 1100px) {
     .lc-mp-grid {
@@ -962,7 +1003,8 @@
     flex: 1;
     grid-template-columns: 26px repeat(10, minmax(0, 1fr));
     gap: 2px;
-    min-height: 180px;
+    min-height: 130px;
+    max-height: 190px;
     padding: 10px 6px 6px;
     border: 1px solid var(--mp-line);
     border-radius: 11px;
@@ -1184,36 +1226,6 @@
     text-align: right;
 }
 
-.lc-mp-fold {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 2px 0;
-    border: 0;
-    border-top: 1px solid var(--mp-line);
-    background: none;
-    color: var(--mp-muted);
-    font-family: var(--mp-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-}
-
-.lc-mp-fold:hover {
-    color: var(--mp-strong);
-}
-
-.lc-mp-fold svg {
-    transition: transform 150ms ease;
-}
-
-.lc-mp-fold-open svg {
-    transform: rotate(180deg);
-}
-
 /* ── Espace 360° ─────────────────────────────────────────────────────────── */
 .lc-mp-pad-head {
     position: absolute;
@@ -1333,4 +1345,194 @@
     font-size: 12px;
     transform: translateX(-50%);
     white-space: nowrap;
+}
+
+/* ── Liens d'en-tête actifs ──────────────────────────────────────────────── */
+.lc-mp-link-on {
+    color: var(--mp-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* ── Tonalité (molettes sous l'égaliseur) ────────────────────────────────── */
+.lc-mp-tone {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--mp-line);
+    border-radius: 11px;
+    background: rgb(0 0 0 / 22%);
+}
+
+.lc-mp-tone-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.lc-mp-tone-knobs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.lc-mp-knob-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.lc-mp-knob-dial {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    cursor: ns-resize;
+    touch-action: none;
+}
+
+.lc-mp-knob-dial:focus-visible {
+    outline: 1px solid var(--mp-muted);
+    outline-offset: 2px;
+}
+
+.lc-mp-knob-dial svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.lc-mp-knob-track,
+.lc-mp-knob-fill {
+    fill: none;
+    stroke-linecap: round;
+    stroke-width: 3;
+}
+
+.lc-mp-knob-track {
+    stroke: var(--mp-track);
+}
+
+.lc-mp-knob-fill {
+    stroke: var(--mp-strong);
+    filter: drop-shadow(0 0 3px rgb(255 255 255 / 45%));
+}
+
+.lc-mp-knob-cap {
+    fill: #17171b;
+    stroke: var(--mp-line-strong);
+    stroke-width: 1;
+}
+
+.lc-mp-knob-dial:hover .lc-mp-knob-cap {
+    fill: #1d1d22;
+}
+
+.lc-mp-knob-hand {
+    stroke: var(--mp-muted);
+    stroke-linecap: round;
+    stroke-width: 2;
+}
+
+.lc-mp-knob-dial-on .lc-mp-knob-hand {
+    stroke: var(--mp-strong);
+}
+
+.lc-mp-knob-value {
+    color: var(--mp-faint);
+    font-family: var(--mp-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-mp-knob-value-on {
+    color: var(--mp-strong);
+}
+
+.lc-mp-knob-label {
+    color: var(--mp-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+/* ── Soundboard ──────────────────────────────────────────────────────────── */
+.lc-mp-sb-grid {
+    display: grid;
+    overflow-y: auto;
+    flex: 0 1 auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    min-height: 0;
+    scrollbar-color: var(--mp-line-strong) transparent;
+    scrollbar-width: thin;
+}
+
+.lc-mp-sb-pad-wrap {
+    position: relative;
+    min-width: 0;
+}
+
+.lc-mp-sb-pad {
+    overflow: hidden;
+    width: 100%;
+    height: 40px;
+    padding: 0 8px;
+    border: 1px solid var(--mp-line);
+    border-radius: 9px;
+    background: rgb(255 255 255 / 3%);
+    color: var(--mp-text);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+}
+
+.lc-mp-sb-pad:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.lc-mp-sb-pad:hover:not(:disabled) {
+    border-color: var(--mp-line-strong);
+    background: rgb(255 255 255 / 6%);
+}
+
+.lc-mp-sb-pad:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.lc-mp-sb-pad-hit {
+    border-color: var(--mp-strong);
+    background: rgb(255 255 255 / 14%);
+    box-shadow: 0 0 14px rgb(214 224 240 / 25%);
+}
+
+.lc-mp-sb-pad-bad {
+    border-color: rgb(242 84 91 / 45%);
+    color: #ff9ca1;
+}
+
+.lc-mp-sb-del {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgb(242 84 91 / 45%);
+    border-radius: 50%;
+    background: #1b0f11;
+    color: var(--mp-bad);
+    cursor: pointer;
+}
+
+.lc-mp-sb-del:hover {
+    background: #2a1215;
 }

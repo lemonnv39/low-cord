@@ -81,4 +81,7 @@ export const enum IpcEvents {
     LOWMUSICAL_DRAG_START = "LowMusicalDragStart",
     LOWMUSICAL_DRAG_END = "LowMusicalDragEnd",
     LOWMUSICAL_STREAM_PROOF = "LowMusicalStreamProof",
+    LOWMUSICAL_SOUND_IMPORT = "LowMusicalSoundImport",
+    LOWMUSICAL_SOUND_DELETE = "LowMusicalSoundDelete",
+    LOWMUSICAL_SOUND_LIST = "LowMusicalSoundList",
 }

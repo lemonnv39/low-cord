@@ -14,7 +14,7 @@
 import * as DataStore from "@api/DataStore";
 import type { SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
-import { useEffect, UserStore, useState } from "@webpack/common";
+import { ChannelStore, SelectedChannelStore, useEffect, UserStore, useState } from "@webpack/common";
 
 export interface VoiceChannel { id: string; name: string; }
 export interface MusicalGuild { id: string; name: string; icon?: string | null; channels: VoiceChannel[]; }
@@ -125,13 +125,22 @@ export interface MusicalPrefs {
     userPresets: UserPreset[];
     /** fenêtre invisible en partage d'écran */
     streamProof: boolean;
+    /** molettes de tonalité, en dB [-12..12] */
+    bass: number;
+    mid: number;
+    treble: number;
+    /** soundboard : sons importés et volume commun (0 à 2) */
+    sounds: SoundPad[];
+    sbVolume: number;
 }
+
+export interface SoundPad { id: string; name: string; file: string; }
 
 export interface UserPreset { name: string; data: Partial<MusicalPrefs>; }
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.8.0";
+export const MIN_ENGINE = "0.9.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -144,18 +153,29 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, clipper: 0, multiband: false, mbAmount: 0.5,
     profile: "Naturel", autoBitrate: true,
     preset: "", userPresets: [], streamProof: false,
+    bass: 0, mid: 0, treble: 0, sounds: [], sbVolume: 1,
 };
 
 type ProcessingKey =
     "highpass" | "width" | "saturation" | "compressor" | "compMode" | "compAmount" | "limiter" | "gate" | "gateThreshold"
     | "agc" | "agcTarget" | "stereoMode" | "balance" | "bassMono" | "bassPlus" | "clarity" | "deesser" | "clipper"
-    | "multiband" | "mbAmount";
+    | "multiband" | "mbAmount" | "bass" | "mid" | "treble";
 export type ProcessingPrefs = Pick<MusicalPrefs, ProcessingKey>;
 const PROCESSING_KEYS: ProcessingKey[] = [
     "highpass", "width", "saturation", "compressor", "compMode", "compAmount", "limiter", "gate", "gateThreshold",
     "agc", "agcTarget", "stereoMode", "balance", "bassMono", "bassPlus", "clarity", "deesser", "clipper",
-    "multiband", "mbAmount",
+    "multiband", "mbAmount", "bass", "mid", "treble",
 ];
+
+/** Préréglages rapides des molettes Graves / Médiums / Aigus. */
+export const TONE_PRESETS: Record<string, [number, number, number]> = {
+    "Neutre": [0, 0, 0],
+    "Chaud": [3, 0.5, -2],
+    "Brillant": [-1, 0, 3],
+    "Grave": [5, -1, 0],
+    "Voix": [-2, 3, 1.5],
+    "Loudness": [4, -1.5, 3],
+};
 
 export const PROFILE_CUSTOM = "Perso";
 
@@ -293,6 +313,8 @@ function wire() {
             setAccount(msg.account, patch);
         } else if (msg?.event === "exit") {
             state = { installed: state.installed, running: false, accounts: {}, following: false, exitReason: String(msg.reason ?? "") };
+            loadedSounds.clear();
+            joinRound++;
             emit();
         }
     });
@@ -303,6 +325,8 @@ function wire() {
             if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
             if (!Array.isArray(prefs.userPresets)) prefs.userPresets = [];
+            if (!Array.isArray(prefs.sounds)) prefs.sounds = [];
+            prefs.sounds = prefs.sounds.filter(pad => pad && typeof pad.id === "string" && typeof pad.file === "string");
             // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
             if (!("profile" in saved)) prefs.profile = PROFILE_CUSTOM;
             // Réglages d'avant l'espace 360° : on reprend ce qui a un équivalent.
@@ -386,7 +410,9 @@ async function applyAudio() {
         call("set_eq", { bands: prefs.eq }),
         call("set_processing", processingArgs()),
         call("set_meter", { on: meterWanted }),
+        call("sb_volume", { volume: prefs.sbVolume }),
     ]);
+    await loadSounds();
     // La source n'est relancée que si elle a été choisie à la main avant.
     if (prefs.source && !state.sourceOn) await setInput(prefs.source).catch(() => { });
 }
@@ -438,10 +464,41 @@ export async function followMe(keys?: string[]) {
             .catch(e => setAccount(key, { error: errorText(e) }))
     ));
     set({ following: true });
+    joinMe(keys);
+}
+
+/** Ta vocale actuelle (salon de serveur seulement). */
+function myVoice() {
+    const channel = SelectedChannelStore.getVoiceChannelId();
+    const guild = channel ? ChannelStore.getChannel(channel)?.guild_id : null;
+    return channel && guild ? { guild, channel } : null;
+}
+
+let joinRound = 0;
+
+/**
+ * Envoie aux comptes ta vocale, chacun après son délai. Au premier lancement,
+ * un compte ne voit pas toujours où tu es (Discord ne lui envoie pas l'état
+ * vocal des gros serveurs) : sans ça, il restait dehors jusqu'à ce que tu
+ * changes de salon. Le moteur ignore la demande s'il y est déjà.
+ */
+export function joinMe(keys?: string[]) {
+    const target = myVoice();
+    if (!target || !state.following) return;
+    const round = ++joinRound;
+    const all = activeKeys();
+    for (const key of keys ?? all) {
+        const delay = Math.max(0, all.indexOf(key)) * prefs.delay;
+        setTimeout(() => {
+            if (round !== joinRound || !state.following || state.accounts[key]?.current?.channel === target.channel) return;
+            call("join", { account: key, ...target }).catch(() => { });
+        }, delay);
+    }
 }
 
 /** Les comptes arrêtent de te suivre et quittent la vocale (ils restent connectés). */
 export async function stopFollowing() {
+    joinRound++;
     set({ following: false });
     await call("set_follow", { target: null }).catch(() => { });
     await call("leave").catch(() => { });
@@ -516,6 +573,12 @@ const processingArgs = () => Object.fromEntries(PROCESSING_KEYS.map(k => [k, pre
 /** Un réglage de traitement touché à la main : le profil passe en « Perso ». */
 export function setProcessing(patch: Partial<ProcessingPrefs>) {
     savePrefs({ ...patch, profile: PROFILE_CUSTOM });
+    live(() => call("set_processing", processingArgs()));
+}
+
+/** Molettes de tonalité (ne touchent pas au profil de traitement). */
+export function setTone(patch: Partial<Pick<MusicalPrefs, "bass" | "mid" | "treble">>) {
+    savePrefs(patch);
     live(() => call("set_processing", processingArgs()));
 }
 
@@ -599,6 +662,13 @@ function sendSound() {
     live(() => call("set_space", spaceArgs()));
 }
 
+/** Remet tout le son à zéro (gain, traitement, égaliseur, tonalité, espace). */
+export function resetSound() {
+    const data = Object.fromEntries(SOUND_KEYS.map(k => [k, PREF_DEFAULTS[k]])) as Partial<MusicalPrefs>;
+    savePrefs({ ...data, eq: [...PREF_DEFAULTS.eq], preset: "" });
+    sendSound();
+}
+
 export function applyPreset(name: string) {
     const data = PRESETS[name]?.data ?? prefs.userPresets.find(p => p.name === name)?.data;
     if (!data) return;
@@ -655,4 +725,94 @@ export function importPreset(text: string) {
 export function setStreamProof(on: boolean) {
     savePrefs({ streamProof: on });
     return VencordNative.lowMusical.setStreamProof(on);
+}
+
+// ── Soundboard ──────────────────────────────────────────────────────────────
+// Les sons sont copiés par low-cord dans son dossier (jamais lus depuis leur
+// emplacement d'origine) et chargés dans le moteur à la connexion. Chaque clic
+// lance le son par-dessus les autres : on peut spammer sans couper.
+
+const loadedSounds = new Set<string>();
+const SOUND_EXT = /\.(mp3|wav|ogg|flac)$/i;
+const MAX_SOUNDS = 48;
+
+/** Sons introuvables ou illisibles, par id (affichés en erreur sur leur bouton). */
+let soundErrors: Record<string, string> = {};
+export const getSoundErrors = () => soundErrors;
+
+async function loadSound(pad: SoundPad) {
+    try {
+        await call("sb_load", { sound: pad.id, file: pad.file });
+        loadedSounds.add(pad.id);
+        if (soundErrors[pad.id]) {
+            const { [pad.id]: _, ...rest } = soundErrors;
+            soundErrors = rest;
+            emit();
+        }
+    } catch (e) {
+        soundErrors = { ...soundErrors, [pad.id]: errorText(e) };
+        emit();
+        throw e;
+    }
+}
+
+async function loadSounds() {
+    for (const pad of prefs.sounds) {
+        if (!loadedSounds.has(pad.id)) await loadSound(pad).catch(() => { });
+    }
+}
+
+export async function playSound(id: string) {
+    if (!state.running) throw new Error("connecte d'abord un compte pour jouer des sons");
+    const pad = prefs.sounds.find(p => p.id === id);
+    if (!pad) return;
+    if (!loadedSounds.has(id)) await loadSound(pad);
+    await call("sb_play", { sound: id });
+}
+
+export async function stopSounds() {
+    if (state.running) await call("sb_stop");
+}
+
+export function setSbVolume(volume: number) {
+    savePrefs({ sbVolume: volume });
+    live(() => call("sb_volume", { volume }));
+}
+
+/** Importe des fichiers audio choisis par l'utilisateur ; renvoie le nombre ajouté. */
+export async function importSounds(files: File[]) {
+    let added = 0;
+    for (const file of files) {
+        if (!SOUND_EXT.test(file.name)) throw new Error(`« ${file.name} » : format non pris en charge (mp3, wav, ogg, flac)`);
+        if (prefs.sounds.length >= MAX_SOUNDS) throw new Error(`${MAX_SOUNDS} sons au plus`);
+        const stored = await VencordNative.lowMusical.importSound(file.name, new Uint8Array(await file.arrayBuffer()));
+        const pad: SoundPad = {
+            id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+            name: file.name.replace(SOUND_EXT, "").slice(0, 32) || "Son",
+            file: stored,
+        };
+        if (state.running) {
+            // Fichier refusé par le moteur (illisible, trop long) : on ne le garde pas.
+            try {
+                await loadSound(pad);
+            } catch (e) {
+                await VencordNative.lowMusical.deleteSound(stored).catch(() => { });
+                const { [pad.id]: _, ...rest } = soundErrors;
+                soundErrors = rest;
+                throw new Error(`« ${file.name} » : ${errorText(e)}`);
+            }
+        }
+        savePrefs({ sounds: [...prefs.sounds, pad] });
+        added++;
+    }
+    return added;
+}
+
+export async function deleteSound(id: string) {
+    const pad = prefs.sounds.find(p => p.id === id);
+    if (!pad) return;
+    savePrefs({ sounds: prefs.sounds.filter(p => p.id !== id) });
+    loadedSounds.delete(id);
+    if (state.running) await call("sb_unload", { sound: id }).catch(() => { });
+    await VencordNative.lowMusical.deleteSound(pad.file).catch(() => { });
 }

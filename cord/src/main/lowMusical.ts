@@ -20,9 +20,9 @@
 import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
 import { ChildProcess, execFile, spawn } from "child_process";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { app, BrowserWindow, ipcMain, net, screen, shell } from "electron";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createInterface } from "readline";
 
@@ -164,6 +164,7 @@ const ENGINE_COMMANDS = new Set([
     "version", "status", "devices",
     "connect", "disconnect", "leave", "set_follow", "set_fake_deafen", "set_bitrate", "set_volume",
     "set_input", "set_gain", "set_latency", "set_space", "set_eq", "set_processing", "set_meter",
+    "join", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
 ]);
 const CALL_TIMEOUT = 15_000;
 
@@ -243,7 +244,12 @@ function stopEngine() {
 
 ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown) => {
     if (typeof cmd !== "string" || !ENGINE_COMMANDS.has(cmd)) throw new Error("commande refusée");
-    const plain = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
+    const plain = args && typeof args === "object" && !Array.isArray(args) ? { ...args as Record<string, unknown> } : {};
+    if (cmd === "sb_load") {
+        // Le moteur ne lit que les sons importés : jamais un chemin venu de Discord.
+        plain.path = soundPath(plain.file);
+        delete plain.file;
+    }
     return callEngine(cmd, plain);
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_RUNNING, () => engine !== null);
@@ -302,6 +308,40 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_STREAM_PROOF, (_, on: unknown) => {
         n++;
     }
     return n;
+});
+
+// ── Soundboard : sons importés ───────────────────────────────────────────────
+// Copiés dans leur propre dossier (gardé si le moteur est désinstallé), sous
+// un nom tiré au hasard : Discord ne donne jamais de chemin, seulement le nom.
+const SOUNDS_DIR = join(DATA_DIR, "low-musical-sounds");
+const SOUND_FILE = /^[0-9a-f-]{36}\.(mp3|wav|ogg|flac)$/;
+const MAX_SOUND = 25 * 1024 * 1024;
+
+function soundPath(file: unknown) {
+    if (typeof file !== "string" || !SOUND_FILE.test(file)) throw new Error("son invalide");
+    return join(SOUNDS_DIR, file);
+}
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_IMPORT, (_, name: unknown, data: unknown) => {
+    const ext = typeof name === "string" ? /\.(mp3|wav|ogg|flac)$/i.exec(name)?.[1]?.toLowerCase() : undefined;
+    if (!ext) throw new Error("format non pris en charge (mp3, wav, ogg, flac)");
+    if (!(data instanceof Uint8Array) || !data.length) throw new Error("fichier vide");
+    if (data.length > MAX_SOUND) throw new Error("fichier trop lourd (25 Mo au plus)");
+    mkdirSync(SOUNDS_DIR, { recursive: true });
+    const file = `${randomUUID()}.${ext}`;
+    writeFileSync(join(SOUNDS_DIR, file), data);
+    return file;
+});
+ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_DELETE, (_, file: unknown) => {
+    rmSync(soundPath(file), { force: true });
+});
+/** Sons encore présents sur le disque (les autres ont été effacés à la main). */
+ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
+    try {
+        return readdirSync(SOUNDS_DIR).filter(f => SOUND_FILE.test(f) && statSync(join(SOUNDS_DIR, f)).isFile());
+    } catch {
+        return [];
+    }
 });
 
 // Reste d'un téléchargement interrompu (Discord fermé en plein milieu).

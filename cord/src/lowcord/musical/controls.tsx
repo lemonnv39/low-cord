@@ -131,12 +131,14 @@ export interface Choice {
  * position fixe (il n'est jamais coupé par une zone qui défile) et s'ouvre
  * vers le haut s'il manque de place en bas.
  */
-export function Dropdown({ value, choices, placeholder, disabled, onChange }: {
+export function Dropdown({ value, choices, placeholder, disabled, onChange, onOpen }: {
     value: string;
     choices: Choice[];
     placeholder: string;
     disabled?: boolean;
     onChange(value: string): void;
+    /** appelé à chaque ouverture (recharger la liste…) */
+    onOpen?(): void;
 }) {
     const ref = useRef<HTMLButtonElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
@@ -170,6 +172,7 @@ export function Dropdown({ value, choices, placeholder, disabled, onChange }: {
 
     function toggle() {
         if (box) return setBox(null);
+        onOpen?.();
         const r = ref.current!.getBoundingClientRect();
         const winH = ref.current!.ownerDocument.defaultView!.innerHeight;
         const below = winH - r.bottom - 8;
@@ -223,5 +226,95 @@ export function Dropdown({ value, choices, placeholder, disabled, onChange }: {
                 </div>
             )}
         </>
+    );
+}
+
+/**
+ * Molette rotative (Graves, Médiums, Aigus) : tirer vers le haut ou le bas,
+ * molette de la souris, flèches du clavier. Double-clic = valeur par défaut.
+ * L'arc part du centre (0) vers la valeur.
+ */
+export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB" }: {
+    label: string; value: number; min: number; max: number; step: number; reset: number;
+    onChange(v: number): void; unit?: string;
+}) {
+    const drag = useRef<{ y: number; v: number; } | null>(null);
+    const dialRef = useRef<HTMLDivElement>(null);
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    const clampStep = (v: number) => Math.max(min, Math.min(max, Math.round(v / step) * step));
+    const set = (v: number) => {
+        const next = clampStep(v);
+        if (next === valueRef.current) return;
+        valueRef.current = next;
+        onChange(next);
+    };
+    const setRef = useRef(set);
+    setRef.current = set;
+
+    // Molette de la souris : écoute non passive, sinon le bloc défile en même temps.
+    useEffect(() => {
+        const el = dialRef.current!;
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            setRef.current(valueRef.current + (e.deltaY < 0 ? step : -step));
+        };
+        el.addEventListener("wheel", onWheel, { passive: false });
+        return () => el.removeEventListener("wheel", onWheel);
+    }, [step]);
+
+    // 270° de course : de −135° (min) à +135° (max).
+    const angle = (v: number) => -135 + ((v - min) / (max - min)) * 270;
+    const point = (deg: number, r: number) => {
+        const a = (deg - 90) * Math.PI / 180;
+        return [24 + r * Math.cos(a), 24 + r * Math.sin(a)];
+    };
+    const arc = (from: number, to: number, r: number) => {
+        const [a, b] = from <= to ? [from, to] : [to, from];
+        const [x1, y1] = point(a, r), [x2, y2] = point(b, r);
+        return `M${x1.toFixed(2)} ${y1.toFixed(2)}A${r} ${r} 0 ${b - a > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+    };
+    const zero = angle(Math.max(min, Math.min(max, 0)));
+    const now = angle(value);
+    const [hx, hy] = point(now, 13);
+    const shown = `${value > 0 ? "+" : ""}${Number.isInteger(value) ? value : value.toFixed(1)}`;
+
+    return (
+        <div className={cl("knob-wrap")}>
+            <div
+                ref={dialRef}
+                role="slider"
+                tabIndex={0}
+                aria-label={label}
+                aria-valuemin={min}
+                aria-valuemax={max}
+                aria-valuenow={value}
+                className={cl("knob-dial", value !== reset && "knob-dial-on")}
+                title="Tirer haut / bas · molette · double-clic : 0"
+                onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { y: e.clientY, v: value }; }}
+                onPointerMove={e => {
+                    if (!drag.current) return;
+                    // 120 px de course = toute la plage (Maj : réglage fin).
+                    const range = (max - min) * (e.shiftKey ? 0.25 : 1);
+                    set(drag.current.v + (drag.current.y - e.clientY) / 120 * range);
+                }}
+                onPointerUp={() => { drag.current = null; }}
+                onPointerCancel={() => { drag.current = null; }}
+                onDoubleClick={() => onChange(reset)}
+                onKeyDown={e => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); set(value + step); }
+                    else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); set(value - step); }
+                }}
+            >
+                <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <path className={cl("knob-track")} d={arc(-135, 135, 20)} />
+                    {value !== 0 && <path className={cl("knob-fill")} d={arc(zero, now, 20)} />}
+                    <circle className={cl("knob-cap")} cx="24" cy="24" r="15" />
+                    <line className={cl("knob-hand")} x1="24" y1="24" x2={hx.toFixed(2)} y2={hy.toFixed(2)} />
+                </svg>
+            </div>
+            <span className={cl("knob-value", value !== reset && "knob-value-on")}>{shown} {unit}</span>
+            <span className={cl("knob-label")}>{label}</span>
+        </div>
     );
 }

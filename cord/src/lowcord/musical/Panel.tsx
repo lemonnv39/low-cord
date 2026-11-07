@@ -7,7 +7,7 @@
 // low-musical — panneau de gestion. Il vit dans sa propre fenêtre (voir
 // window.tsx), sur une seule page :
 //   Session · [titre + visualisation du son en direct] · Espace
-//             [ Signal ][ Égaliseur ]
+//             [ Signal ][ Égaliseur ]                 Soundboard
 // Fond transparent : seuls les blocs sont visibles.
 // La fenêtre s'attrape n'importe où sur un fond vide pour la déplacer, y
 // compris sur un autre écran. La fermer ne coupe rien.
@@ -24,10 +24,11 @@ import { Card, Chip, cl, Dropdown, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, applyPreset, connectAccounts, deleteUserPreset, disconnect, type EngineState, errorText, exportPreset,
-    followMe, getPrefs, importPreset, isActive, isOutdated, isReady, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, savePrefs,
+    followMe, getPrefs, importPreset, isActive, isOutdated, isReady, joinMe, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, savePrefs,
     saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
 } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
+import { SoundboardCard } from "./Soundboard";
 import { Visualizer } from "./Visualizer";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -208,7 +209,11 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
     // qu'après son délai et quelques secondes (le temps qu'il arrive).
     const [movedAt, setMovedAt] = useState(Date.now());
     const [, tick] = useState(0);
-    useEffect(() => { setMovedAt(Date.now()); }, [voice?.id]);
+    useEffect(() => {
+        setMovedAt(Date.now());
+        // Les comptes qui suivent reçoivent ta vocale directement (ils ne la voient pas toujours).
+        joinMe();
+    }, [voice?.id]);
     // Débit calé sur le plafond de ta vocale (option « Débit auto »).
     useEffect(() => { syncBitrate(voice?.bitrate); }, [voice?.bitrate, getPrefs().autoBitrate]);
     useEffect(() => {
@@ -236,10 +241,15 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
             className={cl("card-session")}
             extra={entries.length > 0 && (
                 <span className={cl("card-actions")}>
-                    <button type="button" className={cl("link")} disabled={pending || !ready.length} onClick={() => act(() => setFakeDeafen(!allDeaf))}>
-                        {allDeaf ? "Réentendre" : "Tout assourdir"}
-                    </button>
-                    <button type="button" className={cl("link", "link-danger")} disabled={pending} onClick={() => act(() => disconnect())}>Tout couper</button>
+                    <button
+                        type="button"
+                        className={cl("link", allDeaf && "link-on")}
+                        disabled={pending || !ready.length}
+                        onClick={() => act(() => setFakeDeafen(!allDeaf))}
+                        aria-pressed={allDeaf}
+                        title="Tous les comptes apparaissent sourds (casque coupé) mais continuent de diffuser"
+                    >All fake deafen</button>
+                    <button type="button" className={cl("link", "link-danger")} disabled={pending} onClick={() => act(() => disconnect())} title="Déconnecte tous les comptes">Deco all</button>
                 </span>
             )}
         >
@@ -308,15 +318,13 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
 const SaveIcon = () => svg(<><path d="M5 3h11l3 3v15H5z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></>, 15);
 const MoreIcon = () => svg(<><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></>, 15);
 
-function PresetBar({ act, pending }: { act: Act; pending: boolean; }) {
-    const music = useMusical();
+function PresetBar({ act }: { act: Act; }) {
+    useMusical();
     const prefs = getPrefs();
     const [form, setForm] = useState<"save" | "import" | "menu" | null>(null);
     const [text, setText] = useState("");
     const [note, setNote] = useState<string | null>(null);
 
-    const ready = Object.values(music.accounts).filter(isReady);
-    const allDeaf = ready.length > 0 && ready.every(a => a.fakeDeafen);
     const isUser = prefs.userPresets.some(p => p.name === prefs.preset);
 
     const flash = (msg: string) => {
@@ -343,7 +351,6 @@ function PresetBar({ act, pending }: { act: Act; pending: boolean; }) {
                 <button type="button" className={cl("icon-btn", "icon-btn-glass", form === "menu" && "icon-btn-on")} onClick={() => setForm(form === "menu" ? null : "menu")} title="Exporter, importer, supprimer" aria-label="Plus"><MoreIcon /></button>
                 <span className={cl("stage-sep")} />
                 <Chip on={prefs.streamProof} onClick={() => act(async () => { await setStreamProof(!prefs.streamProof); })} title="La fenêtre de low-musical devient invisible quand tu partages ton écran">Anti-stream</Chip>
-                <Chip on={allDeaf} disabled={pending || !ready.length} onClick={() => act(() => setFakeDeafen(!allDeaf))} title="Tous les comptes apparaissent sourds (casque coupé) mais continuent de diffuser">Comptes en sourdine</Chip>
             </div>
 
             {form === "menu" && (
@@ -464,11 +471,15 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                     <div className={cl("stage-hero")}>
                         <Visualizer />
                         <div className={cl("stage-text")}>
-                            <span className={cl("title")}>low-musical</span>
+                            <h1 className={cl("title")} aria-label="low-musical">
+                                <span className={cl("title-low")}>low</span>
+                                <span className={cl("title-dash")} />
+                                <span className={cl("title-musical")}>musical</span>
+                            </h1>
                             <StatusPill />
                         </div>
                     </div>
-                    <PresetBar act={act} pending={pending} />
+                    <PresetBar act={act} />
                     <div className={cl("window-btns")}>
                         <button
                             type="button"
@@ -489,7 +500,10 @@ function PanelBody({ onClose }: { onClose(): void; }) {
 
                 <SignalCard act={act} />
                 <EqCard />
-                <SpaceCard />
+                <div className={cl("col-space")}>
+                    <SpaceCard />
+                    <SoundboardCard act={act} />
+                </div>
             </main>
         </div>
     );

@@ -131,6 +131,10 @@ export default {
         dragEnd: () => invoke<void>(IpcEvents.LOWMUSICAL_DRAG_END),
         /** Fenêtre du panneau invisible en partage d'écran. */
         setStreamProof: (on: boolean) => invoke<number>(IpcEvents.LOWMUSICAL_STREAM_PROOF, on),
+        /** soundboard : copie un son importé, renvoie son nom de fichier */
+        importSound: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_SOUND_IMPORT, name, data),
+        deleteSound: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_SOUND_DELETE, file),
+        listSounds: () => invoke<string[]>(IpcEvents.LOWMUSICAL_SOUND_LIST),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {
