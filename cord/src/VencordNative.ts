@@ -124,6 +124,8 @@ export default {
         /** Envoie une commande au moteur (lancé à la demande). */
         call: <T = any>(cmd: string, args?: Record<string, unknown>) => invoke<T>(IpcEvents.LOWMUSICAL_ENGINE_CALL, cmd, args ?? {}),
         isRunning: () => invoke<boolean>(IpcEvents.LOWMUSICAL_ENGINE_RUNNING),
+        /** Vérification locale, sans réseau (contrairement à status). */
+        isInstalled: () => invoke<boolean>(IpcEvents.LOWMUSICAL_INSTALLED),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

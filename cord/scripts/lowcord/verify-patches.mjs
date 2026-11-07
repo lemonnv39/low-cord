@@ -62,7 +62,7 @@ const realFiles = {
 const pluginsDir = resolve("src/lowplugins");
 const pluginNames = readdirSync(pluginsDir).filter(n => !n.startsWith("."));
 // Plugins du cœur propres à low-cord : leurs patches sont vérifiés aussi.
-const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts", "lowcordHeaderBar.ts", "lowcordProfileImages.ts"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
+const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts", "lowcordHeaderBar.ts", "lowcordProfileImages.ts", "lowcordMusical.tsx"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
 const entry = `
 export { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 ${pluginNames.map((n, i) => `import p${i} from "@lowplugins/${n}"; export const plugin_${i} = p${i};`).join("\n")}
@@ -91,6 +91,8 @@ await esbuild.build({
                 if (p === "@intrnl/xxhash64") return undefined;
                 if (p.startsWith(".") && !p.endsWith(".css")) return undefined;
                 if (p.endsWith(".css")) return { path: p, namespace: "empty" };
+                // Fichiers embarqués (file://…) : sans effet sur les patches.
+                if (p.startsWith("file://")) return { path: p, namespace: "stub" };
                 if (p.startsWith("@") || p.startsWith("~") || p === "react" || p.startsWith("react/")) {
                     return { path: p, namespace: p === "@utils/types" ? "types-stub" : "stub" };
                 }

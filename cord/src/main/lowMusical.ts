@@ -247,6 +247,7 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown
     return callEngine(cmd, plain);
 });
 ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_RUNNING, () => engine !== null);
+ipcMain.handle(IpcEvents.LOWMUSICAL_INSTALLED, () => readInstalled() !== null);
 ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_STOP, () => stopEngine());
 
 // Discord se ferme : le moteur quitte le vocal de lui-même en voyant son entrée se fermer.

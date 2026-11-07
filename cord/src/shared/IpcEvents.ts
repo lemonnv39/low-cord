@@ -77,4 +77,5 @@ export const enum IpcEvents {
     LOWMUSICAL_ENGINE_RUNNING = "LowMusicalEngineRunning",
     LOWMUSICAL_ENGINE_STOP = "LowMusicalEngineStop",
     LOWMUSICAL_EVENT = "LowMusicalEvent",
+    LOWMUSICAL_INSTALLED = "LowMusicalInstalled",
 }
