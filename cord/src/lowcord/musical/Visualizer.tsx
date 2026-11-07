@@ -108,17 +108,21 @@ export function Visualizer() {
             const glow = Math.min(1, level * 0.8 + bass * 0.5 + flash * 0.5);
 
             // ── Halo central qui respire avec les graves ────────────────
+            // Ellipse entièrement dans la zone : nulle avant les bords (pas
+            // de rectangle visible sur la fenêtre transparente).
             if (glow > 0.01) {
-                const r = h * (0.7 + bass * 0.9 + flash * 0.4);
-                const halo = ctx.createRadialGradient(w / 2, mid, 0, w / 2, mid, r * 2.2);
-                halo.addColorStop(0, `rgba(${TINT},${0.12 * glow})`);
-                halo.addColorStop(1, `rgba(${TINT},0)`);
-                ctx.fillStyle = halo;
+                const ry = h * 0.5, rx = w * 0.5 * (0.55 + bass * 0.3 + flash * 0.15);
                 ctx.save();
                 ctx.translate(w / 2, mid);
-                ctx.scale(2.4, 0.5);
-                ctx.translate(-w / 2, -mid);
-                ctx.fillRect(0, mid - r * 2.2, w, r * 4.4);
+                ctx.scale(rx / ry, 1);
+                const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, ry);
+                halo.addColorStop(0, `rgba(${TINT},${0.12 * glow})`);
+                halo.addColorStop(0.6, `rgba(${TINT},${0.04 * glow})`);
+                halo.addColorStop(1, `rgba(${TINT},0)`);
+                ctx.fillStyle = halo;
+                ctx.beginPath();
+                ctx.arc(0, 0, ry, 0, Math.PI * 2);
+                ctx.fill();
                 ctx.restore();
             }
 
@@ -167,12 +171,15 @@ export function Visualizer() {
                 const a = Math.max(0, 1 - pulse) * 0.9;
                 for (const side of [-1, 1]) {
                     const x = w / 2 + side * pulse * w * 0.46;
-                    const spot = ctx.createRadialGradient(x, mid, 0, x, mid, h * 0.55);
+                    const rad = h * 0.48;
+                    const spot = ctx.createRadialGradient(x, mid, 0, x, mid, rad);
                     spot.addColorStop(0, `rgba(${TINT},${0.35 * a})`);
                     spot.addColorStop(1, `rgba(${TINT},0)`);
                     ctx.globalAlpha = 1;
                     ctx.fillStyle = spot;
-                    ctx.fillRect(x - h * 0.55, 0, h * 1.1, h);
+                    ctx.beginPath();
+                    ctx.arc(x, mid, rad, 0, Math.PI * 2);
+                    ctx.fill();
                 }
             }
             ctx.globalAlpha = 1;
