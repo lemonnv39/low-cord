@@ -728,3 +728,38 @@
     font-size: 11px;
     font-weight: 400;
 }
+
+/* Fenêtre à part */
+
+/* Bloc de contenu de la fenêtre (sous sa barre de titre) : le panneau le remplit. */
+.lc-mp-window-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.lc-mp-window {
+    position: static;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.lc-mp-head-static {
+    cursor: default;
+}
+
+.lc-mp-head-static:active {
+    cursor: default;
+}
+
+.lc-mp-close-on {
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--header-primary, var(--text-strong));
+}
