@@ -126,6 +126,9 @@ export default {
         isRunning: () => invoke<boolean>(IpcEvents.LOWMUSICAL_ENGINE_RUNNING),
         /** Version installée (null = pas installé), lue sur le disque, sans réseau. */
         installedVersion: () => invoke<string | null>(IpcEvents.LOWMUSICAL_INSTALLED),
+        /** Déplacement de la fenêtre du panneau : elle suit la souris jusqu'à dragEnd. */
+        dragStart: () => invoke<boolean>(IpcEvents.LOWMUSICAL_DRAG_START),
+        dragEnd: () => invoke<void>(IpcEvents.LOWMUSICAL_DRAG_END),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

@@ -4,14 +4,119 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — petits composants du panneau (curseurs, interrupteurs,
-// sections, menu déroulant).
+// low-musical — composants du panneau : carte, curseur, interrupteur,
+// pastilles, sélecteur segmenté, menu déroulant.
 
 import { classNameFactory } from "@utils/css";
 import { useEffect, useRef, useState } from "@webpack/common";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export const cl = classNameFactory("lc-mp-");
+
+/** Bloc du panneau : titre (avec actions à droite) et contenu. */
+export function Card({ title, icon, extra, className, children }: {
+    title: string; icon?: ReactNode; extra?: ReactNode; className?: string; children: ReactNode;
+}) {
+    return (
+        <section className={cl("card") + (className ? " " + className : "")}>
+            <header className={cl("card-head")}>
+                {icon && <span className={cl("card-icon")}>{icon}</span>}
+                <span className={cl("card-title")}>{title}</span>
+                {extra && <span className={cl("card-extra")}>{extra}</span>}
+            </header>
+            {children}
+        </section>
+    );
+}
+
+/** Sous-titre à l'intérieur d'un bloc. */
+export const Group = ({ title, children }: { title: string; children: ReactNode; }) => (
+    <div className={cl("group")}>
+        <div className={cl("group-title")}>{title}</div>
+        {children}
+    </div>
+);
+
+/** Curseur horizontal : la partie remplie suit la valeur. Double-clic = valeur par défaut. */
+export function Slider({ label, value, display, min, max, step, reset, onChange, center }: {
+    label: string; value: number; display: string; min: number; max: number; step: number; reset: number;
+    onChange(v: number): void;
+    /** remplissage depuis le centre (valeurs ±) au lieu de la gauche */
+    center?: boolean;
+}) {
+    const pct = ((value - min) / (max - min)) * 100;
+    const zero = center ? ((0 - min) / (max - min)) * 100 : 0;
+    const style = { "--from": `${Math.min(zero, pct)}%`, "--to": `${Math.max(zero, pct)}%` } as CSSProperties;
+    return (
+        <label className={cl("slider")}>
+            <span className={cl("slider-head")}>
+                <span>{label}</span>
+                <span className={cl("value", value !== reset && "value-on")}>{display}</span>
+            </span>
+            <input
+                type="range" min={min} max={max} step={step} value={value} style={style}
+                onChange={e => onChange(Number(e.currentTarget.value))}
+                onDoubleClick={() => onChange(reset)}
+                title="Double-clic : valeur par défaut"
+            />
+        </label>
+    );
+}
+
+export function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): void; label: string; }) {
+    return (
+        <button type="button" role="switch" aria-checked={on} aria-label={label} className={cl("switch", on && "switch-on")} onClick={() => onChange(!on)}>
+            <span className={cl("knob")} />
+        </button>
+    );
+}
+
+/** Ligne titre + description + interrupteur. */
+export function ToggleRow({ name, desc, on, onChange, extra }: {
+    name: string; desc?: string; on: boolean; onChange(v: boolean): void; extra?: ReactNode;
+}) {
+    return (
+        <div className={cl("toggle-row")}>
+            <div className={cl("toggle-text")}>
+                <div className={cl("toggle-name")}>{name}</div>
+                {desc && <div className={cl("toggle-desc")}>{desc}</div>}
+            </div>
+            {extra}
+            <Toggle on={on} label={name} onChange={onChange} />
+        </div>
+    );
+}
+
+/** Choix exclusif sur une ligne (Off / Auto / Manuel…). */
+export function Segmented<T extends string | number>({ value, options, onChange, label }: {
+    value: T; options: readonly { value: T; label: string; }[]; onChange(v: T): void; label: string;
+}) {
+    return (
+        <div className={cl("segmented")} role="radiogroup" aria-label={label}>
+            {options.map(o => (
+                <button
+                    key={String(o.value)}
+                    type="button"
+                    role="radio"
+                    aria-checked={o.value === value}
+                    className={cl("segment", o.value === value && "segment-on")}
+                    onClick={() => onChange(o.value)}
+                >{o.label}</button>
+            ))}
+        </div>
+    );
+}
+
+/** Pastille cliquable (préréglage, effet à activer…). */
+export function Chip({ on, children, onClick, title, disabled }: {
+    on?: boolean; children: ReactNode; onClick(): void; title?: string; disabled?: boolean;
+}) {
+    return (
+        <button type="button" className={cl("chip", on && "chip-on")} aria-pressed={!!on} onClick={onClick} title={title} disabled={disabled}>
+            {children}
+        </button>
+    );
+}
 
 export interface Choice {
     value: string;
@@ -119,44 +224,3 @@ export function Dropdown({ value, choices, placeholder, disabled, onChange }: {
         </>
     );
 }
-
-export function Slider({ label, value, display, min, max, step, reset, onChange }: {
-    label: string; value: number; display: string; min: number; max: number; step: number; reset: number;
-    onChange(v: number): void;
-}) {
-    return (
-        <label className={cl("slider")}>
-            <span className={cl("slider-head")}>
-                <span>{label}</span>
-                <span className={cl("value")}>{display}</span>
-            </span>
-            <input
-                type="range" min={min} max={max} step={step} value={value}
-                onChange={e => onChange(Number(e.currentTarget.value))}
-                onDoubleClick={() => onChange(reset)}
-                title="Double-clic : valeur par défaut"
-            />
-        </label>
-    );
-}
-
-export function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): void; label: string; }) {
-    return (
-        <button role="switch" aria-checked={on} aria-label={label} className={cl("switch", on && "switch-on")} onClick={() => onChange(!on)}>
-            <span className={cl("knob")} />
-        </button>
-    );
-}
-
-export function Section({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode; }) {
-    return (
-        <div className={cl("sec")}>
-            <div className={cl("sec-head")}>
-                <span>{title}</span>
-                {extra}
-            </div>
-            {children}
-        </div>
-    );
-}
-

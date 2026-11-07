@@ -163,6 +163,8 @@ window.VencordNative = {
         call: async () => { throw new Error("Disponible seulement dans Discord sur PC"); },
         isRunning: async () => false,
         installedVersion: async () => null,
+        dragStart: async () => false,
+        dragEnd: async () => { },
         stop: async () => { },
         onEvent: () => { },
     },

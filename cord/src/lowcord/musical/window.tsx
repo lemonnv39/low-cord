@@ -19,8 +19,8 @@ import { WINDOW_KEY } from "./popoutKey";
 // Cadre des fenêtres de Discord (thème, raccourcis, styles), ici sans barre de titre.
 const PopoutWindow = findComponentByCodeLazy('"Missing guestWindow reference"');
 
-const WIDTH = 1000;
-const HEIGHT = 760;
+const WIDTH = 1240;
+const HEIGHT = 740;
 
 export const closePanel = () => PopoutActions.close(WINDOW_KEY);
 

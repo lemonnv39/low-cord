@@ -21,7 +21,7 @@ import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
 import { ChildProcess, execFile, spawn } from "child_process";
 import { createHash } from "crypto";
-import { app, BrowserWindow, ipcMain, net, shell } from "electron";
+import { app, BrowserWindow, ipcMain, net, screen, shell } from "electron";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createInterface } from "readline";
@@ -259,6 +259,37 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_UNINSTALL, () => uninstall());
 ipcMain.handle(IpcEvents.LOWMUSICAL_OPEN_FOLDER, () => {
     if (existsSync(DIR)) return shell.openPath(DIR);
 });
+
+// ── Déplacement de la fenêtre du panneau ────────────────────────────────────
+// La fenêtre du panneau (sans cadre) se déplace en l'attrapant n'importe où
+// sur un fond vide. Une zone de déplacement Windows bloquerait la molette et
+// les barres de défilement : ici, tant que le bouton est tenu, on recale la
+// fenêtre sur la souris (fonctionne d'un écran à l'autre).
+let dragTimer: NodeJS.Timeout | null = null;
+
+function stopDrag() {
+    if (dragTimer) clearInterval(dragTimer);
+    dragTimer = null;
+}
+
+ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_START, event => {
+    stopDrag();
+    // Le clic vient de donner le focus à la fenêtre du panneau (jamais la fenêtre principale).
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win || win.isDestroyed() || win === BrowserWindow.fromWebContents(event.sender)) return false;
+    if (!win.webContents.getURL().includes("/popout")) return false;
+    const start = screen.getCursorScreenPoint();
+    const [x, y] = win.getPosition();
+    const startedAt = Date.now();
+    dragTimer = setInterval(() => {
+        // Garde-fou : jamais plus d'une minute (relâchement du bouton perdu).
+        if (win.isDestroyed() || Date.now() - startedAt > 60_000) return stopDrag();
+        const cursor = screen.getCursorScreenPoint();
+        win.setPosition(x + cursor.x - start.x, y + cursor.y - start.y);
+    }, 8);
+    return true;
+});
+ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_END, () => stopDrag());
 
 // Reste d'un téléchargement interrompu (Discord fermé en plein milieu).
 app.whenReady().then(() => {
