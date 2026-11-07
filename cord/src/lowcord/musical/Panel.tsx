@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "@webpack/common";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { cl, Section, Slider, Toggle } from "./controls";
-import { EqSection, SpatialSection } from "./Effects";
+import { EqSection, ProcessingSection, SpatialSection } from "./Effects";
 import {
     type AccountState, connectAccounts, DEFAULT_INPUT, devices, disconnect, type EngineState, errorText, getPrefs, isActive,
     isOutdated, isReady, joinAll, leave, type MusicalGuild, PREF_DEFAULTS, savePrefs, setBitrate, setFakeDeafen, setFollow,
@@ -118,6 +118,7 @@ function AudioColumn({ act }: { act(fn: () => Promise<unknown>): void; }) {
 
             <SpatialSection />
             <EqSection />
+            <ProcessingSection />
         </div>
     );
 }

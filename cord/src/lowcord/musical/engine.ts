@@ -74,11 +74,21 @@ export interface MusicalPrefs {
     eqPreset: string;
     /** préréglage « Perso » enregistré */
     eqCustom?: number[];
+    /** coupe-bas en Hz (0 = off) */
+    highpass: number;
+    /** largeur stéréo (1 = normale, 0 = mono, 2 = très large) */
+    width: number;
+    /** saturation [0..1] */
+    saturation: number;
+    compressor: boolean;
+    /** intensité du compresseur [0..1] */
+    compAmount: number;
+    limiter: boolean;
 }
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.2.0";
+export const MIN_ENGINE = "0.3.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, bitrate: 128, latency: 200,
@@ -86,6 +96,7 @@ export const PREF_DEFAULTS: MusicalPrefs = {
     eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
     reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
+    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: false,
 };
 
 export const EQ_LABELS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
@@ -238,6 +249,7 @@ async function applyAudio() {
         call("set_reverb", { on: prefs.reverb }),
         call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }),
         call("set_eq", { bands: prefs.eq }),
+        call("set_processing", processingArgs()),
     ]);
     // La source n'est relancée que si elle a été choisie à la main avant.
     if (prefs.source && !state.sourceOn) await setInput(prefs.source).catch(() => { });
@@ -346,6 +358,19 @@ export function applyEqPreset(name: string) {
 /** Enregistre les bandes actuelles comme préréglage « Perso ». */
 export function saveEqCustom() {
     savePrefs({ eqCustom: [...prefs.eq], eqPreset: EQ_CUSTOM });
+}
+
+type ProcessingPrefs = Pick<MusicalPrefs, "highpass" | "width" | "saturation" | "compressor" | "compAmount" | "limiter">;
+
+const processingArgs = () => ({
+    highpass: prefs.highpass, width: prefs.width, saturation: prefs.saturation,
+    compressor: prefs.compressor, compAmount: prefs.compAmount, limiter: prefs.limiter,
+});
+
+/** Coupe-bas, largeur stéréo, saturation, compresseur, limiteur. */
+export function setProcessing(patch: Partial<ProcessingPrefs>) {
+    savePrefs(patch);
+    live(() => call("set_processing", processingArgs()));
 }
 
 /** Arrête le moteur : les comptes quittent le vocal et se déconnectent. */

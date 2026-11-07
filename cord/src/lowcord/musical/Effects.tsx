@@ -7,6 +7,8 @@
 // low-musical — effets : spatialisation 8D, réverbe, égaliseur 10 bandes.
 // Tout s'applique en direct et reste mémorisé pour les prochaines connexions.
 //
+// Traitement : coupe-bas, largeur stéréo, saturation, compresseur, limiteur.
+//
 // Le carré de la 8D règle deux choses avec un seul point :
 //  - gauche → droite : position du son (mode Manuel ; il tourne seul en Auto) ;
 //  - haut → bas : distance de la réverbe (haut = loin, bas = proche).
@@ -17,7 +19,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { cl, Section, Slider, Toggle } from "./controls";
 import {
     applyEqPreset, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getPrefs, PREF_DEFAULTS,
-    saveEqCustom, set8d, setEq, setReverb, setReverbParams, useMusical,
+    saveEqCustom, set8d, setEq, setProcessing, setReverb, setReverbParams, useMusical,
 } from "./engine";
 
 const MODES = [
@@ -194,6 +196,68 @@ export function EqSection() {
                 ))}
             </div>
             <p className={cl("note")}>De −12 à +12 dB par bande. Toucher une bande passe en « Perso » ; Enregistrer le garde comme préréglage.</p>
+        </Section>
+    );
+}
+
+export function ProcessingSection() {
+    useMusical();
+    const p = getPrefs();
+    return (
+        <Section
+            title="Traitement"
+            extra={
+                <button
+                    className={cl("mini")}
+                    onClick={() => setProcessing({
+                        highpass: PREF_DEFAULTS.highpass, width: PREF_DEFAULTS.width, saturation: PREF_DEFAULTS.saturation,
+                        compressor: PREF_DEFAULTS.compressor, compAmount: PREF_DEFAULTS.compAmount, limiter: PREF_DEFAULTS.limiter,
+                    })}
+                >Reset</button>
+            }
+        >
+            <Slider
+                label="Coupe-bas" value={p.highpass} display={p.highpass < 20 ? "off" : `${p.highpass} Hz`}
+                min={0} max={300} step={10} reset={PREF_DEFAULTS.highpass}
+                onChange={v => setProcessing({ highpass: v < 20 ? 0 : v })}
+            />
+            <Slider
+                label="Largeur stéréo" value={p.width} display={p.width === 0 ? "mono" : pct(p.width)}
+                min={0} max={2} step={0.05} reset={PREF_DEFAULTS.width}
+                onChange={v => setProcessing({ width: v })}
+            />
+            <Slider
+                label="Saturation" value={p.saturation} display={p.saturation === 0 ? "off" : pct(p.saturation)}
+                min={0} max={1} step={0.05} reset={PREF_DEFAULTS.saturation}
+                onChange={v => setProcessing({ saturation: v })}
+            />
+
+            <div className={cl("toggle-row")}>
+                <div>
+                    <div className={cl("toggle-name")}>Compresseur</div>
+                    <div className={cl("toggle-desc")}>Rapproche les passages forts et faibles</div>
+                </div>
+                <Toggle on={p.compressor} label="Compresseur" onChange={on => setProcessing({ compressor: on })} />
+            </div>
+            {p.compressor && (
+                <Slider
+                    label="Intensité" value={p.compAmount} display={pct(p.compAmount)}
+                    min={0} max={1} step={0.05} reset={PREF_DEFAULTS.compAmount}
+                    onChange={v => setProcessing({ compAmount: v })}
+                />
+            )}
+
+            <div className={cl("toggle-row")}>
+                <div>
+                    <div className={cl("toggle-name")}>Limiteur</div>
+                    <div className={cl("toggle-desc")}>Empêche le son de saturer (plafond à −1 dB)</div>
+                </div>
+                <Toggle on={p.limiter} label="Limiteur" onChange={on => setProcessing({ limiter: on })} />
+            </div>
+            <p className={cl("note")}>
+                Coupe-bas : retire les graves sous la fréquence choisie. Largeur : 0 % = mono, 100 % = normal, 200 % = très large.
+                Garde le limiteur allumé si tu pousses le gain ou la saturation.
+            </p>
         </Section>
     );
 }
