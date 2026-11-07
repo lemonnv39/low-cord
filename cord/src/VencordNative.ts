@@ -135,6 +135,8 @@ export default {
         importSound: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_SOUND_IMPORT, name, data),
         deleteSound: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_SOUND_DELETE, file),
         listSounds: () => invoke<string[]>(IpcEvents.LOWMUSICAL_SOUND_LIST),
+        /** contenu d'un son importé (forme d'onde de l'éditeur) */
+        readSound: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_SOUND_READ, file),
         stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {

@@ -82,20 +82,40 @@
 }
 
 .lc-mp-title {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
     margin: 0;
+    font-family: var(--font-display, "ABC Ginto Nord", var(--font-primary, sans-serif));
     line-height: 1;
-    filter: drop-shadow(0 0 18px rgb(0 0 0 / 95%)) drop-shadow(0 0 3px rgb(0 0 0 / 80%));
+    filter:
+        drop-shadow(0 0 1px rgb(0 0 0))
+        drop-shadow(0 8px 18px rgb(0 0 0 / 90%))
+        drop-shadow(0 0 22px rgb(214 224 240 / 12%));
 }
 
-/* « low » fin et discret, « musical » plein, en argent poli. */
+/* Encre noire, liseré argent, et un reflet qui traverse le mot à l'ouverture
+   (même lumière que la bannière low-cord). */
+.lc-mp-title-ink {
+    background:
+        linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 70%) 50%, transparent 60%) 130% 0 / 250% 100% no-repeat,
+        linear-gradient(180deg, #303037 0%, #0c0c0f 72%);
+    background-clip: text;
+    color: transparent;
+    -webkit-text-stroke: 1.2px rgb(214 224 240 / 58%);
+}
+
 .lc-mp-title-low {
-    color: #c3cad6;
     font-size: 34px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.lc-mp-title-musical {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
 }
 
 .lc-mp-title-dash {
@@ -106,13 +126,68 @@
     box-shadow: 0 0 10px rgb(214 224 240 / 60%);
 }
 
-.lc-mp-title-musical {
-    background: linear-gradient(180deg, #fff 15%, #c9d1de 60%, #8e97a6 100%);
-    background-clip: text;
-    color: transparent;
-    font-size: 40px;
-    font-weight: 800;
-    letter-spacing: -0.035em;
+/* Voile sombre derrière le titre : l'encre noire se lit sur les fibres. */
+.lc-mp-title::after {
+    position: absolute;
+    z-index: -2;
+    inset: -18px -46px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(5 5 7 / 88%), rgb(5 5 7 / 55%) 55%, transparent);
+    content: "";
+}
+
+/* Éclat de lumière derrière le titre, à l'ouverture seulement. */
+.lc-mp-title::before {
+    position: absolute;
+    z-index: -1;
+    inset: -30px -60px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(214 224 240 / 22%), transparent);
+    content: "";
+    opacity: 0;
+}
+
+.lc-mp-panel-intro .lc-mp-title::before {
+    animation: lc-mp-flare 1800ms ease-out 400ms both;
+}
+
+.lc-mp-panel-intro .lc-mp-title-ink {
+    animation:
+        lc-mp-title-in 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+        lc-mp-sheen 1700ms cubic-bezier(0.45, 0, 0.25, 1) 650ms both;
+}
+
+.lc-mp-panel-intro .lc-mp-title-musical {
+    animation-delay: 120ms, 780ms;
+}
+
+.lc-mp-panel-intro .lc-mp-title-dash {
+    animation: lc-mp-dash-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms both;
+}
+
+@keyframes lc-mp-title-in {
+    from {
+        opacity: 0;
+        filter: blur(6px);
+        transform: translateY(6px) scale(0.97);
+    }
+}
+
+@keyframes lc-mp-sheen {
+    from { background-position: 130% 0, 0 0; }
+    to { background-position: -30% 0, 0 0; }
+}
+
+@keyframes lc-mp-dash-in {
+    from {
+        opacity: 0;
+        transform: scaleX(0);
+    }
+}
+
+@keyframes lc-mp-flare {
+    35% { opacity: 1; }
+    100% { opacity: 0; }
 }
 
 .lc-mp-window-btns {
@@ -214,8 +289,11 @@
     flex: 1 1 0;
 }
 
-.lc-mp-col-space > .lc-mp-card-sb {
+.lc-mp-card-sb-wrap {
+    display: flex;
     flex: 0 1 auto;
+    flex-direction: column;
+    min-height: 0;
     max-height: 48%;
 }
 
@@ -232,18 +310,28 @@
 
 .lc-mp-card {
     display: flex;
-    overflow: hidden auto;
+    overflow: hidden;
     flex-direction: column;
     gap: 12px;
     min-width: 0;
     min-height: 0;
-    scrollbar-color: var(--mp-line-strong) transparent;
-    scrollbar-width: thin;
     padding: 14px;
     border: 1px solid var(--mp-line);
     border-radius: 14px;
     background: var(--mp-card-bg);
     box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+    transition: border-color 200ms ease;
+}
+
+.lc-mp-card-body {
+    display: flex;
+    overflow: hidden auto;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    margin-right: -9px;
+    padding-right: 9px;
 }
 
 .lc-mp-card-head {
@@ -335,8 +423,6 @@
 /* Zones qui défilent (comptes) : barre fine. */
 .lc-mp-scroll {
     overflow-y: auto;
-    scrollbar-color: var(--mp-line-strong) transparent;
-    scrollbar-width: thin;
 }
 
 /* ── Boutons ─────────────────────────────────────────────────────────────── */
@@ -422,7 +508,7 @@
     background: transparent;
     color: var(--mp-muted);
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .lc-mp-icon-btn-sm {
@@ -457,6 +543,7 @@
     color: var(--mp-muted);
     font-size: 12px;
     cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .lc-mp-link:disabled {
@@ -501,7 +588,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
-    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 90ms ease, box-shadow 160ms ease;
 }
 
 .lc-mp-chip:disabled {
@@ -518,6 +605,7 @@
     border-color: var(--mp-strong);
     background: var(--mp-strong);
     color: var(--mp-bg);
+    box-shadow: 0 0 14px rgb(214 224 240 / 14%);
 }
 
 .lc-mp-chip-on:hover:not(:disabled) {
@@ -548,7 +636,7 @@
     font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 90ms ease, box-shadow 160ms ease;
 }
 
 .lc-mp-segment:hover {
@@ -700,6 +788,7 @@
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .lc-mp-dropdown:disabled {
@@ -745,7 +834,6 @@
     border-radius: 10px;
     background: #141417;
     box-shadow: 0 16px 40px rgb(0 0 0 / 60%);
-    scrollbar-width: thin;
 }
 
 .lc-mp-dropdown-item {
@@ -761,6 +849,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .lc-mp-dropdown-item:disabled {
@@ -1425,6 +1514,7 @@
     fill: #17171b;
     stroke: var(--mp-line-strong);
     stroke-width: 1;
+    transition: fill 150ms ease, stroke 150ms ease;
 }
 
 .lc-mp-knob-dial:hover .lc-mp-knob-cap {
@@ -1435,6 +1525,7 @@
     stroke: var(--mp-muted);
     stroke-linecap: round;
     stroke-width: 2;
+    transition: fill 150ms ease, stroke 150ms ease;
 }
 
 .lc-mp-knob-dial-on .lc-mp-knob-hand {
@@ -1446,6 +1537,7 @@
     font-family: var(--mp-mono);
     font-size: 10.5px;
     font-variant-numeric: tabular-nums;
+    transition: color 150ms ease;
 }
 
 .lc-mp-knob-value-on {
@@ -1466,8 +1558,6 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     min-height: 0;
-    scrollbar-color: var(--mp-line-strong) transparent;
-    scrollbar-width: thin;
 }
 
 .lc-mp-sb-pad-wrap {
@@ -1490,6 +1580,10 @@
     white-space: nowrap;
     cursor: pointer;
     transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
 }
 
 .lc-mp-sb-pad:disabled {
@@ -1561,6 +1655,7 @@
     text-align: left;
     white-space: nowrap;
     cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .lc-mp-dropdown-ctx-item:hover {
@@ -1571,4 +1666,257 @@
 .lc-mp-dropdown-ctx-danger,
 .lc-mp-dropdown-ctx-danger:hover {
     color: var(--mp-bad);
+}
+
+/* ── Barres de défilement (dans le thème, jamais dans les coins) ────────── */
+.lc-mp-panel ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.lc-mp-panel ::-webkit-scrollbar-track {
+    margin: 6px 0;
+    background: transparent;
+}
+
+.lc-mp-panel ::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgb(255 255 255 / 11%);
+}
+
+.lc-mp-panel ::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 22%);
+}
+
+.lc-mp-panel ::-webkit-scrollbar-button,
+.lc-mp-panel ::-webkit-scrollbar-corner {
+    display: none;
+    background: transparent;
+}
+
+.lc-mp-card-sb-wrap > .lc-mp-card {
+    flex: 1 1 auto;
+}
+
+/* ── Ouverture (première fois seulement) : les blocs arrivent en douceur ── */
+.lc-mp-panel-intro .lc-mp-card,
+.lc-mp-panel-intro .lc-mp-stage-bar {
+    animation: lc-mp-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lc-mp-panel-intro .lc-mp-card-session { animation-delay: 60ms; }
+.lc-mp-panel-intro .lc-mp-stage-bar { animation-delay: 140ms; }
+.lc-mp-panel-intro .lc-mp-card-signal { animation-delay: 180ms; }
+.lc-mp-panel-intro .lc-mp-card-eq { animation-delay: 240ms; }
+.lc-mp-panel-intro .lc-mp-card-space { animation-delay: 300ms; }
+.lc-mp-panel-intro .lc-mp-card-sb { animation-delay: 360ms; }
+
+.lc-mp-panel-intro .lc-mp-visualizer {
+    animation: lc-mp-fade 1200ms ease 200ms both;
+}
+
+@keyframes lc-mp-rise {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+}
+
+@keyframes lc-mp-fade {
+    from { opacity: 0; }
+}
+
+/* ── Finitions : tout réagit en douceur ──────────────────────────────────── */
+.lc-mp-card:hover {
+    border-color: rgb(255 255 255 / 10%);
+}
+
+.lc-mp-chip:active:not(:disabled),
+.lc-mp-segment:active,
+.lc-mp-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.lc-mp-dropdown-list,
+.lc-mp-dropdown-ctx,
+.lc-mp-stage-pop,
+.lc-mp-stage-note {
+    animation: lc-mp-pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Les deux bulles centrées gardent leur décalage pendant l'animation. */
+.lc-mp-stage-pop,
+.lc-mp-stage-note {
+    animation-name: lc-mp-pop-center;
+}
+
+@keyframes lc-mp-pop {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+}
+
+@keyframes lc-mp-pop-center {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -4px) scale(0.98);
+    }
+}
+
+/* ── Soundboard : détails ────────────────────────────────────────────────── */
+.lc-mp-sb-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lc-mp-sb-cut {
+    display: grid;
+    flex: none;
+    color: var(--mp-muted);
+}
+
+.lc-mp-sb-rename {
+    width: 100%;
+    height: 40px;
+    padding: 0 8px;
+    border: 1px solid var(--mp-muted);
+    border-radius: 9px;
+    outline: none;
+    background: rgb(0 0 0 / 35%);
+    color: var(--mp-strong);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* ── Éditeur de découpe ──────────────────────────────────────────────────── */
+.lc-mp-modal-back {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgb(0 0 0 / 55%);
+    backdrop-filter: blur(3px);
+    animation: lc-mp-fade 160ms ease both;
+}
+
+.lc-mp-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(820px, 100%);
+    padding: 16px;
+    border: 1px solid var(--mp-line-strong);
+    border-radius: 14px;
+    background: #0e0e11;
+    box-shadow: 0 30px 80px rgb(0 0 0 / 70%);
+    animation: lc-mp-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lc-mp-modal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.lc-mp-modal-name {
+    overflow: hidden;
+    flex: 1;
+    color: var(--mp-muted);
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-mp-wave {
+    position: relative;
+    height: 190px;
+    border: 1px solid var(--mp-line);
+    border-radius: 11px;
+    background: rgb(0 0 0 / 35%);
+    overflow: hidden;
+}
+
+.lc-mp-wave-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: text;
+    touch-action: none;
+}
+
+.lc-mp-wave-msg {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--mp-muted);
+    font-size: 12.5px;
+}
+
+/* Mini-carte du zoom : quelle partie du son est affichée. */
+.lc-mp-wave-zoom {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    left: 8px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgb(255 255 255 / 8%);
+}
+
+.lc-mp-wave-zoom span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 2px;
+    background: rgb(214 224 240 / 60%);
+}
+
+.lc-mp-trim-times {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 18px;
+    color: var(--mp-strong);
+    font-family: var(--mp-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-mp-trim-times em {
+    margin-right: 6px;
+    color: var(--mp-faint);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.lc-mp-trim-hint {
+    margin-left: auto;
+    color: var(--mp-faint);
+    font-family: inherit;
+    font-size: 11px;
+}
+
+.lc-mp-row-grow {
+    flex: 1;
+}
+
+.lc-mp-btn-on {
+    border-color: rgb(61 220 132 / 45%);
+    color: var(--mp-live);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lc-mp-panel *,
+    .lc-mp-panel *::before {
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+    }
 }

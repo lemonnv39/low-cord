@@ -136,7 +136,14 @@ export interface MusicalPrefs {
     sbVolume: number;
 }
 
-export interface SoundPad { id: string; name: string; file: string; }
+export interface SoundPad {
+    id: string;
+    name: string;
+    file: string;
+    /** découpe (ms) : début et fin gardés ; absents = le son entier */
+    start?: number;
+    end?: number;
+}
 
 export interface UserPreset { name: string; data: Partial<MusicalPrefs>; }
 
@@ -146,7 +153,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.9.2";
+export const MIN_ENGINE = "0.9.4";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -755,7 +762,7 @@ export const getSoundErrors = () => soundErrors;
 
 async function loadSound(pad: SoundPad) {
     try {
-        await call("sb_load", { sound: pad.id, file: pad.file });
+        await call("sb_load", { sound: pad.id, file: pad.file, start: pad.start, end: pad.end });
         loadedSounds.add(pad.id);
         if (soundErrors[pad.id]) {
             const { [pad.id]: _, ...rest } = soundErrors;
@@ -829,3 +836,21 @@ export async function deleteSound(id: string) {
     if (state.running) await call("sb_unload", { sound: id }).catch(() => { });
     await VencordNative.lowMusical.deleteSound(pad.file).catch(() => { });
 }
+
+export function renameSound(id: string, name: string) {
+    const clean = name.trim().slice(0, 32);
+    if (clean) savePrefs({ sounds: prefs.sounds.map(p => p.id === id ? { ...p, name: clean } : p) });
+}
+
+/** Découpe un son (ms) ; recharge le moteur s'il tourne. Le fichier reste intact. */
+export async function trimSound(id: string, start: number, end: number) {
+    const pad = prefs.sounds.find(p => p.id === id);
+    if (!pad) return;
+    const next: SoundPad = { ...pad, start: Math.max(0, Math.round(start)), end: Math.round(end) };
+    if (state.running) await loadSound(next);
+    else loadedSounds.delete(id);
+    savePrefs({ sounds: prefs.sounds.map(p => p.id === id ? next : p) });
+}
+
+/** Contenu d'un son importé (pour l'éditeur). */
+export const readSound = (pad: SoundPad) => VencordNative.lowMusical.readSound(pad.file);

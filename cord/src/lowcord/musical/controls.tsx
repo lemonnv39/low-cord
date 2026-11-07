@@ -24,7 +24,8 @@ export function Card({ title, icon, extra, className, children }: {
                 <span className={cl("card-title")}>{title}</span>
                 {extra && <span className={cl("card-extra")}>{extra}</span>}
             </header>
-            {children}
+            {/* Contenu qui défile : la barre reste à l'intérieur, loin des coins arrondis. */}
+            <div className={cl("card-body")}>{children}</div>
         </section>
     );
 }
@@ -378,6 +379,53 @@ export function Knob({ label, value, min, max, step, reset, onChange, unit = "dB
             </div>
             <span className={cl("knob-value", value !== reset && "knob-value-on")}>{shown} {unit}</span>
             <span className={cl("knob-label")}>{label}</span>
+        </div>
+    );
+}
+
+/**
+ * Menu du clic droit, à la position de la souris (gardé dans la fenêtre).
+ * Une action « danger » demande un deuxième clic pour confirmer.
+ */
+export function ContextMenu({ x, y, actions, onClose }: { x: number; y: number; actions: ChoiceAction[]; onClose(): void; }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [confirm, setConfirm] = useState<string | null>(null);
+    const [pos, setPos] = useState({ left: x, top: y });
+
+    useEffect(() => {
+        const el = ref.current!;
+        const doc = el.ownerDocument, win = doc.defaultView!;
+        setPos({
+            left: Math.max(4, Math.min(x, win.innerWidth - el.offsetWidth - 4)),
+            top: Math.max(4, Math.min(y, win.innerHeight - el.offsetHeight - 4)),
+        });
+        const onDown = (e: MouseEvent) => { if (!el.contains(e.target as Node)) onClose(); };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        doc.addEventListener("mousedown", onDown, true);
+        doc.addEventListener("keydown", onKey, true);
+        win.addEventListener("blur", onClose);
+        return () => {
+            doc.removeEventListener("mousedown", onDown, true);
+            doc.removeEventListener("keydown", onKey, true);
+            win.removeEventListener("blur", onClose);
+        };
+    }, []);
+
+    return (
+        <div ref={ref} className={cl("dropdown-ctx")} role="menu" style={pos}>
+            {actions.map(a => (
+                <button
+                    key={a.label}
+                    type="button"
+                    role="menuitem"
+                    className={cl("dropdown-ctx-item", a.danger && "dropdown-ctx-danger")}
+                    onClick={() => {
+                        if (a.danger && confirm !== a.label) return setConfirm(a.label);
+                        onClose();
+                        a.onClick();
+                    }}
+                >{confirm === a.label ? "Confirmer ?" : a.label}</button>
+            ))}
         </div>
     );
 }

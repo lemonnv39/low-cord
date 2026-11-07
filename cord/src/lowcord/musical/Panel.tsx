@@ -433,9 +433,17 @@ function useTransparentWindow(ref: React.RefObject<HTMLElement | null>) {
     }, []);
 }
 
+/** L'animation d'ouverture ne se joue qu'une fois par lancement de Discord. */
+let introPlayed = false;
+
 function PanelBody({ onClose }: { onClose(): void; }) {
     useMusical();
     const rootRef = useRef<HTMLDivElement>(null);
+    const [intro] = useState(() => {
+        const first = !introPlayed;
+        introPlayed = true;
+        return first;
+    });
     useTransparentWindow(rootRef);
     // Mesures du son seulement tant que le panneau est ouvert.
     useEffect(() => {
@@ -469,7 +477,7 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     }
 
     return (
-        <div ref={rootRef} className={cl("panel")} onPointerDown={startDrag}>
+        <div ref={rootRef} className={cl("panel", intro && "panel-intro")} onPointerDown={startDrag}>
             <main className={cl("grid")}>
                 <SessionCard act={act} pending={pending} />
 
@@ -479,9 +487,9 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                         <Visualizer />
                         <div className={cl("stage-text")}>
                             <h1 className={cl("title")} aria-label="low-musical">
-                                <span className={cl("title-low")}>low</span>
+                                <span className={cl("title-ink", "title-low")}>low</span>
                                 <span className={cl("title-dash")} />
-                                <span className={cl("title-musical")}>musical</span>
+                                <span className={cl("title-ink", "title-musical")}>musical</span>
                             </h1>
                             <StatusPill />
                         </div>

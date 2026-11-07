@@ -169,6 +169,7 @@ window.VencordNative = {
         importSound: async () => { throw new Error("Disponible seulement dans Discord sur PC"); },
         deleteSound: async () => { },
         listSounds: async () => [],
+        readSound: async () => new Uint8Array(),
         stop: async () => { },
         onEvent: () => { },
     },

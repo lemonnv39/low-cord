@@ -335,6 +335,7 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_IMPORT, (_, name: unknown, data: unkno
 ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_DELETE, (_, file: unknown) => {
     rmSync(soundPath(file), { force: true });
 });
+ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_READ, (_, file: unknown) => readFileSync(soundPath(file)));
 /** Sons encore présents sur le disque (les autres ont été effacés à la main). */
 ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
     try {
