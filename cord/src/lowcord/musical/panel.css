@@ -1536,3 +1536,13 @@
 .lc-mp-sb-del:hover {
     background: #2a1215;
 }
+
+.lc-mp-gr-hot {
+    margin: 2px 0 0;
+    color: var(--mp-warn);
+    font-size: 11.5px;
+}
+
+.lc-mp-gr-hot[hidden] {
+    display: none;
+}
