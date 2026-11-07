@@ -1,0 +1,111 @@
+name: low-musical — build & publish engine
+
+# Moteur audio de low-musical (musical/engine), indépendant de low-cord :
+# sa propre CI, sa propre branche de publication, ses propres mises à jour.
+# Publie low-musical-engine.exe + manifest.json sur la branche orpheline
+# `musical-builds` (un seul commit, remplacé à chaque version : la branche ne
+# grossit pas). low-cord compare le sha256 du manifeste à l'installation.
+# Les PR ne font que vérifier.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "musical/**"
+      - ".github/workflows/musical.yml"
+  pull_request:
+    paths:
+      - "musical/**"
+      - ".github/workflows/musical.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: musical-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: musical/engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: musical/engine
+
+      - name: Format
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        run: cargo clippy --release --locked -- -D warnings
+
+      # cmake + MSVC sont sur l'image Windows (songbird compile Opus).
+      - name: Build
+        run: cargo build --release --locked
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Alertes connues et justifiées : musical/engine/.cargo/audit.toml.
+      - name: Audit des dépendances
+        run: cargo audit
+
+      # Le moteur doit démarrer, répondre et s'arrêter tout seul quand son
+      # entrée se ferme (= Discord fermé).
+      - name: Vérifier le moteur
+        run: |
+          set -euo pipefail
+          EXE=target/release/low-musical-engine.exe
+          WANT=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          GOT=$("$EXE" --version | tr -d '\r')
+          test "$GOT" = "$WANT" || { echo "::error::version $GOT au lieu de $WANT"; exit 1; }
+          OUT=$(printf '%s\n' '{"id":1,"cmd":"version"}' '{"id":2,"cmd":"status"}' | timeout 20 "$EXE" | tr -d '\r')
+          echo "$OUT"
+          grep -q '"id":1,"ok":true,"result":"'"$WANT"'"' <<<"$OUT" || { echo "::error::réponse version absente"; exit 1; }
+          grep -q '"id":2,"ok":true' <<<"$OUT" || { echo "::error::réponse status absente"; exit 1; }
+
+      - name: Publier sur la branche musical-builds
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          REPO_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          EXE=target/release/low-musical-engine.exe
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          OUT="$RUNNER_TEMP/musical-builds"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          cp "$EXE" "$OUT/"
+          cat > "$OUT/manifest.json" <<JSON
+          {
+            "name": "low-musical-engine",
+            "version": "${VERSION}",
+            "sha": "${GITHUB_SHA}",
+            "short": "${GITHUB_SHA::7}",
+            "file": "low-musical-engine.exe",
+            "sha256": "$(sha256sum "$EXE" | cut -d' ' -f1)",
+            "size": $(stat -c %s "$EXE"),
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+          cat "$OUT/manifest.json"
+
+          cd "$OUT"
+          git init --quiet -b musical-builds
+          git config user.name "low-cord-ci"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add low-musical-engine.exe manifest.json
+          git commit --quiet -m "musical: low-musical-engine ${VERSION} @${GITHUB_SHA::7}"
+          git push --quiet --force "$REPO_URL" musical-builds
+          echo "Publié : $(git rev-parse HEAD)"

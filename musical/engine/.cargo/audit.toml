@@ -1,0 +1,24 @@
+# Alertes connues, toutes tirées par songbird 0.6.1 (dernière version publiée),
+# qui impose ces versions via davey 0.1 (chiffrement vocal DAVE). Impossible de
+# les monter sans une nouvelle version de songbird : à retirer dès qu'elle sort.
+# Toute NOUVELLE alerte fait toujours échouer la CI.
+[advisories]
+ignore = [
+    # crypto-bigint 0.5 (p256, via davey) : écarts de temps sur des opérations
+    # censées être à temps constant. Attaque par mesure de temps, en local.
+    "RUSTSEC-2026-0387",
+    # libcrux (via hpke-rs / openmls, via davey) : AES-GCM, ChaCha20, KEM, SHA-3.
+    # Écarts de temps, plantages sur entrées mal formées, sortie incorrecte sur
+    # ARM ou sur un usage de SHAKE non utilisé ici.
+    "RUSTSEC-2026-0209",
+    "RUSTSEC-2026-0211",
+    "RUSTSEC-2026-0124",
+    "RUSTSEC-2026-0330",
+    "RUSTSEC-2026-0331",
+    "RUSTSEC-2026-0212",
+    "RUSTSEC-2026-0207",
+    "RUSTSEC-2026-0208",
+    # ringbuf 0.4 (songbird) : double libération seulement si le Drop d'un
+    # élément panique ; les éléments du tampon de songbird n'en ont pas.
+    "RUSTSEC-2026-0293",
+]
