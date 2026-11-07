@@ -58,6 +58,14 @@ global!(eq_gains: Mutex<[f32; 10]> = Mutex::new([0.0; 10]));
 global!(current_input: Mutex<Option<String>> = Mutex::new(None));
 // Drapeau d'arrêt de la capture en cours.
 global!(capture_stop: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None));
+// Traitement : coupe-bas (Hz, 0 = off), largeur stéréo (1 = normale),
+// saturation [0..1], compresseur (on + intensité [0..1]), limiteur.
+global!(highpass_hz: AtomicU32 = f32_atomic(0.0));
+global!(width: AtomicU32 = f32_atomic(1.0));
+global!(saturation: AtomicU32 = f32_atomic(0.0));
+global!(comp_on: AtomicBool = AtomicBool::new(false));
+global!(comp_amount: AtomicU32 = f32_atomic(0.5));
+global!(limiter_on: AtomicBool = AtomicBool::new(false));
 
 /// Réglages audio courants, pour un panneau qui se (re)monte.
 pub fn snapshot(map: &mut Map<String, Value>) {
@@ -76,6 +84,17 @@ pub fn snapshot(map: &mut Map<String, Value>) {
     map.insert("reverbRoom".into(), json!(load_f32(reverb_room())));
     map.insert("reverbDistance".into(), json!(load_f32(reverb_distance())));
     map.insert("eq".into(), json!(lock(eq_gains()).to_vec()));
+    map.insert(
+        "processing".into(),
+        json!({
+            "highpass": load_f32(highpass_hz()),
+            "width": load_f32(width()),
+            "saturation": load_f32(saturation()),
+            "compressor": comp_on().load(Ordering::Relaxed),
+            "compAmount": load_f32(comp_amount()),
+            "limiter": limiter_on().load(Ordering::Relaxed),
+        }),
+    );
 }
 
 // ── Réglages ────────────────────────────────────────────────────────────────
@@ -108,6 +127,29 @@ pub fn set_eq(bands: Vec<f32>) {
     for (i, slot) in g.iter_mut().enumerate() {
         *slot = bands.get(i).copied().unwrap_or(0.0).clamp(-12.0, 12.0);
     }
+}
+
+/// Traitement : coupe-bas, largeur stéréo, saturation, compresseur, limiteur.
+pub fn set_processing(
+    highpass: f32,
+    stereo_width: f32,
+    drive: f32,
+    compressor: bool,
+    amount: f32,
+    limiter: bool,
+) {
+    // En dessous de 20 Hz, le coupe-bas est coupé.
+    let hz = if highpass < 20.0 {
+        0.0
+    } else {
+        highpass.min(400.0)
+    };
+    store_f32(highpass_hz(), hz);
+    store_f32(width(), stereo_width.clamp(0.0, 2.0));
+    store_f32(saturation(), drive.clamp(0.0, 1.0));
+    comp_on().store(compressor, Ordering::Relaxed);
+    store_f32(comp_amount(), amount.clamp(0.0, 1.0));
+    limiter_on().store(limiter, Ordering::Relaxed);
 }
 
 // ── 8D ──────────────────────────────────────────────────────────────────────
@@ -281,6 +323,18 @@ impl Biquad {
         self.a1 = (-2.0 * cw) / a0;
         self.a2 = (1.0 - alpha / a) / a0;
     }
+    /// Passe-haut (coupe-bas) d'ordre 2, Q = 0,707 (formules RBJ).
+    fn set_highpass(&mut self, f0: f32, fs: f32) {
+        let w0 = std::f32::consts::TAU * f0 / fs;
+        let cw = w0.cos();
+        let alpha = w0.sin() / (2.0 * std::f32::consts::FRAC_1_SQRT_2);
+        let a0 = 1.0 + alpha;
+        self.b0 = (1.0 + cw) / 2.0 / a0;
+        self.b1 = -(1.0 + cw) / a0;
+        self.b2 = (1.0 + cw) / 2.0 / a0;
+        self.a1 = (-2.0 * cw) / a0;
+        self.a2 = (1.0 - alpha) / a0;
+    }
     fn process(&mut self, x: f32) -> f32 {
         // Forme directe II transposée (stable).
         let y = self.b0 * x + self.z1;
@@ -318,6 +372,44 @@ impl Eq {
     }
 }
 
+// ── Dynamique (compresseur, limiteur) ───────────────────────────────────────
+// Suiveur d'enveloppe sur le maximum des deux canaux (stéréo liée : l'image
+// ne bouge pas quand un seul côté tape fort).
+
+struct Follower {
+    env: f32,
+    attack: f32,
+    release: f32,
+}
+
+impl Follower {
+    fn new(attack_ms: f32, release_ms: f32) -> Self {
+        let k = |ms: f32| (-1.0 / (ms * OUT_RATE as f32 / 1000.0)).exp();
+        Follower {
+            env: 0.0,
+            attack: k(attack_ms),
+            release: k(release_ms),
+        }
+    }
+    fn next(&mut self, level: f32) -> f32 {
+        let c = if level > self.env {
+            self.attack
+        } else {
+            self.release
+        };
+        self.env = level + c * (self.env - level);
+        self.env
+    }
+}
+
+fn db(x: f32) -> f32 {
+    20.0 * x.max(1e-9).log10()
+}
+
+fn from_db(d: f32) -> f32 {
+    10f32.powf(d / 20.0)
+}
+
 // ── Chaîne d'effets ─────────────────────────────────────────────────────────
 // Vit dans la capture : une seule par source, quel que soit le nombre de comptes.
 
@@ -325,6 +417,10 @@ struct Dsp {
     eq: Eq,
     reverb: Reverb,
     lfo: f32,
+    highpass: [Biquad; 2],
+    highpass_hz: f32,
+    comp: Follower,
+    limit: Follower,
 }
 
 impl Dsp {
@@ -333,6 +429,10 @@ impl Dsp {
             eq: Eq::new(),
             reverb: Reverb::new(),
             lfo: 0.0,
+            highpass: [Biquad::default(); 2],
+            highpass_hz: 0.0,
+            comp: Follower::new(10.0, 150.0),
+            limit: Follower::new(1.0, 80.0),
         }
     }
 
@@ -349,14 +449,69 @@ impl Dsp {
             self.reverb
                 .update(load_f32(reverb_room()), load_f32(reverb_distance()));
         }
+        let hp = load_f32(highpass_hz());
+        if hp != self.highpass_hz {
+            self.highpass_hz = hp;
+            for b in self.highpass.iter_mut() {
+                b.set_highpass(hp.max(20.0), OUT_RATE as f32);
+            }
+        }
+        let w = load_f32(width());
+        let drive = load_f32(saturation());
+        // Saturation douce (tanh), niveau gardé : tanh(k·x) / tanh(k).
+        let k = 1.0 + drive * 9.0;
+        let norm = k.tanh();
+        let comp = comp_on().load(Ordering::Relaxed);
+        // Intensité → seuil de −10 à −40 dB, rapport 4:1, compensation de la moitié.
+        let threshold = -10.0 - 30.0 * load_f32(comp_amount());
+        let makeup = from_db(-threshold * 0.75 * 0.5);
+        let limit = limiter_on().load(Ordering::Relaxed);
+        const CEILING: f32 = 0.891; // −1 dBFS
+
         for frame in buf.as_chunks_mut::<2>().0 {
-            let (mut l, mut r) = spatialize(frame[0] * g, frame[1] * g, &mut self.lfo);
+            let (mut l, mut r) = (frame[0] * g, frame[1] * g);
+            if hp > 0.0 {
+                l = self.highpass[0].process(l);
+                r = self.highpass[1].process(r);
+            }
+            (l, r) = spatialize(l, r, &mut self.lfo);
+            if (w - 1.0).abs() > 0.01 {
+                let mid = (l + r) * 0.5;
+                let side = (l - r) * 0.5 * w;
+                (l, r) = (mid + side, mid - side);
+            }
             if rvb {
                 (l, r) = self.reverb.process(l, r);
             }
             if eq_active {
                 l = self.eq.process(l, 0);
                 r = self.eq.process(r, 1);
+            }
+            if drive > 0.001 {
+                l = (k * l).tanh() / norm;
+                r = (k * r).tanh() / norm;
+            }
+            if comp {
+                let env = self.comp.next(l.abs().max(r.abs()));
+                let over = db(env) - threshold;
+                let reduce = if over > 0.0 {
+                    from_db(-over * 0.75)
+                } else {
+                    1.0
+                };
+                l *= reduce * makeup;
+                r *= reduce * makeup;
+            }
+            if limit {
+                let env = self.limit.next(l.abs().max(r.abs()));
+                if env > CEILING {
+                    let reduce = CEILING / env;
+                    l *= reduce;
+                    r *= reduce;
+                }
+                // Filet de sécurité : jamais au-delà du plafond.
+                l = l.clamp(-CEILING, CEILING);
+                r = r.clamp(-CEILING, CEILING);
             }
             frame[0] = l;
             frame[1] = r;
@@ -563,4 +718,100 @@ where
         |e| capture_error(format!("Capture interrompue : {e}")),
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Les réglages sont globaux : les tests partagent un verrou.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn reset() {
+        set_gain(0.0);
+        set_8d(0, 0.15, 0.5);
+        set_reverb(false);
+        set_eq(vec![0.0; 10]);
+        set_processing(0.0, 1.0, 0.0, false, 0.5, false);
+    }
+
+    /// Une seconde de sinus stéréo (gauche, droite) passée dans la chaîne d'effets.
+    fn run(hz: f32, amp_l: f32, amp_r: f32) -> Vec<f32> {
+        let mut buf = Vec::with_capacity(OUT_RATE as usize * 2);
+        for i in 0..OUT_RATE as usize {
+            let s = (std::f32::consts::TAU * hz * i as f32 / OUT_RATE as f32).sin();
+            buf.push(s * amp_l);
+            buf.push(s * amp_r);
+        }
+        Dsp::new().process(&mut buf);
+        buf
+    }
+
+    /// Crête sur la deuxième moitié (une fois les filtres stabilisés).
+    fn peak(buf: &[f32]) -> f32 {
+        buf[buf.len() / 2..].iter().fold(0.0, |m, x| m.max(x.abs()))
+    }
+
+    #[test]
+    fn neutre_ne_change_rien() {
+        let _g = lock(&SERIAL);
+        reset();
+        assert!((peak(&run(440.0, 0.5, 0.5)) - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn limiteur_plafonne_a_moins_1_dbfs() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_processing(0.0, 1.0, 0.0, false, 0.5, true);
+        let out = run(440.0, 2.0, 2.0);
+        assert!(out.iter().all(|x| x.abs() <= 0.8911));
+        reset();
+    }
+
+    #[test]
+    fn coupe_bas_attenue_les_graves() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_processing(200.0, 1.0, 0.0, false, 0.5, false);
+        assert!(peak(&run(30.0, 0.5, 0.5)) < 0.05);
+        assert!(peak(&run(2000.0, 0.5, 0.5)) > 0.45);
+        reset();
+    }
+
+    #[test]
+    fn largeur_zero_donne_du_mono() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_processing(0.0, 0.0, 0.0, false, 0.5, false);
+        let out = run(440.0, 0.8, 0.0);
+        assert!(out
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .all(|[l, r]| (l - r).abs() < 1e-6));
+        reset();
+    }
+
+    #[test]
+    fn saturation_garde_le_niveau() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_processing(0.0, 1.0, 1.0, false, 0.5, false);
+        let p = peak(&run(440.0, 1.0, 1.0));
+        assert!(p <= 1.0001 && p > 0.95);
+        reset();
+    }
+
+    #[test]
+    fn compresseur_resserre_l_ecart() {
+        let _g = lock(&SERIAL);
+        reset();
+        set_processing(0.0, 1.0, 0.0, true, 1.0, false);
+        let fort = peak(&run(440.0, 0.9, 0.9));
+        let faible = peak(&run(440.0, 0.09, 0.09));
+        // Sans compresseur, l'écart serait de 20 dB.
+        assert!(db(fort) - db(faible) < 12.0);
+        reset();
+    }
 }

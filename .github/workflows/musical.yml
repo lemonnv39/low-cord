@@ -48,7 +48,11 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Clippy
-        run: cargo clippy --release --locked -- -D warnings
+        run: cargo clippy --release --locked --all-targets -- -D warnings
+
+      # Les effets audio sont vérifiés sur un vrai signal (limiteur, coupe-bas…).
+      - name: Tests
+        run: cargo test --release --locked
 
       # cmake + MSVC sont sur l'image Windows (songbird compile Opus).
       - name: Build

@@ -2,7 +2,8 @@
 //!
 //! Un ou plusieurs comptes se connectent au gateway Discord, rejoignent un salon
 //! vocal et y DIFFUSENT de l'audio (émission seule) : capture d'un périphérique
-//! d'entrée → gain → 8D → réverbe → égaliseur → Opus (songbird, chiffrement
+//! d'entrée → gain → coupe-bas → 8D → largeur → réverbe → égaliseur →
+//! saturation → compresseur → limiteur → Opus (songbird, chiffrement
 //! DAVE inclus).
 //!
 //! Protocole avec low-cord, par l'entrée/sortie standard, une ligne JSON par
@@ -161,6 +162,17 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
                 })
                 .collect::<Result<Vec<f32>, _>>()?;
             audio::set_eq(bands);
+            Ok(Value::Null)
+        }
+        "set_processing" => {
+            audio::set_processing(
+                num(r, "highpass")? as f32,
+                num(r, "width")? as f32,
+                num(r, "saturation")? as f32,
+                flag(r, "compressor")?,
+                num(r, "compAmount")? as f32,
+                flag(r, "limiter")?,
+            );
             Ok(Value::Null)
         }
 
