@@ -1020,7 +1020,7 @@
     background:
         radial-gradient(circle at 50% 50%, rgb(255 255 255 / 5%), transparent 70%),
         rgb(0 0 0 / 28%);
-    cursor: ns-resize;
+    cursor: pointer;
     touch-action: none;
 }
 
@@ -1201,4 +1201,26 @@
 
 .lc-mp-fold-open svg {
     transform: rotate(180deg);
+}
+
+/* ── Espace 360° ─────────────────────────────────────────────────────────── */
+.lc-mp-pad-head {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 26px;
+    height: 26px;
+    color: var(--mp-muted);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.lc-mp-pad-orbit {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 1px solid rgb(255 255 255 / 22%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }

@@ -61,17 +61,24 @@ export interface MusicalPrefs {
     selection: string[];
     /** délai entre deux comptes (connexion, salon), en ms */
     delay: number;
-    /** 8D : 0 off, 1 auto (rotation), 2 manuel */
-    eightdMode: 0 | 1 | 2;
-    /** vitesse de rotation (Hz) */
-    eightdSpeed: number;
-    /** position gauche → droite [0..1] */
-    eightdPos: number;
+    /** Espace : 0 off, 1 mouvement auto, 2 position manuelle */
+    spaceMode: 0 | 1 | 2;
+    /** mouvement auto : 0 orbite, 1 ping-pong, 2 avant / arrière, 3 spirale, 4 chaos */
+    motion: 0 | 1 | 2 | 3 | 4;
+    /** vitesse du mouvement (tours par seconde) */
+    speed: number;
+    /** position manuelle : x gauche (−1) → droite (1), y derrière (−1) → devant (1) */
+    posX: number;
+    posY: number;
+    /** distance du mouvement auto [0..1] */
+    radius: number;
+    /** largeur stéréo gardée de la source [0..1] */
+    spread: number;
+    /** la pièce (réflexions + réverbe) */
     reverb: boolean;
-    /** taille de la salle [0..1] */
-    reverbRoom: number;
-    /** distance (dosage réverbéré) [0..1] */
-    reverbDistance: number;
+    /** taille de la pièce et quantité [0..1] */
+    room: number;
+    mix: number;
     /** 10 bandes, en dB [-12..12] */
     eq: number[];
     eqPreset: string;
@@ -116,13 +123,13 @@ export interface MusicalPrefs {
 
 export const DEFAULT_INPUT = "__default__";
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.7.0";
+export const MIN_ENGINE = "0.8.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
     selection: [], delay: 500,
-    eightdMode: 0, eightdSpeed: 0.15, eightdPos: 0.5,
-    reverb: false, reverbRoom: 0.5, reverbDistance: 0.4,
+    spaceMode: 0, motion: 0, speed: 0.15, posX: 0, posY: 0.5, radius: 0.6, spread: 0.3,
+    reverb: false, room: 0.5, mix: 0.5,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
     highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true,
     compMode: 0, gate: false, gateThreshold: -60, agc: false, agcTarget: -16, stereoMode: 0, balance: 0,
@@ -227,6 +234,8 @@ export interface Meter {
     /** réduction de gain (dB) du compresseur et du limiteur */
     comp: number;
     limit: number;
+    /** position de la source dans l'espace (absente quand l'espace est coupé) */
+    pos: [number, number] | null;
     at: number;
 }
 let meter: Meter | null = null;
@@ -250,7 +259,9 @@ function wire() {
         if (msg?.event === "meter" && Array.isArray(msg.bands)) {
             meter = {
                 level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands,
-                comp: Number(msg.comp) || 0, limit: Number(msg.limit) || 0, at: performance.now(),
+                comp: Number(msg.comp) || 0, limit: Number(msg.limit) || 0,
+                pos: Array.isArray(msg.pos) && msg.pos.length === 2 ? [Number(msg.pos[0]) || 0, Number(msg.pos[1]) || 0] : null,
+                at: performance.now(),
             };
             return;
         }
@@ -278,6 +289,13 @@ function wire() {
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
             // Réglages d'avant les profils : on ne prétend pas qu'ils suivent « Naturel ».
             if (!("profile" in saved)) prefs.profile = PROFILE_CUSTOM;
+            // Réglages d'avant l'espace 360° : on reprend ce qui a un équivalent.
+            const old = saved as Record<string, unknown>;
+            if (!("spaceMode" in saved) && "eightdMode" in old) {
+                prefs.spaceMode = old.eightdMode === 1 ? 1 : old.eightdMode === 2 ? 2 : 0;
+                if (typeof old.eightdSpeed === "number") prefs.speed = old.eightdSpeed;
+                if (typeof old.reverbRoom === "number") prefs.room = old.reverbRoom;
+            }
         }
         emit();
     }).catch(() => { });
@@ -346,9 +364,7 @@ async function applyAudio() {
         call("set_volume", { volume: prefs.volume }),
         call("set_bitrate", { kbps: prefs.bitrate }),
         call("set_latency", { ms: prefs.latency }),
-        call("set_8d", { mode: prefs.eightdMode, speed: prefs.eightdSpeed, position: prefs.eightdPos }),
-        call("set_reverb", { on: prefs.reverb }),
-        call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }),
+        call("set_space", spaceArgs()),
         call("set_eq", { bands: prefs.eq }),
         call("set_processing", processingArgs()),
         call("set_meter", { on: meterWanted }),
@@ -448,19 +464,17 @@ export function setLatency(ms: number) {
     live(() => call("set_latency", { ms }));
 }
 
-export function set8d(patch: Partial<Pick<MusicalPrefs, "eightdMode" | "eightdSpeed" | "eightdPos">>) {
-    savePrefs(patch);
-    live(() => call("set_8d", { mode: prefs.eightdMode, speed: prefs.eightdSpeed, position: prefs.eightdPos }));
-}
+type SpaceKey = "spaceMode" | "motion" | "speed" | "posX" | "posY" | "radius" | "spread" | "reverb" | "room" | "mix";
 
-export function setReverb(on: boolean) {
-    savePrefs({ reverb: on });
-    live(() => call("set_reverb", { on }));
-}
+const spaceArgs = () => ({
+    mode: prefs.spaceMode, motion: prefs.motion, speed: prefs.speed, x: prefs.posX, y: prefs.posY,
+    radius: prefs.radius, spread: prefs.spread, reverb: prefs.reverb, room: prefs.room, mix: prefs.mix,
+});
 
-export function setReverbParams(patch: Partial<Pick<MusicalPrefs, "reverbRoom" | "reverbDistance">>) {
+/** Espace : position 360°, mouvement, pièce. */
+export function setSpace(patch: Partial<Pick<MusicalPrefs, SpaceKey>>) {
     savePrefs(patch);
-    live(() => call("set_reverb_params", { room: prefs.reverbRoom, distance: prefs.reverbDistance }));
+    live(() => call("set_space", spaceArgs()));
 }
 
 /** Bandes de l'égaliseur ; `preset` = nom affiché (une bande touchée à la main repasse en « Perso »). */

@@ -10,9 +10,8 @@
 // fins repliés par défaut pour garder un panneau épuré.
 // Tout s'applique en direct et reste mémorisé pour les prochaines connexions.
 //
-// Le carré de l'espace règle deux choses avec un seul point :
-//  - gauche → droite : position du son (Manuel ; il tourne seul en Auto) ;
-//  - haut → bas : distance de la réverbe (haut = loin, bas = proche).
+// Espace : la pièce vue de dessus (toi au centre, devant en haut) ; le point
+// montre la position réellement jouée par le moteur.
 
 import { useEffect, useRef, useState } from "@webpack/common";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
@@ -20,8 +19,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { Card, Chip, cl, Dropdown, Group, Segmented, Slider, ToggleRow } from "./controls";
 import {
     applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive,
-    PREF_DEFAULTS, PROFILES, saveEqCustom, savePrefs, set8d, setBitrate, setEq, setGain, setInput, setLatency,
-    setProcessing, setReverb, setReverbParams, useMusical,
+    PREF_DEFAULTS, PROFILES, saveEqCustom, savePrefs, setBitrate, setEq, setGain, setInput, setLatency,
+    setProcessing, setSpace, useMusical,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -261,101 +260,148 @@ export function EqCard() {
     );
 }
 
-// ── Espace (8D + réverbe) ───────────────────────────────────────────────────
+// ── Espace (position 360°, mouvement, pièce) ────────────────────────────────
 
-const MODES = [
-    { value: 0, label: "Off" },
-    { value: 1, label: "Auto" },
-    { value: 2, label: "Manuel" },
+const SPACE_MODES = [
+    { value: 0, label: "Off", title: "Le son tel quel, sans position" },
+    { value: 1, label: "Auto", title: "Le son se déplace tout seul autour de toi" },
+    { value: 2, label: "Manuel", title: "Place le son où tu veux dans la pièce" },
 ] as const;
 
-/** Angle du point en mode Auto : purement visuel, à la même vitesse que le moteur. */
-function useOrbit(active: boolean, speed: number) {
-    const [angle, setAngle] = useState(0);
+const MOTIONS: { value: 0 | 1 | 2 | 3 | 4; label: string; title: string; }[] = [
+    { value: 0, label: "Orbite", title: "Tour complet de la tête : devant, droite, derrière, gauche" },
+    { value: 1, label: "Ping-pong", title: "Gauche ↔ droite, devant toi" },
+    { value: 2, label: "Avant / arrière", title: "Passe devant puis derrière toi" },
+    { value: 3, label: "Spirale", title: "Orbite qui s'approche et s'éloigne" },
+    { value: 4, label: "Chaos", title: "Trajectoire imprévisible" },
+];
+
+const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
+
+/**
+ * La pièce vue de dessus : toi au centre, devant en haut. Le point montre la
+ * position RÉELLEMENT jouée par le moteur (mesures en direct) ; en Manuel on
+ * le place, en Auto on règle la distance du mouvement en tirant.
+ */
+function RoomPad() {
+    useMusical();
+    const p = getPrefs();
+    const padRef = useRef<HTMLDivElement>(null);
+    const dotRef = useRef<HTMLSpanElement>(null);
+
+    // Point animé hors React (20 mesures/s lissées à l'écran).
     useEffect(() => {
-        if (!active) return;
+        const pad = padRef.current!;
+        const win = pad.ownerDocument.defaultView!;
         let raf = 0;
-        let last = performance.now();
-        const tick = (now: number) => {
-            setAngle(a => a + 2 * Math.PI * speed * (now - last) / 1000);
-            last = now;
-            raf = requestAnimationFrame(tick);
+        let x = 0, y = 0.5;
+        const draw = () => {
+            raf = win.requestAnimationFrame(draw);
+            const prefs = getPrefs();
+            const m = getMeter();
+            const live = m?.pos && performance.now() - m.at < 400 ? m.pos : null;
+            const target = live ?? (prefs.spaceMode === 2 ? [prefs.posX, prefs.posY] : prefs.spaceMode === 1 ? [0, prefs.radius] : [0, 0]);
+            x += (target[0] - x) * 0.25;
+            y += (target[1] - y) * 0.25;
+            const dot = dotRef.current!;
+            dot.style.left = `${50 + x * 46}%`;
+            dot.style.top = `${50 - y * 46}%`;
+            dot.style.opacity = prefs.spaceMode === 0 ? "0.25" : "1";
         };
-        raf = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf);
-    }, [active, speed]);
-    return angle;
+        raf = win.requestAnimationFrame(draw);
+        return () => win.cancelAnimationFrame(raf);
+    }, []);
+
+    function fromPointer(e: ReactPointerEvent) {
+        const r = padRef.current!.getBoundingClientRect();
+        const x = clamp1(((e.clientX - r.left) / r.width - 0.5) / 0.46);
+        const y = clamp1((0.5 - (e.clientY - r.top) / r.height) / 0.46);
+        if (getPrefs().spaceMode === 1) setSpace({ radius: round2(Math.min(1, Math.hypot(x, y))) });
+        else setSpace({ spaceMode: 2, posX: round2(x), posY: round2(y) });
+    }
+
+    return (
+        <div
+            ref={padRef}
+            className={cl("pad", p.spaceMode === 2 && "pad-manual")}
+            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); fromPointer(e); }}
+            onPointerMove={e => { if (e.buttons) fromPointer(e); }}
+            onDoubleClick={() => setSpace({ posX: PREF_DEFAULTS.posX, posY: PREF_DEFAULTS.posY, radius: PREF_DEFAULTS.radius })}
+            title={p.spaceMode === 1 ? "Tirer pour régler la distance · double-clic pour revenir" : "Placer le son · double-clic pour revenir devant"}
+        >
+            <span className={cl("pad-ring", "pad-ring-1")} />
+            <span className={cl("pad-ring", "pad-ring-2")} />
+            {p.spaceMode === 1 && <span className={cl("pad-orbit")} style={{ width: `${p.radius * 92}%`, height: `${p.radius * 92}%` }} />}
+            <span className={cl("pad-x")} />
+            <span className={cl("pad-y")} />
+            <span className={cl("pad-label", "pad-t")}>devant</span>
+            <span className={cl("pad-label", "pad-b")}>derrière</span>
+            <span className={cl("pad-label", "pad-l")}>G</span>
+            <span className={cl("pad-label", "pad-r")}>D</span>
+            {/* Toi, vu de dessus (le nez vers l'avant). */}
+            <svg className={cl("pad-head")} viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3.5 14.2 7H9.8z" fill="currentColor" />
+                <circle cx="12" cy="13" r="6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+            <span ref={dotRef} className={cl("pad-dot")} />
+        </div>
+    );
 }
 
 export function SpaceCard() {
     useMusical();
     const p = getPrefs();
-    const padRef = useRef<HTMLDivElement>(null);
-    const angle = useOrbit(p.eightdMode === 1, p.eightdSpeed);
-
-    function fromPointer(e: ReactPointerEvent) {
-        const r = padRef.current!.getBoundingClientRect();
-        const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-        const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-        setReverbParams({ reverbDistance: round2(1 - y) });
-        if (p.eightdMode === 2) set8d({ eightdPos: round2(x) });
-    }
-
-    function resetPad() {
-        setReverbParams({ reverbDistance: PREF_DEFAULTS.reverbDistance });
-        if (p.eightdMode === 2) set8d({ eightdPos: 0.5 });
-    }
-
-    const dotX = p.eightdMode === 1 ? 50 + 42 * Math.sin(angle) : p.eightdMode === 2 ? p.eightdPos * 100 : 50;
-    const dotY = (1 - p.reverbDistance) * 100;
 
     return (
         <Card title="Espace" className={cl("card-space")} icon={icon("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z")}>
-            <Segmented label="Mode 8D" value={p.eightdMode} options={MODES} onChange={m => set8d({ eightdMode: m })} />
+            <Segmented label="Espace" value={p.spaceMode} options={SPACE_MODES} onChange={m => setSpace({ spaceMode: m })} />
 
-            <div
-                ref={padRef}
-                className={cl("pad", p.eightdMode === 2 && "pad-manual")}
-                onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); fromPointer(e); }}
-                onPointerMove={e => { if (e.buttons) fromPointer(e); }}
-                onDoubleClick={resetPad}
-                title="Glisser le point · double-clic pour recentrer"
-            >
-                <span className={cl("pad-ring", "pad-ring-1")} />
-                <span className={cl("pad-ring", "pad-ring-2")} />
-                <span className={cl("pad-x")} />
-                <span className={cl("pad-y")} />
-                <span className={cl("pad-label", "pad-l")}>G</span>
-                <span className={cl("pad-label", "pad-r")}>D</span>
-                <span className={cl("pad-label", "pad-t")}>loin</span>
-                <span className={cl("pad-label", "pad-b")}>proche</span>
-                <span className={cl("pad-dot")} style={{ left: `${dotX}%`, top: `${dotY}%` }} />
-            </div>
-
-            {p.eightdMode === 1 && (
-                <Slider
-                    label="Vitesse de rotation" value={p.eightdSpeed} display={`${p.eightdSpeed.toFixed(2)} Hz`}
-                    min={0.02} max={1} step={0.01} reset={PREF_DEFAULTS.eightdSpeed} onChange={v => set8d({ eightdSpeed: v })}
-                />
+            {p.spaceMode === 1 && (
+                <div className={cl("chips")}>
+                    {MOTIONS.map(m => (
+                        <Chip key={m.value} on={p.motion === m.value} onClick={() => setSpace({ motion: m.value })} title={m.title}>{m.label}</Chip>
+                    ))}
+                </div>
             )}
-            {p.eightdMode === 2 && (
+
+            <RoomPad />
+
+            {p.spaceMode === 1 && (
+                <>
+                    <Slider
+                        label="Vitesse" value={p.speed} display={`${p.speed.toFixed(2)} tour/s`}
+                        min={0.02} max={1} step={0.01} reset={PREF_DEFAULTS.speed} onChange={v => setSpace({ speed: v })}
+                    />
+                    <Slider
+                        label="Distance" value={p.radius} display={pct(p.radius)}
+                        min={0} max={1} step={0.01} reset={PREF_DEFAULTS.radius} onChange={v => setSpace({ radius: v })}
+                    />
+                </>
+            )}
+            {p.spaceMode !== 0 && (
                 <Slider
-                    label="Position" value={p.eightdPos} display={p.eightdPos < 0.45 ? "gauche" : p.eightdPos > 0.55 ? "droite" : "centre"}
-                    min={0} max={1} step={0.01} reset={0.5} onChange={v => set8d({ eightdPos: v })}
+                    label="Largeur de la source" value={p.spread} display={pct(p.spread)}
+                    min={0} max={1} step={0.05} reset={PREF_DEFAULTS.spread} onChange={v => setSpace({ spread: v })}
                 />
             )}
 
-            <ToggleRow name="Réverbe" desc="Ambiance de salle stéréo" on={p.reverb} onChange={setReverb} />
+            <ToggleRow name="Pièce" desc="Réflexions et réverbe : plus le son est loin, plus elle s'entend" on={p.reverb} onChange={on => setSpace({ reverb: on })} />
             {p.reverb && (
                 <>
                     <Slider
-                        label="Taille de la salle" value={p.reverbRoom} display={pct(p.reverbRoom)}
-                        min={0} max={1} step={0.01} reset={PREF_DEFAULTS.reverbRoom} onChange={v => setReverbParams({ reverbRoom: v })}
+                        label="Taille de la pièce" value={p.room} display={pct(p.room)}
+                        min={0} max={1} step={0.01} reset={PREF_DEFAULTS.room} onChange={v => setSpace({ room: v })}
                     />
                     <Slider
-                        label="Distance" value={p.reverbDistance} display={pct(p.reverbDistance)}
-                        min={0} max={1} step={0.01} reset={PREF_DEFAULTS.reverbDistance} onChange={v => setReverbParams({ reverbDistance: v })}
+                        label="Quantité" value={p.mix} display={pct(p.mix)}
+                        min={0} max={1} step={0.01} reset={PREF_DEFAULTS.mix} onChange={v => setSpace({ mix: v })}
                     />
+                    {p.spaceMode === 0 && (
+                        <Slider
+                            label="Distance" value={p.radius} display={pct(p.radius)}
+                            min={0} max={1} step={0.01} reset={PREF_DEFAULTS.radius} onChange={v => setSpace({ radius: v })}
+                        />
+                    )}
                 </>
             )}
         </Card>
