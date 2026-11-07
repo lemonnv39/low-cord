@@ -123,6 +123,15 @@ export interface Choice {
     value: string;
     label: string;
     disabled?: boolean;
+    /** actions du clic droit sur ce choix (supprimer, exporter…) */
+    menu?: ChoiceAction[];
+}
+
+export interface ChoiceAction {
+    label: string;
+    onClick(): void;
+    /** action destructrice : demande une confirmation (deuxième clic) */
+    danger?: boolean;
 }
 
 /**
@@ -143,6 +152,9 @@ export function Dropdown({ value, choices, placeholder, disabled, onChange, onOp
     const ref = useRef<HTMLButtonElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
     const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number; max: number; } | null>(null);
+    // Menu du clic droit : choix concerné, position, action en attente de confirmation.
+    const [ctx, setCtx] = useState<{ choice: Choice; x: number; y: number; confirm?: string; } | null>(null);
+    useEffect(() => { if (!box) setCtx(null); }, [box]);
     const current = choices.find(c => c.value === value);
 
     // Fermeture : clic ailleurs, Échap, défilement, redimensionnement (dans la
@@ -221,8 +233,35 @@ export function Dropdown({ value, choices, placeholder, disabled, onChange, onOp
                             className={cl("dropdown-item", c.value === value && "dropdown-item-on")}
                             disabled={c.disabled}
                             onClick={() => pick(c)}
+                            onContextMenu={e => {
+                                e.preventDefault();
+                                // Reste dans la fenêtre, même au bord.
+                                const win = e.currentTarget.ownerDocument.defaultView!;
+                                const x = Math.min(e.clientX, win.innerWidth - 190);
+                                const y = Math.min(e.clientY, win.innerHeight - 20 - 34 * (c.menu?.length ?? 0));
+                                setCtx(c.menu?.length ? { choice: c, x, y } : null);
+                            }}
+                            title={c.menu?.length ? "Clic droit : plus d'options" : undefined}
                         >{c.label}</button>
                     )) : <div className={cl("dropdown-empty")}>{placeholder}</div>}
+                    {ctx && (
+                        <div className={cl("dropdown-ctx")} role="menu" style={{ left: ctx.x, top: ctx.y }}>
+                            {ctx.choice.menu!.map(a => (
+                                <button
+                                    key={a.label}
+                                    type="button"
+                                    role="menuitem"
+                                    className={cl("dropdown-ctx-item", a.danger && "dropdown-ctx-danger")}
+                                    onClick={() => {
+                                        if (a.danger && ctx.confirm !== a.label) return setCtx({ ...ctx, confirm: a.label });
+                                        a.onClick();
+                                        setCtx(null);
+                                        setBox(null);
+                                    }}
+                                >{ctx.confirm === a.label ? "Confirmer ?" : a.label}</button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </>

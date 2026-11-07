@@ -342,7 +342,14 @@ function PresetBar({ act }: { act: Act; }) {
                         placeholder={prefs.preset === PRESET_CUSTOM ? "Perso (réglé à la main)" : "Préréglages low-musical"}
                         choices={[
                             ...Object.keys(PRESETS).map(name => ({ value: name, label: name })),
-                            ...prefs.userPresets.map(p => ({ value: p.name, label: `★ ${p.name}` })),
+                            ...prefs.userPresets.map(p => ({
+                                value: p.name,
+                                label: `★ ${p.name}`,
+                                menu: [
+                                    { label: "Exporter (copier)", onClick: () => { copyToClipboard(exportPreset(p.name)); flash("Préréglage copié : colle-le à qui tu veux."); } },
+                                    { label: `Supprimer « ${p.name} »`, danger: true, onClick: () => { deleteUserPreset(p.name); flash("Préréglage supprimé."); } },
+                                ],
+                            })),
                         ]}
                         onChange={applyPreset}
                     />
