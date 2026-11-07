@@ -17,6 +17,7 @@
 //!
 //! Client tiers en token utilisateur : à utiliser avec des comptes dédiés.
 
+mod apo;
 mod audio;
 mod dsp;
 mod engine;
@@ -165,6 +166,7 @@ fn dispatch(cmd: &str, r: &Value) -> Result<Value, String> {
             sound::set_volume(num(r, "volume")? as f32);
             Ok(Value::Null)
         }
+        "set_apo" => apo::set(r).map(|n| json!(n)),
         "set_meter" => {
             audio::set_meter(flag(r, "on")?);
             Ok(Value::Null)

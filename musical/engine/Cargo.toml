@@ -1,6 +1,6 @@
 [package]
 name = "low-musical-engine"
-version = "0.9.4"
+version = "0.10.0"
 description = "Moteur audio de low-musical : diffuse de l'audio dans un salon vocal Discord"
 authors = ["shitday"]
 edition = "2021"
@@ -25,6 +25,7 @@ futures-util = "0.3"
 serde_json = "1"
 # Capture d'un périphérique d'entrée (câble virtuel, micro).
 cpal = "0.15"
+rustfft = "6"
 # songbird embarque symphonia SANS codec : "pcm" est requis par RawAdapter
 # (notre source live est du PCM f32), l'unification des features de Cargo
 # l'active pour songbird aussi.

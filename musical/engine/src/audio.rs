@@ -146,6 +146,7 @@ struct Dsp {
     highpass: [Biquad; 2],
     highpass_hz: f32,
     width: StereoWidth,
+    apo: crate::apo::Apo,
     chain: Chain,
 }
 
@@ -157,6 +158,7 @@ impl Dsp {
             highpass: [Biquad::default(); 2],
             highpass_hz: 0.0,
             width: StereoWidth::new(),
+            apo: crate::apo::Apo::new(),
             chain: Chain::new(),
         }
     }
@@ -194,12 +196,20 @@ impl Dsp {
         self.space.process(buf, &space::current());
         self.chain.begin_block(&p);
         let sb = crate::sound::mix(buf.len() / 2);
-        for (i, frame) in buf.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+        for frame in buf.as_chunks_mut::<2>().0 {
             let (mut l, mut r) = self.width.process(frame[0], frame[1], &p);
             if eq_active {
                 l = self.eq.process(l, 0);
                 r = self.eq.process(r, 1);
             }
+            (frame[0], frame[1]) = (l, r);
+        }
+        // Mini APO (set Equalizer APO), avant la dynamique et la protection.
+        if self.apo.active() {
+            self.apo.process(buf);
+        }
+        for (i, frame) in buf.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+            let (l, r) = (frame[0], frame[1]);
             (frame[0], frame[1]) = self.chain.back(l, r, &p, vol, sb_frame(&sb, i));
         }
     }
