@@ -215,6 +215,8 @@ pub struct Params {
     /// Intensité du compresseur [0..1].
     pub comp_amount: f32,
     pub limiter: bool,
+    /// Protection anti-grésillement à 0 dB quand le limiteur est coupé.
+    pub protect: bool,
     pub gate: bool,
     /// Seuil de la porte anti-souffle (dB).
     pub gate_threshold: f32,
@@ -254,6 +256,7 @@ impl Default for Params {
             comp_mode: 0,
             comp_amount: 0.5,
             limiter: false,
+            protect: true,
             gate: false,
             gate_threshold: -60.0,
             agc: false,
@@ -295,6 +298,7 @@ impl Params {
             comp_mode: (n("compMode", 0.0) as u8).min(2),
             comp_amount: n("compAmount", d.comp_amount).clamp(0.0, 1.0),
             limiter: b("limiter", d.limiter),
+            protect: b("protect", d.protect),
             gate: b("gate", d.gate),
             gate_threshold: n("gateThreshold", d.gate_threshold).clamp(-90.0, -20.0),
             agc: b("agc", d.agc),
@@ -318,7 +322,7 @@ impl Params {
         json!({
             "highpass": self.highpass, "width": self.width, "saturation": self.saturation,
             "compressor": self.compressor, "compMode": self.comp_mode, "compAmount": self.comp_amount,
-            "limiter": self.limiter, "gate": self.gate, "gateThreshold": self.gate_threshold,
+            "limiter": self.limiter, "protect": self.protect, "gate": self.gate, "gateThreshold": self.gate_threshold,
             "agc": self.agc, "agcTarget": self.agc_target, "stereoMode": self.stereo_mode,
             "balance": self.balance, "bassMono": self.bass_mono, "bassPlus": self.bass_plus,
             "clarity": self.clarity, "deesser": self.deesser, "multiband": self.multiband,
@@ -1178,11 +1182,14 @@ impl Chain {
 
         l = (l + extra.0) * volume;
         r = (r + extra.1) * volume;
-        // Limiteur à −1 dB, ou à défaut la protection à 0 dB : jamais de saturation.
+        // Limiteur à −1 dB, ou à défaut la protection à 0 dB : jamais de
+        // saturation. Les deux coupés : le son passe tel quel.
         let lim = if p.limiter {
             &mut self.limiter
-        } else {
+        } else if p.protect {
             &mut self.safety
+        } else {
+            return (l, r);
         };
         let (a, b, red) = lim.process(l, r);
         note_gr(limit_gr(), red);
@@ -1351,6 +1358,22 @@ mod tests {
             .map(|&x| c.back(x, x, &p, 1.0, (0.0, 0.0)).0)
             .collect();
         assert!(peak(&out) <= SAFETY + 1e-6);
+    }
+
+    #[test]
+    fn protection_désactivable() {
+        let p = Params {
+            limiter: false,
+            protect: false,
+            ..Params::default()
+        };
+        let mut c = Chain::new();
+        // Rien ne touche le son : 2.5 ressort à 2.5.
+        let out: Vec<f32> = sine(300.0, 2.5, 0.5)
+            .iter()
+            .map(|&x| c.back(x, x, &p, 1.0, (0.0, 0.0)).0)
+            .collect();
+        assert!((peak(&out) - 2.5).abs() < 0.01);
     }
 
     #[test]

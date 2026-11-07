@@ -6,7 +6,7 @@
 
 use std::collections::VecDeque;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -214,16 +214,22 @@ fn sb_frame(sb: &Option<Vec<f32>>, i: usize) -> (f32, f32) {
 struct Pipeline {
     dsp: Dsp,
     meter: Meter,
+    /// Blocs venus d'une vraie capture (et non de l'horloge de secours).
+    live: bool,
 }
 
 impl Pipeline {
-    fn new() -> Self {
+    fn new(live: bool) -> Self {
         Pipeline {
             dsp: Dsp::new(),
             meter: Meter::new(),
+            live,
         }
     }
     fn run(&mut self, block: &mut [f32]) {
+        if self.live {
+            last_capture().store(now_ms(), Ordering::Relaxed);
+        }
         self.dsp.process(block);
         if meter_on().load(Ordering::Relaxed) {
             for reading in self.meter.feed(block) {
@@ -238,10 +244,27 @@ impl Pipeline {
 // Sans source audio (aucune capture), personne ne fait avancer le son : la
 // soundboard resterait muette. Ce fil prend alors le relais, au rythme réel
 // (10 ms à la fois), avec du silence en entrée. Il ne travaille que si une
-// capture est absente ET que quelqu'un écoute (comptes en vocal, panneau
+// capture est absente (ou muette : une capture de sortie ne livre rien
+// pendant les silences) ET que quelqu'un écoute (comptes en vocal, panneau
 // ouvert ou sons en cours).
 
 global!(active_captures: AtomicUsize = AtomicUsize::new(0));
+global!(last_capture: AtomicU64 = AtomicU64::new(0));
+
+/// Millisecondes depuis le démarrage du moteur.
+fn now_ms() -> u64 {
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_millis() as u64
+}
+
+/// Aucune capture, ou plus aucun bloc reçu depuis 80 ms.
+fn capture_idle() -> bool {
+    active_captures().load(Ordering::Relaxed) == 0
+        || now_ms().saturating_sub(last_capture().load(Ordering::Relaxed)) > 80
+}
 
 pub fn wake_pump() {
     static STARTED: OnceLock<()> = OnceLock::new();
@@ -251,12 +274,12 @@ pub fn wake_pump() {
             .spawn(|| {
                 const FRAMES: usize = OUT_RATE as usize / 100;
                 let period = std::time::Duration::from_millis(10);
-                let mut pipeline = Pipeline::new();
+                let mut pipeline = Pipeline::new(false);
                 let mut block = vec![0.0f32; FRAMES * 2];
                 let mut next = std::time::Instant::now();
                 loop {
                     next += period;
-                    let needed = active_captures().load(Ordering::Relaxed) == 0
+                    let needed = capture_idle()
                         && (crate::sound::playing()
                             || meter_on().load(Ordering::Relaxed)
                             || !lock(consumers()).is_empty());
@@ -455,11 +478,24 @@ impl symphonia::core::io::MediaSource for LiveSource {
 // ── Capture ────────────────────────────────────────────────────────────────
 
 /// Noms des périphériques d'entrée.
+/// Préfixe des sorties audio captées en boucle (« loopback ») : on récupère
+/// ce qui est JOUÉ sur la sortie (ex. « CABLE Input »).
+pub const LOOPBACK: &str = "loopback:";
+
+/// Entrées audio, puis sorties (préfixées par LOOPBACK).
 pub fn devices() -> Vec<String> {
-    cpal::default_host()
+    let host = cpal::default_host();
+    let mut out: Vec<String> = host
         .input_devices()
         .map(|it| it.filter_map(|d| d.name().ok()).collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Ok(it) = host.output_devices() {
+        out.extend(
+            it.filter_map(|d| d.name().ok())
+                .map(|n| format!("{LOOPBACK}{n}")),
+        );
+    }
+    out
 }
 
 /// (Re)démarre la capture sur le périphérique nommé (None = entrée par défaut).
@@ -479,6 +515,14 @@ pub fn stop_capture() {
     clear_consumers();
 }
 
+/// Premier périphérique de la liste portant ce nom.
+fn named<I, E>(list: Result<I, E>, name: &str) -> Option<cpal::Device>
+where
+    I: Iterator<Item = cpal::Device>,
+{
+    list.ok()?.find(|d| d.name().is_ok_and(|n| n == name))
+}
+
 fn capture_error(msg: impl Into<String>) {
     crate::engine::emit_global(json!({ "captureError": msg.into() }));
 }
@@ -487,12 +531,11 @@ fn capture_error(msg: impl Into<String>) {
 fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
     std::thread::spawn(move || {
         let host = cpal::default_host();
-        let device = match &input_name {
-            Some(name) => host
-                .input_devices()
-                .ok()
-                .and_then(|mut it| it.find(|d| d.name().map(|n| &n == name).unwrap_or(false))),
-            None => host.default_input_device(),
+        let loopback = input_name.as_deref().and_then(|n| n.strip_prefix(LOOPBACK));
+        let device = match (&input_name, loopback) {
+            (_, Some(out)) => named(host.output_devices(), out),
+            (Some(name), None) => named(host.input_devices(), name),
+            (None, _) => host.default_input_device(),
         };
         let Some(device) = device else {
             return capture_error(match input_name {
@@ -500,7 +543,13 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
                 None => "Aucune entrée audio par défaut.".into(),
             });
         };
-        let cfg = match device.default_input_config() {
+        // Sortie captée en boucle : format de la sortie (WASAPI active alors
+        // le mode « loopback » à l'ouverture du flux d'entrée).
+        let cfg = match if loopback.is_some() {
+            device.default_output_config()
+        } else {
+            device.default_input_config()
+        } {
             Ok(c) => c,
             Err(e) => return capture_error(format!("Périphérique inutilisable : {e}")),
         };
@@ -547,7 +596,7 @@ where
     T: cpal::SizedSample + Send + 'static,
 {
     let scfg: cpal::StreamConfig = cfg.clone().into();
-    let mut pipeline = Pipeline::new();
+    let mut pipeline = Pipeline::new(true);
     let mut block: Vec<f32> = Vec::new();
     let mut pos = 0.0f32;
     let mut last_l = 0.0f32;
