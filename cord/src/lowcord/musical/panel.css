@@ -82,57 +82,28 @@
 }
 
 .lc-mp-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
     margin: 0;
     line-height: 1;
-    filter: drop-shadow(0 0 18px rgb(0 0 0 / 95%)) drop-shadow(0 0 3px rgb(0 0 0 / 80%));
+    filter: drop-shadow(0 2px 0 rgb(0 0 0 / 92%)) drop-shadow(0 0 16px rgb(0 0 0 / 85%));
 }
 
-/* Argent poli, et un reflet de lumière qui traverse le titre à l'ouverture
-   (même effet que la bannière low-cord). */
+/* Comme le logo de la bannière low-cord : encre grise, ombre noire, et un
+   reflet de lumière qui traverse le mot à l'ouverture. */
 .lc-mp-title-ink {
     background:
-        linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 85%) 50%, transparent 60%) 130% 0 / 250% 100% no-repeat,
-        var(--mp-ink);
+        linear-gradient(105deg, transparent 42%, rgb(255 255 255 / 60%) 50%, transparent 58%) 130% 0 / 250% 100% no-repeat,
+        linear-gradient(#a4a4aa, #a4a4aa);
     background-clip: text;
     color: transparent;
-}
-
-/* « low » fin et discret, « musical » plein. */
-.lc-mp-title-low {
-    --mp-ink: linear-gradient(#c3cad6, #c3cad6);
-
-    font-size: 34px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
-}
-
-.lc-mp-title-musical {
-    --mp-ink: linear-gradient(180deg, #fff 15%, #c9d1de 60%, #8e97a6 100%);
-
     font-size: 40px;
     font-weight: 800;
-    letter-spacing: -0.035em;
-}
-
-.lc-mp-title-dash {
-    width: 22px;
-    height: 2px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, rgb(214 224 240 / 0%), rgb(214 224 240 / 90%));
-    box-shadow: 0 0 10px rgb(214 224 240 / 60%);
+    letter-spacing: -0.04em;
 }
 
 .lc-mp-panel-intro .lc-mp-title-ink {
     animation:
         lc-mp-title-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards,
         lc-mp-sheen 1700ms cubic-bezier(0.45, 0, 0.25, 1) 550ms backwards;
-}
-
-.lc-mp-panel-intro .lc-mp-title-musical {
-    animation-delay: 100ms, 680ms;
 }
 
 @keyframes lc-mp-title-in {
@@ -171,6 +142,7 @@
     color: var(--mp-muted);
     font-size: 11.5px;
     white-space: nowrap;
+    transition: color 220ms ease, border-color 220ms ease;
 }
 
 .lc-mp-pill-dot {
@@ -178,6 +150,7 @@
     height: 7px;
     border-radius: 50%;
     background: var(--mp-faint);
+    transition: background 220ms ease;
 }
 
 .lc-mp-pill-ok .lc-mp-pill-dot {
@@ -212,6 +185,7 @@
     color: #ff9ca1;
     text-align: center;
     font-size: 12.5px;
+    animation: lc-mp-pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 /* ── Grille des 4 blocs ──────────────────────────────────────────────────── */
@@ -337,6 +311,7 @@
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+    transition: color 160ms ease;
 }
 
 .lc-mp-group + .lc-mp-group {
@@ -906,6 +881,7 @@
     padding: 7px 6px 7px 8px;
     border-radius: 10px;
     transition: background 150ms ease;
+    animation: lc-mp-fade 220ms ease backwards;
 }
 
 .lc-mp-account:hover {
@@ -1518,6 +1494,7 @@
 .lc-mp-sb-pad-wrap {
     position: relative;
     min-width: 0;
+    animation: lc-mp-fade 200ms ease backwards;
 }
 
 .lc-mp-sb-pad {
@@ -1941,7 +1918,7 @@
     border: 1px solid var(--mp-line);
     border-radius: 14px;
     background: var(--mp-card-bg);
-    animation: lc-mp-fade 200ms ease backwards;
+    animation: lc-mp-slide 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 .lc-mp-apo-state {
@@ -2075,6 +2052,7 @@
     border-radius: 7px;
     background: rgb(255 255 255 / 2.5%);
     font-size: 11.5px;
+    animation: lc-mp-fade 160ms ease backwards;
 }
 
 .lc-mp-apo-line:hover {
@@ -2297,4 +2275,11 @@
     text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+@keyframes lc-mp-slide {
+    from {
+        opacity: 0;
+        transform: translateX(14px);
+    }
 }

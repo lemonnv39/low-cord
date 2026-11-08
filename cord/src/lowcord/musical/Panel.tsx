@@ -25,7 +25,7 @@ import { Card, Chip, cl, Dropdown, Slider } from "./controls";
 import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, applyPreset, connectAccounts, deleteUserPreset, disconnect, type EngineState, errorText, exportPreset,
-    followMe, getPrefs, importPreset, isActive, isOutdated, isReady, joinMe, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, savePrefs,
+    followMe, getPrefs, importPreset, isActive, isOutdated, isReady, joinMe, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, releaseEngineIfIdle, savePrefs,
     saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
 widenPanel, } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
@@ -217,10 +217,12 @@ function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
     }, [voice?.id]);
     // Débit calé sur le plafond de ta vocale (option « Débit auto »).
     useEffect(() => { syncBitrate(voice?.bitrate); }, [voice?.bitrate, getPrefs().autoBitrate]);
+    // Avertissement « pas dans ta vocale » : revu chaque seconde, seulement pendant le suivi.
     useEffect(() => {
+        if (!music.following) return;
         const timer = setInterval(() => tick(n => n + 1), 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [music.following]);
 
     const entries = Object.entries(music.accounts);
     const active = entries.filter(([, a]) => isActive(a));
@@ -452,7 +454,12 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     // Mesures du son seulement tant que le panneau est ouvert.
     useEffect(() => {
         wantMeter(true);
-        return () => wantMeter(false);
+        return () => {
+            wantMeter(false);
+            // Fermé sans aucun compte actif : le moteur (et ses plugins VST)
+            // n'a plus rien à faire, il s'arrête au lieu de rester en mémoire.
+            releaseEngineIfIdle();
+        };
     }, []);
     // Titre de la fenêtre (sert aussi à la retrouver pour l'anti-stream), puis
     // anti-stream réappliqué à chaque ouverture si l'option est active.
@@ -495,10 +502,8 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                     <div className={cl("stage-hero")}>
                         <Visualizer />
                         <div className={cl("stage-text")}>
-                            <h1 className={cl("title")} aria-label="low-musical">
-                                <span className={cl("title-ink", "title-low")}>low</span>
-                                <span className={cl("title-dash")} />
-                                <span className={cl("title-ink", "title-musical")}>musical</span>
+                            <h1 className={cl("title")} aria-label="low-sound">
+                                <span className={cl("title-ink")}>low-sound</span>
                             </h1>
                             <StatusPill />
                         </div>
@@ -517,7 +522,7 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                     </div>
                     {(isOutdated() || error) && (
                         <div className={cl("banner")} onClick={() => setError(null)} title={error ? "Cliquer pour masquer" : undefined}>
-                            {isOutdated() ? "Moteur trop ancien : Paramètres → low-musical → Mettre à jour, puis redémarre Discord." : error}
+                            {isOutdated() ? "Moteur trop ancien : Paramètres → low-musical → Mettre à jour (sans redémarrer Discord)." : error}
                         </div>
                     )}
                 </div>

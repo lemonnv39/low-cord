@@ -5,32 +5,33 @@
  */
 
 // low-musical — onglet des réglages : installer, mettre à jour ou retirer le
-// moteur. Module optionnel, mis à jour séparément de low-cord ; après chaque
-// installation, on redémarre Discord.
+// moteur. Module optionnel, mis à jour séparément de low-cord. Tout s'applique
+// tout de suite, sans redémarrer Discord : les comptes connectés repartent
+// seuls sur le nouveau moteur.
 
 import "@lowcord/styles.css";
 
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
 import type { MusicalStatus } from "@main/lowMusical";
 import { classNameFactory } from "@utils/css";
-import { relaunch } from "@utils/native";
 import type { IconProps } from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
+
+import { engineReplaced, sessionSnapshot } from "./engine";
 
 const cl = classNameFactory("lc-mu-");
 
 export function MusicalIcon({ width = 20, height = 20 }: IconProps) {
     return (
-        <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
+        <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            {/* Éclair */}
+            <path d="M13.6 1.6a.8.8 0 0 0-1.4-.5L2.9 12.6a.8.8 0 0 0 .6 1.3h7.6l-1.3 8.5a.8.8 0 0 0 1.4.6l9.6-11.6a.8.8 0 0 0-.6-1.3h-7.6z" />
         </svg>
     );
 }
 
-// Gardé hors du composant : changer d'onglet ne fait pas oublier qu'il faut redémarrer.
-let restartNeeded = false;
+// Gardé hors du composant : le message reste si on change d'onglet.
+let doneNote: string | null = null;
 
 const mb = (bytes: number) => (bytes / 1048576).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 const day = (iso?: string) => {
@@ -53,11 +54,19 @@ function LowMusicalSettings() {
         setError(null);
         setConfirmRemove(false);
         try {
+            const before = sessionSnapshot();
+            const wasInstalled = !!status?.installed;
             const next = action === "install" ? await VencordNative.lowMusical.install()
                 : action === "uninstall" ? await VencordNative.lowMusical.uninstall()
                     : await VencordNative.lowMusical.status();
-            if (action !== "check") restartNeeded = true;
             setStatus(next);
+            if (action !== "check") {
+                // Appliqué tout de suite : pas besoin de redémarrer Discord.
+                await engineReplaced(next.installed ? next.version ?? null : null, before);
+                doneNote = action === "uninstall" ? "low-musical a été retiré."
+                    : wasInstalled ? `Mis à jour en v${next.version} : c'est déjà actif${before.keys.length ? ", tes comptes se sont reconnectés" : ""}.`
+                        : "Installé : le bouton est à côté de micro / casque, en bas à gauche.";
+            }
         } catch (e: any) {
             // Les erreurs du processus principal arrivent préfixées par Electron.
             setError(String(e?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
@@ -95,7 +104,7 @@ function LowMusicalSettings() {
                     </div>
                 </div>
 
-                {installed && !restartNeeded && (
+                {installed && !doneNote && (
                     <div className={cl("hint-row")}>
                         <MusicalIcon width={16} height={16} />
                         <span>Ouvre low-musical avec le bouton à côté de micro / casque, en bas à gauche.</span>
@@ -128,15 +137,10 @@ function LowMusicalSettings() {
                     </div>
                 </div>
 
-                {restartNeeded && !running && (
-                    <div className={cl("row", "restart")}>
-                        <div className={cl("state")}>
-                            <div className={cl("state-name")}>Redémarrage nécessaire</div>
-                            <div className={cl("state-detail")}>
-                                {installed ? "Redémarre Discord pour activer cette version de low-musical." : "Redémarre Discord pour finir de retirer low-musical."}
-                            </div>
-                        </div>
-                        <button className={cl("btn", "btn-primary")} onClick={relaunch}>Redémarrer Discord</button>
+                {doneNote && !running && (
+                    <div className={cl("hint-row")}>
+                        <MusicalIcon width={16} height={16} />
+                        <span>{doneNote}</span>
                     </div>
                 )}
 

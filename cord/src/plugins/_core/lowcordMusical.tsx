@@ -10,7 +10,7 @@
 // sur Discord) ou le ramène au premier plan. Le fermer ne coupe pas la diffusion.
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { useMusical } from "@lowcord/musical/engine";
+import { isActive, useMusical } from "@lowcord/musical/engine";
 import { MusicalIcon } from "@lowcord/musical/LowMusicalTab";
 import { usePanelOpen } from "@lowcord/musical/popoutKey";
 import { openPanel } from "@lowcord/musical/window";
@@ -25,11 +25,18 @@ function MusicalButton(props: { nameplate?: unknown; }) {
     const open = usePanelOpen();
     if (!music.installed) return null;
 
-    const live = Object.values(music.accounts).some(a => a.state === "in_voice");
+    const accounts = Object.values(music.accounts);
+    const live = accounts.some(a => a.state === "in_voice");
+    // Actif (au moins un compte connecté) : l'éclair passe au rouge, comme le micro coupé.
+    const active = accounts.some(isActive);
     return (
         <PanelButton
-            tooltipText={live ? "low-musical · en diffusion" : "low-musical"}
-            icon={() => <MusicalIcon width={20} height={20} />}
+            tooltipText={live ? "low-musical · en diffusion" : active ? "low-musical · actif" : "low-musical"}
+            icon={() => (
+                <span style={{ display: "flex", color: active ? "var(--status-danger, #f23f43)" : undefined }}>
+                    <MusicalIcon width={20} height={20} />
+                </span>
+            )}
             role="switch"
             ariaChecked={open}
             plated={props?.nameplate != null}

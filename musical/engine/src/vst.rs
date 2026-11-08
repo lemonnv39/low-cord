@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -494,6 +494,10 @@ impl Plugin {
 }
 
 // ── Processus hôte (moteur lancé avec --vst-host) ───────────────────────────
+//
+// Messages : [type u8][numéro u32][longueur u32][contenu]. Chaque réponse
+// reprend le numéro de sa demande : le son (traité tout de suite) n'attend
+// jamais une demande de contrôle (traitée sur le fil des fenêtres).
 
 const OP_OPEN: u8 = 1;
 const OP_PROCESS: u8 = 2;
@@ -505,30 +509,36 @@ const OP_STATE: u8 = 6;
 /// Le panneau du plugin est ouvert (fenêtre de l'hôte).
 static EDITOR_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Travail à faire sur le fil du plugin (celui des fenêtres), et sa réponse.
-pub type Job = Box<dyn FnOnce() -> Result<Value, String> + Send>;
-/// Exécute un travail sur le fil du plugin et attend la réponse.
-pub type RunOnPluginThread<'a> = &'a dyn Fn(Job) -> Result<Value, String>;
+/// Travail à faire sur le fil du plugin (celui des fenêtres) ; il répond lui-même.
+pub type Job = Box<dyn FnOnce() + Send>;
+/// Confie un travail au fil du plugin (sans attendre).
+pub type RunOnPluginThread<'a> = &'a dyn Fn(Job);
 /// Le plugin, partagé : traitement du son d'un côté, tout le reste de l'autre.
 pub type PluginSlot = Arc<Mutex<Option<Plugin>>>;
+/// Sortie vers le moteur, partagée par les deux fils de l'hôte.
+pub type Out<W> = Arc<Mutex<W>>;
 
-fn write_msg(w: &mut impl Write, tag: u8, payload: &[u8]) -> std::io::Result<()> {
-    w.write_all(&[tag])?;
-    w.write_all(&(payload.len() as u32).to_le_bytes())?;
+fn write_msg(w: &mut impl Write, tag: u8, id: u32, payload: &[u8]) -> std::io::Result<()> {
+    let mut head = [0u8; 9];
+    head[0] = tag;
+    head[1..5].copy_from_slice(&id.to_le_bytes());
+    head[5..9].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+    w.write_all(&head)?;
     w.write_all(payload)?;
     w.flush()
 }
 
-fn read_msg(r: &mut impl Read) -> std::io::Result<(u8, Vec<u8>)> {
-    let mut head = [0u8; 5];
+fn read_msg(r: &mut impl Read) -> std::io::Result<(u8, u32, Vec<u8>)> {
+    let mut head = [0u8; 9];
     r.read_exact(&mut head)?;
-    let len = u32::from_le_bytes([head[1], head[2], head[3], head[4]]) as usize;
+    let id = u32::from_le_bytes([head[1], head[2], head[3], head[4]]);
+    let len = u32::from_le_bytes([head[5], head[6], head[7], head[8]]) as usize;
     if len > 64 << 20 {
         return Err(std::io::Error::other("message trop gros"));
     }
     let mut payload = vec![0u8; len];
     r.read_exact(&mut payload)?;
-    Ok((head[0], payload))
+    Ok((head[0], id, payload))
 }
 
 fn params_of(v: &Value) -> BTreeMap<String, f32> {
@@ -548,20 +558,30 @@ fn params_of(v: &Value) -> BTreeMap<String, f32> {
 // le traitement).
 unsafe impl Send for Plugin {}
 
+/// Réponse JSON (0 = réussi, 1 = erreur avec son message).
+fn reply<W: Write>(out: &Out<W>, id: u32, result: Result<Value, String>) -> bool {
+    let (tag, body) = match result {
+        Ok(v) => (0, v.to_string()),
+        Err(e) => (1, e),
+    };
+    write_msg(&mut *lock(out), tag, id, body.as_bytes()).is_ok()
+}
+
 /// Boucle de l'hôte : un plugin, des messages jusqu'à la fermeture de l'entrée.
 ///
 /// Le son est traité ici même ; tout le reste (chargement, état, réglages,
-/// panneau) passe par `on_plugin_thread`, le fil qui gère les fenêtres : les
-/// plugins (JUCE notamment) exigent d'être créés et pilotés sur ce fil-là.
-pub fn serve(
+/// panneau) est confié à `on_plugin_thread`, le fil qui gère les fenêtres :
+/// les plugins (JUCE notamment) exigent d'être créés et pilotés sur ce fil-là.
+pub fn serve<W: Write + Send + 'static>(
     r: &mut impl Read,
-    w: &mut impl Write,
+    out: Out<W>,
     plugin: PluginSlot,
     load: fn(&str) -> Result<Plugin, String>,
     open_editor: fn(usize, String) -> Result<(), String>,
     on_plugin_thread: RunOnPluginThread,
 ) {
-    while let Ok((op, payload)) = read_msg(r) {
+    let mut bytes = Vec::new();
+    while let Ok((op, id, payload)) = read_msg(r) {
         if op == OP_PROCESS {
             let mut buf: Vec<f32> = payload
                 .as_chunks::<4>()
@@ -572,63 +592,67 @@ pub fn serve(
             if let Some(p) = lock(&plugin).as_mut() {
                 p.process(&mut buf);
             }
-            let out: Vec<u8> = buf.iter().flat_map(|x| x.to_le_bytes()).collect();
-            if write_msg(w, 0, &out).is_err() {
+            bytes.clear();
+            bytes.extend(buf.iter().flat_map(|x| x.to_le_bytes()));
+            if write_msg(&mut *lock(&out), 0, id, &bytes).is_err() {
                 return;
             }
             continue;
         }
         let req: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
         let slot = plugin.clone();
-        let job: Job = match op {
-            OP_OPEN => Box::new(move || {
-                let path = req.get("path").and_then(Value::as_str).unwrap_or("");
-                let mut p = load(path)?;
-                p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req));
-                let state = p.state();
-                *lock(&slot) = Some(p);
-                Ok(state)
-            }),
-            OP_APPLY | OP_SET_PARAM | OP_STATE => Box::new(move || {
-                let mut guard = lock(&slot);
-                let p = guard.as_mut().ok_or("aucun plugin chargé")?;
-                match op {
-                    OP_APPLY => p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req)),
-                    OP_SET_PARAM => {
-                        let index = req.get("index").and_then(Value::as_i64).unwrap_or(-1) as i32;
-                        let value = req.get("value").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                        p.set_param(index, value);
+        let out = out.clone();
+        let work = move || -> Result<Value, String> {
+            match op {
+                OP_OPEN => {
+                    let path = req.get("path").and_then(Value::as_str).unwrap_or("");
+                    let mut p = load(path)?;
+                    p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req));
+                    let state = p.state();
+                    *lock(&slot) = Some(p);
+                    Ok(state)
+                }
+                OP_APPLY | OP_SET_PARAM | OP_STATE => {
+                    let mut guard = lock(&slot);
+                    let p = guard.as_mut().ok_or("aucun plugin chargé")?;
+                    match op {
+                        OP_APPLY => {
+                            p.apply(req.get("chunk").and_then(Value::as_str), &params_of(&req))
+                        }
+                        OP_SET_PARAM => {
+                            let index =
+                                req.get("index").and_then(Value::as_i64).unwrap_or(-1) as i32;
+                            let value =
+                                req.get("value").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                            p.set_param(index, value);
+                        }
+                        _ => p.sync_copies(),
                     }
-                    _ => p.sync_copies(),
+                    Ok(p.state())
                 }
-                Ok(p.state())
-            }),
-            OP_EDITOR => Box::new(move || {
-                // Verrou relâché avant d'ouvrir : le son continue pendant ce temps.
-                let (effect, title, has_editor) = {
-                    let guard = lock(&slot);
-                    let p = guard.as_ref().ok_or("aucun plugin chargé")?;
-                    (
-                        p.instances[0].effect as usize,
-                        format!("{} — low-musical", p.name),
-                        p.has_editor(),
-                    )
-                };
-                if !has_editor {
-                    return Err("ce plugin n'a pas de panneau".into());
+                OP_EDITOR => {
+                    // Verrou relâché avant d'ouvrir : le son continue pendant ce temps.
+                    let (effect, title, has_editor) = {
+                        let guard = lock(&slot);
+                        let p = guard.as_ref().ok_or("aucun plugin chargé")?;
+                        (
+                            p.instances[0].effect as usize,
+                            format!("{} — low-musical", p.name),
+                            p.has_editor(),
+                        )
+                    };
+                    if !has_editor {
+                        return Err("ce plugin n'a pas de panneau".into());
+                    }
+                    open_editor(effect, title)?;
+                    Ok(json!({ "ok": true }))
                 }
-                open_editor(effect, title)?;
-                Ok(json!({ "ok": true }))
-            }),
-            _ => Box::new(|| Err("demande inconnue".into())),
+                _ => Err("demande inconnue".into()),
+            }
         };
-        let (tag, body) = match on_plugin_thread(job) {
-            Ok(v) => (0, v.to_string()),
-            Err(e) => (1, e),
-        };
-        if write_msg(w, tag, body.as_bytes()).is_err() {
-            return;
-        }
+        on_plugin_thread(Box::new(move || {
+            reply(&out, id, work());
+        }));
     }
 }
 
@@ -646,20 +670,17 @@ fn open_editor_window(_: usize, _: String) -> Result<(), String> {
 /// plugin et sa fenêtre (boucle de messages Windows) sur le fil principal.
 pub fn host_main() {
     let plugin: PluginSlot = Arc::new(Mutex::new(None));
-    let (tx, rx) = mpsc::channel::<(Job, mpsc::Sender<Result<Value, String>>)>();
+    let (tx, rx) = mpsc::channel::<Job>();
     let reader_slot = plugin.clone();
     std::thread::spawn(move || {
         let stdin = std::io::stdin();
-        let stdout = std::io::stdout();
-        let run = move |job: Job| -> Result<Value, String> {
-            let (reply_tx, reply_rx) = mpsc::channel();
-            tx.send((job, reply_tx))
-                .map_err(|_| "hôte arrêté".to_string())?;
-            reply_rx.recv().map_err(|_| "hôte arrêté".to_string())?
+        let out: Out<std::io::Stdout> = Arc::new(Mutex::new(std::io::stdout()));
+        let run = move |job: Job| {
+            let _ = tx.send(job);
         };
         serve(
             &mut stdin.lock(),
-            &mut stdout.lock(),
+            out,
             reader_slot,
             Plugin::load,
             open_editor_window,
@@ -671,29 +692,39 @@ pub fn host_main() {
     #[cfg(windows)]
     gui::run(rx, plugin);
     #[cfg(not(windows))]
-    for (job, reply) in rx {
-        let _ = reply.send(job());
+    for job in rx {
+        job();
     }
 }
 
 // ── Côté moteur : un plugin dans son processus ──────────────────────────────
 
-/// Le plugin vu du moteur : processus hôte + dernier état connu.
-pub struct Bridge {
-    child: Child,
-    stdin: ChildStdin,
-    replies: Receiver<(u8, Vec<u8>)>,
-    alive: bool,
-    pub path: String,
+type Waiting = Arc<Mutex<std::collections::HashMap<u32, mpsc::Sender<(u8, Vec<u8>)>>>>;
+
+/// Ce qui change au fil du temps (sous verrou, jamais pendant une attente).
+struct Known {
     /// état demandé la dernière fois (ChunkData / paramètres)
-    pub applied: (Option<String>, BTreeMap<String, f32>),
-    pub state: Value,
-    pub error: Option<String>,
-    scratch: Vec<u8>,
+    applied: (Option<String>, BTreeMap<String, f32>),
+    state: Value,
+    error: Option<String>,
 }
 
-/// Délai de réponse : chargement (plugins lourds) et traitement d'un bloc.
+/// Le plugin vu du moteur : processus hôte + dernier état connu. Le son et
+/// le contrôle passent par le même processus sans s'attendre l'un l'autre.
+pub struct Bridge {
+    child: Mutex<Child>,
+    stdin: Mutex<ChildStdin>,
+    waiting: Waiting,
+    next_id: std::sync::atomic::AtomicU32,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+    path: String,
+    known: Mutex<Known>,
+    scratch: Mutex<Vec<u8>>,
+}
+
+/// Délais de réponse : chargement (plugins lourds), contrôle, bloc de son.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
+const CONTROL_TIMEOUT: Duration = Duration::from_secs(3);
 const BLOCK_TIMEOUT: Duration = Duration::from_millis(250);
 
 impl Bridge {
@@ -720,127 +751,163 @@ impl Bridge {
             let _ = child.kill();
             return Err("hôte VST impossible à lancer".into());
         };
-        let (tx, replies) = mpsc::channel();
-        std::thread::Builder::new()
-            .name("low-musical-vst".into())
-            .spawn(move || {
-                while let Ok(msg) = read_msg(&mut stdout) {
-                    if tx.send(msg).is_err() {
-                        break;
+        let waiting: Waiting = Arc::default();
+        let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        {
+            // Chaque réponse retourne à qui l'attend (par son numéro).
+            let waiting = waiting.clone();
+            let alive = alive.clone();
+            std::thread::Builder::new()
+                .name("low-musical-vst".into())
+                .spawn(move || {
+                    while let Ok((tag, id, body)) = read_msg(&mut stdout) {
+                        if let Some(tx) = lock(&waiting).remove(&id) {
+                            let _ = tx.send((tag, body));
+                        }
                     }
-                }
-            })
-            .ok();
-        let mut bridge = Bridge {
-            child,
-            stdin,
-            replies,
-            alive: true,
+                    // Hôte arrêté : plus personne n'attend pour rien.
+                    alive.store(false, std::sync::atomic::Ordering::Relaxed);
+                    lock(&waiting).clear();
+                })
+                .ok();
+        }
+        let bridge = Bridge {
+            child: Mutex::new(child),
+            stdin: Mutex::new(stdin),
+            waiting,
+            next_id: std::sync::atomic::AtomicU32::new(1),
+            alive,
             path: path.to_string(),
-            applied: (chunk.clone(), params.clone()),
-            state: Value::Null,
-            error: None,
-            scratch: Vec::new(),
+            known: Mutex::new(Known {
+                applied: (chunk.clone(), params.clone()),
+                state: Value::Null,
+                error: None,
+            }),
+            scratch: Mutex::new(Vec::new()),
         };
         let req = json!({ "path": path, "chunk": chunk, "params": params });
-        match bridge.request(OP_OPEN, req.to_string().as_bytes(), OPEN_TIMEOUT) {
-            Ok(state) => bridge.state = state,
+        match bridge.control(OP_OPEN, req.to_string().as_bytes(), OPEN_TIMEOUT) {
+            Ok(state) => lock(&bridge.known).state = state,
             Err(e) => bridge.fail(e),
         }
         Ok(bridge)
     }
 
-    fn fail(&mut self, e: String) {
-        self.alive = false;
-        self.error = Some(e);
-        let _ = self.child.kill();
+    pub fn is_alive(&self) -> bool {
+        self.alive.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn request(&mut self, op: u8, payload: &[u8], timeout: Duration) -> Result<Value, String> {
-        if !self.alive {
-            return Err(self.error.clone().unwrap_or_else(|| "plugin arrêté".into()));
+    fn fail(&self, e: String) {
+        self.alive
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        lock(&self.known).error = Some(e);
+        let _ = lock(&self.child).kill();
+    }
+
+    /// Envoie une demande et attend sa réponse (et seulement la sienne).
+    fn exchange(&self, op: u8, payload: &[u8], timeout: Duration) -> Result<(u8, Vec<u8>), String> {
+        if !self.is_alive() {
+            return Err(lock(&self.known)
+                .error
+                .clone()
+                .unwrap_or_else(|| "plugin arrêté".into()));
         }
-        write_msg(&mut self.stdin, op, payload)
-            .map_err(|_| "le plugin s'est arrêté".to_string())?;
-        match self.replies.recv_timeout(timeout) {
-            Ok((0, body)) => {
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (tx, rx) = mpsc::channel();
+        lock(&self.waiting).insert(id, tx);
+        if write_msg(&mut *lock(&self.stdin), op, id, payload).is_err() {
+            lock(&self.waiting).remove(&id);
+            return Err("le plugin s'est arrêté".into());
+        }
+        rx.recv_timeout(timeout).map_err(|_| {
+            lock(&self.waiting).remove(&id);
+            "le plugin ne répond plus".to_string()
+        })
+    }
+
+    fn control(&self, op: u8, payload: &[u8], timeout: Duration) -> Result<Value, String> {
+        match self.exchange(op, payload, timeout)? {
+            (0, body) => {
                 serde_json::from_slice(&body).map_err(|_| "réponse illisible du plugin".into())
             }
-            Ok((_, body)) => Err(String::from_utf8_lossy(&body).into_owned()),
-            Err(_) => Err("le plugin ne répond plus".into()),
+            (_, body) => Err(String::from_utf8_lossy(&body).into_owned()),
         }
     }
 
     /// Nouvel état demandé par le set (rien à faire s'il n'a pas changé).
-    pub fn apply(&mut self, chunk: Option<String>, params: BTreeMap<String, f32>) {
-        if self.applied == (chunk.clone(), params.clone()) || !self.alive {
-            return;
+    pub fn apply(&self, chunk: Option<String>, params: BTreeMap<String, f32>) {
+        {
+            let mut known = lock(&self.known);
+            if known.applied == (chunk.clone(), params.clone()) || !self.is_alive() {
+                return;
+            }
+            known.applied = (chunk.clone(), params.clone());
         }
         let req = json!({ "chunk": chunk, "params": params });
-        self.applied = (chunk, params);
-        match self.request(OP_APPLY, req.to_string().as_bytes(), OPEN_TIMEOUT) {
-            Ok(s) => self.state = s,
+        match self.control(OP_APPLY, req.to_string().as_bytes(), CONTROL_TIMEOUT) {
+            Ok(s) => lock(&self.known).state = s,
             Err(e) => self.fail(e),
         }
     }
 
     /// Ouvre le panneau du plugin (sa fenêtre).
-    pub fn open_editor(&mut self) -> Result<Value, String> {
-        self.request(OP_EDITOR, b"{}", OPEN_TIMEOUT)
+    pub fn open_editor(&self) -> Result<Value, String> {
+        self.control(OP_EDITOR, b"{}", OPEN_TIMEOUT)
     }
 
     /// État actuel (réglages faits dans le panneau du plugin compris).
-    pub fn refresh(&mut self) -> Result<Value, String> {
-        let state = self.request(OP_STATE, b"{}", OPEN_TIMEOUT)?;
+    pub fn refresh(&self) -> Result<Value, String> {
+        let state = self.control(OP_STATE, b"{}", CONTROL_TIMEOUT)?;
         Ok(self.adopt(state))
     }
 
     /// Réglage d'un paramètre depuis le panneau ; renvoie le nouvel état.
-    pub fn set_param(&mut self, index: i64, value: f64) -> Result<Value, String> {
+    pub fn set_param(&self, index: i64, value: f64) -> Result<Value, String> {
         let req = json!({ "index": index, "value": value });
-        let state = self.request(OP_SET_PARAM, req.to_string().as_bytes(), OPEN_TIMEOUT)?;
+        let state = self.control(OP_SET_PARAM, req.to_string().as_bytes(), CONTROL_TIMEOUT)?;
         Ok(self.adopt(state))
     }
 
     /// Le set va être réécrit avec cet état : ce n'est pas un changement à rappliquer.
-    fn adopt(&mut self, state: Value) -> Value {
-        self.applied.0 = state
+    fn adopt(&self, state: Value) -> Value {
+        let mut known = lock(&self.known);
+        known.applied.0 = state
             .get("chunk")
             .and_then(Value::as_str)
             .map(str::to_string);
-        if let Some(list) = state.get("params").and_then(Value::as_array) {
-            if !state
-                .get("chunks")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-            {
-                self.applied.1 = list
-                    .iter()
-                    .filter_map(|p| {
-                        Some((
-                            p.get("name")?.as_str()?.to_string(),
-                            p.get("value")?.as_f64()? as f32,
-                        ))
-                    })
-                    .collect();
-            }
+        let chunks = state
+            .get("chunks")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if let (false, Some(list)) = (chunks, state.get("params").and_then(Value::as_array)) {
+            known.applied.1 = list
+                .iter()
+                .filter_map(|p| {
+                    Some((
+                        p.get("name")?.as_str()?.to_string(),
+                        p.get("value")?.as_f64()? as f32,
+                    ))
+                })
+                .collect();
         }
-        self.state = state.clone();
+        known.state = state.clone();
         state
     }
 
     /// Traite un bloc stéréo entrelacé ; plugin arrêté = son inchangé.
-    pub fn process(&mut self, buf: &mut [f32]) {
-        if !self.alive {
+    pub fn process(&self, buf: &mut [f32]) {
+        if !self.is_alive() {
             return;
         }
-        self.scratch.clear();
-        self.scratch
-            .extend(buf.iter().flat_map(|x| x.to_le_bytes()));
-        if write_msg(&mut self.stdin, OP_PROCESS, &self.scratch).is_err() {
-            return self.lost("le plugin s'est arrêté");
-        }
-        match self.replies.recv_timeout(BLOCK_TIMEOUT) {
+        let reply = {
+            let mut scratch = lock(&self.scratch);
+            scratch.clear();
+            scratch.extend(buf.iter().flat_map(|x| x.to_le_bytes()));
+            self.exchange(OP_PROCESS, &scratch, BLOCK_TIMEOUT)
+        };
+        match reply {
             Ok((0, body)) if body.len() == buf.len() * 4 => {
                 for (x, b) in buf.iter_mut().zip(body.as_chunks::<4>().0) {
                     let v = f32::from_le_bytes(*b);
@@ -851,24 +918,28 @@ impl Bridge {
         }
     }
 
-    fn lost(&mut self, why: &str) {
-        let name = self
+    fn lost(&self, why: &str) {
+        let was_alive = self.alive.swap(false, std::sync::atomic::Ordering::Relaxed);
+        let name = lock(&self.known)
             .state
             .get("name")
             .and_then(Value::as_str)
             .unwrap_or("plugin")
             .to_string();
         self.fail(why.to_string());
-        crate::engine::emit_global(json!({ "vstError": format!("{name} : {why}") }));
+        if was_alive {
+            crate::engine::emit_global(json!({ "vstError": format!("{name} : {why}") }));
+        }
     }
 
     pub fn info(&self) -> Value {
-        let mut v = if self.state.is_object() {
-            self.state.clone()
+        let known = lock(&self.known);
+        let mut v = if known.state.is_object() {
+            known.state.clone()
         } else {
             json!({})
         };
-        v["error"] = json!(self.error);
+        v["error"] = json!(known.error);
         v["file"] = json!(std::path::Path::new(&self.path)
             .file_name()
             .map(|f| f.to_string_lossy().into_owned()));
@@ -882,14 +953,15 @@ impl Bridge {
 
 impl Drop for Bridge {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let mut child = lock(&self.child);
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 
 /// Plugins vivants, par (fichier, rang dans le set) : modifier le set ne
 /// relance pas un plugin déjà chargé.
-pub type Shared = Arc<Mutex<Bridge>>;
+pub type Shared = Arc<Bridge>;
 
 type LivePlugins = Mutex<Vec<((String, usize), Shared)>>;
 
@@ -910,14 +982,11 @@ pub fn plugin_for(
         .iter()
         .find(|(k, _)| *k == key)
         .map(|(_, b)| b.clone());
-    if let Some(b) = existing {
-        let reusable = lock(&b).alive;
-        if reusable {
-            lock(&b).apply(chunk, params);
-            return Ok(b);
-        }
+    if let Some(b) = existing.filter(|b| b.is_alive()) {
+        b.apply(chunk, params);
+        return Ok(b);
     }
-    let b = Arc::new(Mutex::new(Bridge::spawn(path, chunk, params)?));
+    let b = Arc::new(Bridge::spawn(path, chunk, params)?);
     let mut live = lock(live_plugins());
     live.retain(|(k, _)| *k != key);
     live.push((key, b.clone()));
@@ -1116,41 +1185,37 @@ mod tests {
     fn protocole_de_l_hôte() {
         // L'hôte tourne dans un fil ; on lui parle par deux tuyaux en mémoire.
         let (mut to_host_w, mut to_host_r) = pipe();
-        let (mut from_host_w, mut from_host_r) = pipe();
+        let (from_host_w, mut from_host_r) = pipe();
         let host = std::thread::spawn(move || {
             serve(
                 &mut to_host_r,
-                &mut from_host_w,
+                Arc::new(Mutex::new(from_host_w)),
                 Arc::new(Mutex::new(None)),
                 |_| Plugin::open(test_plugin::entry, None),
                 |_, _| Err("pas de panneau".to_string()),
                 &|job| job(),
             );
         });
-        write_msg(
-            &mut to_host_w,
-            OP_OPEN,
-            br#"{"path":"x","chunk":"MC4yNQ=="}"#,
-        )
-        .unwrap();
-        let (tag, body) = read_msg(&mut from_host_r).unwrap();
+        let mut ask = |op: u8, id: u32, body: &[u8]| {
+            write_msg(&mut to_host_w, op, id, body).unwrap();
+            let (tag, rid, out) = read_msg(&mut from_host_r).unwrap();
+            assert_eq!(rid, id, "chaque réponse reprend le numéro de sa demande");
+            (tag, out)
+        };
+        let (tag, body) = ask(OP_OPEN, 7, br#"{"path":"x","chunk":"MC4yNQ=="}"#);
         assert_eq!(tag, 0);
         assert!(String::from_utf8_lossy(&body).contains("Gain test"));
         let block: Vec<u8> = [1.0f32, 1.0].iter().flat_map(|x| x.to_le_bytes()).collect();
-        write_msg(&mut to_host_w, OP_PROCESS, &block).unwrap();
-        let (_, out) = read_msg(&mut from_host_r).unwrap();
+        let (_, out) = ask(OP_PROCESS, 8, &block);
         assert_eq!(f32::from_le_bytes([out[0], out[1], out[2], out[3]]), 0.5);
-        write_msg(&mut to_host_w, OP_SET_PARAM, br#"{"index":0,"value":1.0}"#).unwrap();
-        let (_, body) = read_msg(&mut from_host_r).unwrap();
+        let (_, body) = ask(OP_SET_PARAM, 9, br#"{"index":0,"value":1.0}"#);
         assert!(String::from_utf8_lossy(&body).contains("\"chunk\":\"MQ==\""));
         // Pas de panneau pour ce plugin : refus clair, l'hôte continue.
-        write_msg(&mut to_host_w, OP_EDITOR, b"{}").unwrap();
-        let (tag, body) = read_msg(&mut from_host_r).unwrap();
+        let (tag, body) = ask(OP_EDITOR, 10, b"{}");
         assert_eq!(tag, 1);
         assert!(String::from_utf8_lossy(&body).contains("pas de panneau"));
         // État relu (comme après un réglage fait dans le panneau du plugin).
-        write_msg(&mut to_host_w, OP_STATE, b"{}").unwrap();
-        let (tag, body) = read_msg(&mut from_host_r).unwrap();
+        let (tag, body) = ask(OP_STATE, 11, b"{}");
         assert_eq!(tag, 0);
         assert!(String::from_utf8_lossy(&body).contains("\"editorOpen\":false"));
         drop(to_host_w);
@@ -1216,7 +1281,6 @@ mod gui {
         AEffect, Job, PluginSlot, EDITOR_OPEN, EFF_EDIT_CLOSE, EFF_EDIT_GET_RECT, EFF_EDIT_IDLE,
         EFF_EDIT_OPEN,
     };
-    use serde_json::Value;
 
     const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
 
@@ -1383,10 +1447,7 @@ mod gui {
     /// Boucle du fil du plugin : messages Windows en continu (les plugins en
     /// ont besoin même sans panneau ouvert), travaux demandés par le moteur,
     /// « idle » du panneau (~30 fois/s) et recopie des réglages (plugin mono).
-    pub fn run(
-        rx: Receiver<(Job, std::sync::mpsc::Sender<Result<Value, String>>)>,
-        plugin: PluginSlot,
-    ) {
+    pub fn run(rx: Receiver<Job>, plugin: PluginSlot) {
         let mut last_idle = Instant::now();
         let mut last_sync = Instant::now();
         loop {
@@ -1400,9 +1461,7 @@ mod gui {
             }
             loop {
                 match rx.try_recv() {
-                    Ok((job, reply)) => {
-                        let _ = reply.send(job());
-                    }
+                    Ok(job) => job(),
                     Err(TryRecvError::Disconnected) => return,
                     Err(TryRecvError::Empty) => break,
                 }
@@ -1418,7 +1477,18 @@ mod gui {
                     p.sync_copies();
                 }
             }
-            std::thread::sleep(Duration::from_millis(5));
+            if open {
+                // Panneau ouvert : réactif (~200 fois/s).
+                std::thread::sleep(Duration::from_millis(5));
+            } else {
+                // Sans fenêtre : on attend un travail (ou 20 ms) au lieu de
+                // tourner à vide ; les messages Windows restent traités.
+                match rx.recv_timeout(Duration::from_millis(20)) {
+                    Ok(job) => job(),
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
         }
     }
 }

@@ -12,7 +12,7 @@
 // Chacun est identifié auprès du moteur par son id dans le Token Importer.
 
 import * as DataStore from "@api/DataStore";
-import type { SavedAccount } from "@lowplugins/tokenImporter";
+import { getAccounts, type SavedAccount } from "@lowplugins/tokenImporter";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, SelectedChannelStore, useEffect, UserStore, useState } from "@webpack/common";
 
@@ -164,7 +164,7 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.13.2";
+export const MIN_ENGINE = "0.14.0";
 
 export const PREF_DEFAULTS: MusicalPrefs = {
     gain: 0, volume: 1, bitrate: 128, latency: 200,
@@ -628,6 +628,16 @@ export function syncBitrate(channelBps: number | undefined) {
 /** Arrête le moteur : les comptes quittent le vocal et se déconnectent. */
 export const stopEngine = () => VencordNative.lowMusical.stop();
 
+/** Panneau fermé : moteur arrêté s'il ne sert à rien (aucun compte actif). */
+export function releaseEngineIfIdle() {
+    if (!state.running || Object.values(state.accounts).some(isActive)) return;
+    // Les fenêtres de plugins ouvertes depuis le Mini APO se ferment avec lui.
+    for (const timer of editorPolls.values()) clearInterval(timer);
+    editorPolls.clear();
+    apoVst = [];
+    stopEngine().catch(() => { });
+}
+
 // ── Préréglages low-musical ─────────────────────────────────────────────────
 // Un préréglage règle TOUT le son d'un coup (comme un set Equalizer APO) :
 // gain, chaîne de traitement, égaliseur, espace. Jamais les comptes, le
@@ -925,10 +935,15 @@ export const openVstFolder = () => VencordNative.lowMusical.openVstFolder();
 const apoStages = () => parseApo(prefs.apoText, prefs.apoIrs, vstFiles).stages;
 
 /** Envoie le set au moteur (ou le coupe). Renvoie le nombre d'étapes jouées. */
+let apoSeq = 0;
+
 async function sendApo() {
     const stages = prefs.apoOn ? apoStages() : [];
+    const seq = ++apoSeq;
     try {
         const res = await call<{ stages: number; vst?: VstInfo[]; }>("set_apo", { enabled: prefs.apoOn && stages.length > 0, stages });
+        // Une réponse plus ancienne qu'un autre envoi n'écrase rien.
+        if (seq !== apoSeq) return res?.stages ?? 0;
         apoVst = Array.isArray(res?.vst) ? res.vst : [];
         apoError = null;
         // L'envoi a pu démarrer le moteur (aucun compte connecté).
@@ -1070,4 +1085,34 @@ export async function openVstEditor(slot: number) {
         }
     }, 1000);
     editorPolls.set(slot, timer);
+}
+
+// ── Installation / mise à jour sans redémarrer Discord ─────────────────────
+
+/** Comptes actifs et suivi, à reprendre après un changement de moteur. */
+export function sessionSnapshot() {
+    return {
+        keys: Object.entries(state.accounts).filter(([, a]) => isActive(a)).map(([k]) => k),
+        following: !!state.following,
+    };
+}
+
+/**
+ * Le moteur vient d'être installé, mis à jour ou retiré (Paramètres) : la
+ * nouvelle version est prise en compte tout de suite, et les comptes qui
+ * étaient connectés repartent sur le nouveau moteur (suivi compris).
+ */
+export async function engineReplaced(version: string | null, before: ReturnType<typeof sessionSnapshot>) {
+    for (const timer of editorPolls.values()) clearInterval(timer);
+    editorPolls.clear();
+    loadedSounds.clear();
+    apoVst = [];
+    state = { installed: version, running: false, accounts: {}, following: false };
+    emit();
+    if (!version || !before.keys.length || isOutdated()) return;
+    const saved = await getAccounts();
+    const again = saved.filter(a => before.keys.includes(a.id));
+    if (!again.length) return;
+    await connectAccounts(again);
+    if (before.following) await followMe();
 }

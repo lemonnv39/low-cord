@@ -21,11 +21,12 @@ import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
 import { ChildProcess, execFile, spawn } from "child_process";
 import { createHash, randomUUID } from "crypto";
-import { app, BrowserWindow, ipcMain, net, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage, net, screen, shell } from "electron";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createInterface } from "readline";
 
+import { ICON_ICO, ICON_PNG } from "./lowSoundIcon";
 import { DATA_DIR } from "./utils/constants";
 
 export interface MusicalManifest {
@@ -112,6 +113,21 @@ async function status(): Promise<MusicalStatus> {
 }
 
 /** Installe ou met à jour vers la dernière version publiée. */
+/**
+ * Windows garde l'exe verrouillé un court instant après l'arrêt du moteur (le
+ * temps que ses hôtes VST se ferment aussi) : on réessaie au lieu d'échouer.
+ */
+async function retryLocked<T>(fn: () => T, tries = 25): Promise<T> {
+    for (let i = 0; ; i++) {
+        try {
+            return fn();
+        } catch (e: any) {
+            if (i >= tries || !["EPERM", "EBUSY", "EACCES"].includes(e?.code)) throw e;
+            await new Promise(r => setTimeout(r, 150));
+        }
+    }
+}
+
 async function install(): Promise<MusicalStatus> {
     if (busy) throw new Error("une opération est déjà en cours");
     busy = true;
@@ -131,7 +147,7 @@ async function install(): Promise<MusicalStatus> {
         if (got !== latest.version) throw new Error(`version ${got} au lieu de ${latest.version}`);
 
         // Renommer remplace d'un coup (même disque).
-        renameSync(tmp, ENGINE_EXE);
+        await retryLocked(() => renameSync(tmp, ENGINE_EXE));
         const meta: Installed = { version: latest.version, sha256: latest.sha256, sha: latest.sha, installedAt: new Date().toISOString() };
         writeFileSync(META, JSON.stringify(meta, null, 2));
     } finally {
@@ -146,7 +162,7 @@ async function uninstall(): Promise<MusicalStatus> {
     busy = true;
     try {
         await stopEngine();
-        rmSync(DIR, { recursive: true, force: true });
+        await retryLocked(() => rmSync(DIR, { recursive: true, force: true }));
     } finally {
         busy = false;
     }
@@ -167,6 +183,9 @@ const ENGINE_COMMANDS = new Set([
     "join", "set_apo", "vst_param", "vst_editor", "vst_state", "sb_load", "sb_unload", "sb_play", "sb_stop", "sb_volume",
 ]);
 const CALL_TIMEOUT = 15_000;
+/** Commandes qui peuvent être longues : connexion, set APO avec plugins VST lourds. */
+const SLOW_COMMANDS = new Set(["connect", "set_apo"]);
+const SLOW_TIMEOUT = 60_000;
 
 let engine: ChildProcess | null = null;
 let nextId = 1;
@@ -225,7 +244,7 @@ function callEngine(cmd: string, args: Record<string, unknown>) {
         const timer = setTimeout(() => {
             waiting.delete(id);
             reject(new Error("le moteur ne répond pas"));
-        }, CALL_TIMEOUT);
+        }, SLOW_COMMANDS.has(cmd) ? SLOW_TIMEOUT : CALL_TIMEOUT);
         waiting.set(id, { resolve, reject, timer });
         proc.stdin!.write(JSON.stringify({ ...args, id, cmd }) + "\n");
     });
@@ -318,7 +337,7 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_END, () => stopDrag());
 ipcMain.handle(IpcEvents.LOWMUSICAL_STREAM_PROOF, (_, on: unknown) => {
     let n = 0;
     for (const win of BrowserWindow.getAllWindows()) {
-        if (win.isDestroyed() || win.getTitle() !== "low-musical" || !win.webContents.getURL().includes("/popout")) continue;
+        if (win.isDestroyed() || win.getTitle() !== PANEL_TITLE || !win.webContents.getURL().includes("/popout")) continue;
         win.setContentProtection(on === true);
         n++;
     }
@@ -427,6 +446,34 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_WIDEN, (_, extra: unknown) => {
         win.setBounds({ x, y: b.y, width, height: b.height });
         widened.set(win, { extra: want, shift: baseX - x });
     }
+});
+
+// ── Icône de la fenêtre du panneau (barre des tâches) ───────────────────────
+// La fenêtre du panneau (titre « low-musical ») a sa propre icône éclair et
+// son propre identifiant Windows : elle a son bouton dans la barre des tâches
+// au lieu d'être rangée sous l'icône de Discord.
+const PANEL_TITLE = "low-musical";
+const decorated = new WeakSet<BrowserWindow>();
+
+function decoratePanel(win: BrowserWindow) {
+    if (decorated.has(win) || win.isDestroyed()) return;
+    decorated.add(win);
+    try {
+        win.setIcon(nativeImage.createFromBuffer(Buffer.from(ICON_PNG, "base64")));
+        if (process.platform === "win32") {
+            const ico = join(DATA_DIR, "low-sound.ico");
+            writeFileSync(ico, Buffer.from(ICON_ICO, "base64"));
+            win.setAppDetails({ appId: "lowcord.lowsound", appIconPath: ico, appIconIndex: 0, relaunchDisplayName: "low-sound" });
+        }
+    } catch (e) {
+        console.error("[low-musical] icône du panneau :", e);
+    }
+}
+
+app.on("browser-window-created", (_, win) => {
+    win.on("page-title-updated", (_e, title) => {
+        if (title === PANEL_TITLE && win.webContents.getURL().includes("/popout")) decoratePanel(win);
+    });
 });
 
 // Reste d'un téléchargement interrompu (Discord fermé en plein milieu).

@@ -109,7 +109,7 @@ fn vst_infos(c: &Config) -> Vec<Value> {
     c.vst
         .iter()
         .map(|r| match r {
-            Ok(b) => lock(b).info(),
+            Ok(b) => b.info(),
             Err(e) => e.clone(),
         })
         .collect()
@@ -128,22 +128,19 @@ fn vst_at(slot_index: usize) -> Result<crate::vst::Shared, String> {
 /// (dont le ChunkData, pour réécrire le set).
 pub fn vst_param(slot_index: usize, index: i64, value: f64) -> Result<Value, String> {
     let plugin = vst_at(slot_index)?;
-    let mut b = lock(&plugin);
-    b.set_param(index, value)
+    plugin.set_param(index, value)
 }
 
 /// Ouvre le panneau (l'interface) du n-ième plugin.
 pub fn vst_editor(slot_index: usize) -> Result<Value, String> {
     let plugin = vst_at(slot_index)?;
-    let mut b = lock(&plugin);
-    b.open_editor()
+    plugin.open_editor()
 }
 
 /// État actuel du n-ième plugin (réglages faits dans son panneau compris).
 pub fn vst_state(slot_index: usize) -> Result<Value, String> {
     let plugin = vst_at(slot_index)?;
-    let mut b = lock(&plugin);
-    b.refresh()
+    plugin.refresh()
 }
 
 fn parse(list: &[Value]) -> Result<Config, String> {
@@ -619,7 +616,7 @@ impl Apo {
                     // Canal non choisi : remis tel quel après le plugin.
                     keep.clear();
                     keep.extend_from_slice(buf);
-                    lock(plugin).process(buf);
+                    plugin.process(buf);
                     for (frame, old) in buf
                         .as_chunks_mut::<2>()
                         .0
