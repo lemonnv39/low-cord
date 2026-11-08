@@ -832,21 +832,21 @@
     cursor: pointer;
 }
 
-/* ── low-musical (onglet des réglages) ─────────────────────────────────── */
-.lc-mu-card {
+/* ── low-sound (onglet des réglages) ─────────────────────────────────── */
+.lc-lss-card {
     overflow: hidden;
     border-radius: 10px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
 }
 
-.lc-mu-head {
+.lc-lss-head {
     display: flex;
     gap: 14px;
     padding: 18px 16px;
 }
 
-.lc-mu-logo {
+.lc-lss-logo {
     display: grid;
     flex: none;
     place-items: center;
@@ -857,12 +857,12 @@
     color: var(--header-primary, var(--text-strong));
 }
 
-.lc-mu-titles {
+.lc-lss-titles {
     flex: 1;
     min-width: 0;
 }
 
-.lc-mu-title {
+.lc-lss-title {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -871,7 +871,7 @@
     font-weight: 700;
 }
 
-.lc-mu-tag {
+.lc-lss-tag {
     padding: 1px 7px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
     border-radius: 999px;
@@ -881,14 +881,14 @@
     font-weight: 500;
 }
 
-.lc-mu-sub {
+.lc-lss-sub {
     margin-top: 4px;
     color: var(--text-muted);
     font-size: 13px;
     line-height: 1.4;
 }
 
-.lc-mu-row {
+.lc-lss-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -897,11 +897,11 @@
     border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
 }
 
-.lc-mu-restart {
+.lc-lss-restart {
     background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
 }
 
-.lc-mu-dot {
+.lc-lss-dot {
     flex: none;
     width: 8px;
     height: 8px;
@@ -910,40 +910,40 @@
     opacity: 0.5;
 }
 
-.lc-mu-dot-on {
+.lc-lss-dot-on {
     background: var(--header-primary, var(--text-strong));
     opacity: 1;
 }
 
-.lc-mu-dot-update {
+.lc-lss-dot-update {
     background: var(--status-positive, #23a55a);
     opacity: 1;
 }
 
-.lc-mu-state {
+.lc-lss-state {
     flex: 1;
     min-width: 180px;
 }
 
-.lc-mu-state-name {
+.lc-lss-state-name {
     color: var(--header-primary, var(--text-strong));
     font-size: 15px;
     font-weight: 600;
 }
 
-.lc-mu-state-detail {
+.lc-lss-state-detail {
     margin-top: 2px;
     color: var(--text-muted);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
-.lc-mu-actions {
+.lc-lss-actions {
     display: flex;
     gap: 8px;
 }
 
-.lc-mu-btn {
+.lc-lss-btn {
     padding: 7px 16px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
     border-radius: 6px;
@@ -954,35 +954,35 @@
     cursor: pointer;
 }
 
-.lc-mu-btn:disabled {
+.lc-lss-btn:disabled {
     cursor: default;
     opacity: 0.45;
 }
 
-.lc-mu-btn:hover:not(:disabled) {
+.lc-lss-btn:hover:not(:disabled) {
     border-color: var(--text-muted);
 }
 
-.lc-mu-btn-primary {
+.lc-lss-btn-primary {
     border-color: var(--header-primary, var(--text-strong));
     background: var(--header-primary, var(--text-strong));
     color: var(--background-base-low, var(--background-primary, #1e1f22));
     font-weight: 600;
 }
 
-.lc-mu-btn-primary:hover:not(:disabled) {
+.lc-lss-btn-primary:hover:not(:disabled) {
     border-color: var(--header-primary, var(--text-strong));
     opacity: 0.9;
 }
 
-.lc-mu-error {
+.lc-lss-error {
     padding: 10px 16px;
     border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
     color: var(--text-feedback-critical, var(--text-danger, #f23f43));
     font-size: 13px;
 }
 
-.lc-mu-foot {
+.lc-lss-foot {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -992,7 +992,7 @@
     border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
 }
 
-.lc-mu-link {
+.lc-lss-link {
     padding: 0;
     border: 0;
     background: none;
@@ -1001,21 +1001,21 @@
     cursor: pointer;
 }
 
-.lc-mu-link:disabled {
+.lc-lss-link:disabled {
     cursor: default;
     opacity: 0.45;
 }
 
-.lc-mu-link:hover:not(:disabled) {
+.lc-lss-link:hover:not(:disabled) {
     color: var(--text-normal, var(--text-default));
     text-decoration: underline;
 }
 
-.lc-mu-danger:hover:not(:disabled) {
+.lc-lss-danger:hover:not(:disabled) {
     color: var(--text-feedback-critical, var(--text-danger, #f23f43));
 }
 
-.lc-mu-confirm {
+.lc-lss-confirm {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1023,7 +1023,7 @@
     font-size: 13px;
 }
 
-.lc-mu-hint-row {
+.lc-lss-hint-row {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1033,7 +1033,7 @@
     font-size: 13px;
 }
 
-.lc-mu-note {
+.lc-lss-note {
     margin-top: 12px;
     color: var(--text-muted);
     font-size: 12px;

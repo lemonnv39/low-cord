@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — installation du moteur (processus principal).
+// low-sound — installation du moteur (processus principal).
 //
 // Module optionnel, mis à jour séparément de low-cord. La CI publie le moteur
-// sur la branche `musical-builds` : low-musical-engine.exe + manifest.json
+// sur la branche `sound-builds` : low-sound-engine.exe + manifest.json
 // (version, taille, sha256). Ici :
 //  - on demande à GitHub le commit actuel de la branche, puis on lit le
 //    manifeste et l'exe à CE commit (jamais une adresse « dernière version »
@@ -15,7 +15,7 @@
 //  - l'exe téléchargé doit avoir exactement la taille et l'empreinte sha256
 //    annoncées, et répondre à `--version` avec la bonne version ;
 //  - il est écrit à côté puis mis en place d'un coup (jamais à moitié écrit).
-// Dossier : %APPDATA%\low-cord\low-musical\
+// Dossier : %APPDATA%\low-cord\low-sound\
 
 import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
@@ -29,9 +29,9 @@ import { createInterface } from "readline";
 import { ICON_ICO, ICON_PNG } from "./lowSoundIcon";
 import { DATA_DIR } from "./utils/constants";
 
-export interface MusicalManifest {
+export interface SoundManifest {
     version: string;
-    /** commit de la branche musical-builds où lire les fichiers */
+    /** commit de la branche sound-builds où lire les fichiers */
     commit: string;
     /** commit de main dont le moteur est fait */
     sha: string;
@@ -40,23 +40,50 @@ export interface MusicalManifest {
     date: string;
 }
 
-export interface MusicalStatus {
+export interface SoundStatus {
     installed: boolean;
     /** version installée */
     version?: string;
     installedAt?: string;
     /** dernière version publiée (absente si GitHub injoignable) */
-    latest?: MusicalManifest;
+    latest?: SoundManifest;
     updateAvailable: boolean;
     /** une installation / mise à jour / désinstallation est en cours */
     busy: boolean;
     error?: string;
 }
 
-const DIR = join(DATA_DIR, "low-musical");
-export const ENGINE_EXE = join(DIR, "low-musical-engine.exe");
+const DIR = join(DATA_DIR, "low-sound");
+export const ENGINE_EXE = join(DIR, "low-sound-engine.exe");
 const META = join(DIR, "installed.json");
-const EXE_NAME = "low-musical-engine.exe";
+const EXE_NAME = "low-sound-engine.exe";
+
+// ── Ancien nom (low-musical) → low-sound ────────────────────────────────────
+// Une seule fois, au démarrage de Discord (le moteur ne tourne pas encore) :
+// les dossiers gardent tout leur contenu (sons, IR, plugins VST, moteur).
+function migrateOldName() {
+    const moves: [string, string][] = [
+        ["low-musical-sounds", "low-sound-sounds"],
+        ["low-musical-ir", "low-sound-ir"],
+        ["low-musical-vst", "low-sound-vst"],
+        ["low-musical", "low-sound"],
+    ];
+    for (const [from, to] of moves) {
+        const src = join(DATA_DIR, from), dst = join(DATA_DIR, to);
+        try {
+            if (existsSync(src) && !existsSync(dst)) renameSync(src, dst);
+        } catch (e) {
+            console.error(`[low-sound] migration ${from} :`, e);
+        }
+    }
+    try {
+        const oldExe = join(DIR, "low-musical-engine.exe");
+        if (existsSync(oldExe) && !existsSync(ENGINE_EXE)) renameSync(oldExe, ENGINE_EXE);
+    } catch (e) {
+        console.error("[low-sound] migration du moteur :", e);
+    }
+}
+migrateOldName();
 const MAX_SIZE = 100 * 1024 * 1024;
 const HEADERS = { "User-Agent": "low-cord", "Accept": "application/vnd.github+json" };
 
@@ -71,8 +98,8 @@ function readInstalled(): Installed | null {
     return null;
 }
 
-async function latestManifest(): Promise<MusicalManifest> {
-    const head = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}/commits/musical-builds`, { headers: HEADERS });
+async function latestManifest(): Promise<SoundManifest> {
+    const head = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}/commits/sound-builds`, { headers: HEADERS });
     if (!head.ok) throw new Error(head.status === 404 ? "aucune version publiée" : `GitHub : HTTP ${head.status}`);
     const commit = (await head.json())?.sha;
     if (typeof commit !== "string" || !/^[0-9a-f]{40}$/.test(commit)) throw new Error("GitHub : réponse inattendue");
@@ -101,7 +128,7 @@ function engineVersion(exe: string) {
 
 let busy = false;
 
-async function status(): Promise<MusicalStatus> {
+async function status(): Promise<SoundStatus> {
     const installed = readInstalled();
     const base = { installed: !!installed, version: installed?.version, installedAt: installed?.installedAt, busy };
     try {
@@ -128,7 +155,7 @@ async function retryLocked<T>(fn: () => T, tries = 25): Promise<T> {
     }
 }
 
-async function install(): Promise<MusicalStatus> {
+async function install(): Promise<SoundStatus> {
     if (busy) throw new Error("une opération est déjà en cours");
     busy = true;
     const tmp = join(DIR, `.download-${process.pid}.exe`);
@@ -157,7 +184,7 @@ async function install(): Promise<MusicalStatus> {
     return status();
 }
 
-async function uninstall(): Promise<MusicalStatus> {
+async function uninstall(): Promise<SoundStatus> {
     if (busy) throw new Error("une opération est déjà en cours");
     busy = true;
     try {
@@ -193,14 +220,14 @@ const waiting = new Map<number, { resolve(v: any): void; reject(e: Error): void;
 
 function broadcast(msg: unknown) {
     for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send(IpcEvents.LOWMUSICAL_EVENT, msg);
+        if (!win.isDestroyed()) win.webContents.send(IpcEvents.LOWSOUND_EVENT, msg);
     }
 }
 
 function startEngine(): ChildProcess {
     if (engine) return engine;
     if (busy) throw new Error("installation en cours");
-    if (!readInstalled()) throw new Error("low-musical n'est pas installé");
+    if (!readInstalled()) throw new Error("low-sound n'est pas installé");
 
     const proc = spawn(ENGINE_EXE, [], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     engine = proc;
@@ -219,7 +246,7 @@ function startEngine(): ChildProcess {
         }
     });
     // Le moteur n'écrit sur stderr qu'en cas de plantage : utile dans les logs.
-    createInterface({ input: proc.stderr! }).on("line", line => console.error("[low-musical]", line));
+    createInterface({ input: proc.stderr! }).on("line", line => console.error("[low-sound]", line));
 
     const finish = (reason: string) => {
         if (engine !== proc) return;
@@ -261,7 +288,7 @@ function stopEngine() {
     });
 }
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_ENGINE_CALL, (_, cmd: unknown, args: unknown) => {
     if (typeof cmd !== "string" || !ENGINE_COMMANDS.has(cmd)) throw new Error("commande refusée");
     const plain = args && typeof args === "object" && !Array.isArray(args) ? { ...args as Record<string, unknown> } : {};
     if (cmd === "sb_load") {
@@ -277,7 +304,7 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown
                 return { ...rest, path: irPath(ir) };
             }
             if (s?.t === "vst") {
-                // Plugins VST : seulement ceux déposés dans le dossier VST de low-musical.
+                // Plugins VST : seulement ceux déposés dans le dossier VST de low-sound.
                 const { lib, ...rest } = s;
                 return { ...rest, path: vstPath(lib) };
             }
@@ -286,17 +313,17 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_CALL, (_, cmd: unknown, args: unknown
     }
     return callEngine(cmd, plain);
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_RUNNING, () => engine !== null);
-ipcMain.handle(IpcEvents.LOWMUSICAL_INSTALLED, () => readInstalled()?.version ?? null);
-ipcMain.handle(IpcEvents.LOWMUSICAL_ENGINE_STOP, () => stopEngine());
+ipcMain.handle(IpcEvents.LOWSOUND_ENGINE_RUNNING, () => engine !== null);
+ipcMain.handle(IpcEvents.LOWSOUND_INSTALLED, () => readInstalled()?.version ?? null);
+ipcMain.handle(IpcEvents.LOWSOUND_ENGINE_STOP, () => stopEngine());
 
 // Discord se ferme : le moteur quitte le vocal de lui-même en voyant son entrée se fermer.
 app.on("will-quit", () => engine?.stdin?.end());
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_STATUS, () => status());
-ipcMain.handle(IpcEvents.LOWMUSICAL_INSTALL, () => install());
-ipcMain.handle(IpcEvents.LOWMUSICAL_UNINSTALL, () => uninstall());
-ipcMain.handle(IpcEvents.LOWMUSICAL_OPEN_FOLDER, () => {
+ipcMain.handle(IpcEvents.LOWSOUND_STATUS, () => status());
+ipcMain.handle(IpcEvents.LOWSOUND_INSTALL, () => install());
+ipcMain.handle(IpcEvents.LOWSOUND_UNINSTALL, () => uninstall());
+ipcMain.handle(IpcEvents.LOWSOUND_OPEN_FOLDER, () => {
     if (existsSync(DIR)) return shell.openPath(DIR);
 });
 
@@ -312,7 +339,7 @@ function stopDrag() {
     dragTimer = null;
 }
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_START, event => {
+ipcMain.handle(IpcEvents.LOWSOUND_DRAG_START, event => {
     stopDrag();
     // Le clic vient de donner le focus à la fenêtre du panneau (jamais la fenêtre principale).
     const win = BrowserWindow.getFocusedWindow();
@@ -329,12 +356,12 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_START, event => {
     }, 8);
     return true;
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_DRAG_END, () => stopDrag());
+ipcMain.handle(IpcEvents.LOWSOUND_DRAG_END, () => stopDrag());
 
-// Anti-stream : la fenêtre du panneau (titre « low-musical ») devient
+// Anti-stream : la fenêtre du panneau (titre « low-sound ») devient
 // invisible dans les partages d'écran et les captures. Renvoie le nombre de
 // fenêtres touchées (0 = panneau fermé : appliqué à sa prochaine ouverture).
-ipcMain.handle(IpcEvents.LOWMUSICAL_STREAM_PROOF, (_, on: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_STREAM_PROOF, (_, on: unknown) => {
     let n = 0;
     for (const win of BrowserWindow.getAllWindows()) {
         if (win.isDestroyed() || win.getTitle() !== PANEL_TITLE || !win.webContents.getURL().includes("/popout")) continue;
@@ -347,7 +374,7 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_STREAM_PROOF, (_, on: unknown) => {
 // ── Soundboard : sons importés ───────────────────────────────────────────────
 // Copiés dans leur propre dossier (gardé si le moteur est désinstallé), sous
 // un nom tiré au hasard : Discord ne donne jamais de chemin, seulement le nom.
-const SOUNDS_DIR = join(DATA_DIR, "low-musical-sounds");
+const SOUNDS_DIR = join(DATA_DIR, "low-sound-sounds");
 const SOUND_FILE = /^[0-9a-f-]{36}\.(mp3|wav|ogg|flac)$/;
 const MAX_SOUND = 25 * 1024 * 1024;
 
@@ -356,7 +383,7 @@ function soundPath(file: unknown) {
     return join(SOUNDS_DIR, file);
 }
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_IMPORT, (_, name: unknown, data: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_SOUND_IMPORT, (_, name: unknown, data: unknown) => {
     const ext = typeof name === "string" ? /\.(mp3|wav|ogg|flac)$/i.exec(name)?.[1]?.toLowerCase() : undefined;
     if (!ext) throw new Error("format non pris en charge (mp3, wav, ogg, flac)");
     if (!(data instanceof Uint8Array) || !data.length) throw new Error("fichier vide");
@@ -366,13 +393,13 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_IMPORT, (_, name: unknown, data: unkno
     writeFileSync(join(SOUNDS_DIR, file), data);
     return file;
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_DELETE, (_, file: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_SOUND_DELETE, (_, file: unknown) => {
     rmSync(soundPath(file), { force: true });
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_READ, (_, file: unknown) => readFileSync(soundPath(file)));
+ipcMain.handle(IpcEvents.LOWSOUND_SOUND_READ, (_, file: unknown) => readFileSync(soundPath(file)));
 
 // ── Mini APO : réponses impulsionnelles importées (Convolution) ─────────────
-const IR_DIR = join(DATA_DIR, "low-musical-ir");
+const IR_DIR = join(DATA_DIR, "low-sound-ir");
 const IR_FILE = /^[0-9a-f-]{36}\.(wav|flac|ogg)$/;
 const MAX_IR_FILE = 25 * 1024 * 1024;
 
@@ -381,7 +408,7 @@ function irPath(file: unknown) {
     return join(IR_DIR, file);
 }
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_IR_IMPORT, (_, name: unknown, data: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_IR_IMPORT, (_, name: unknown, data: unknown) => {
     const ext = typeof name === "string" ? /\.(wav|flac|ogg)$/i.exec(name)?.[1]?.toLowerCase() : undefined;
     if (!ext) throw new Error("format non pris en charge (wav, flac, ogg)");
     if (!(data instanceof Uint8Array) || !data.length) throw new Error("fichier vide");
@@ -391,13 +418,13 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_IR_IMPORT, (_, name: unknown, data: unknown)
     writeFileSync(join(IR_DIR, file), data);
     return file;
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_IR_DELETE, (_, file: unknown) => { rmSync(irPath(file), { force: true }); });
-ipcMain.handle(IpcEvents.LOWMUSICAL_IR_READ, (_, file: unknown) => readFileSync(irPath(file)));
+ipcMain.handle(IpcEvents.LOWSOUND_IR_DELETE, (_, file: unknown) => { rmSync(irPath(file), { force: true }); });
+ipcMain.handle(IpcEvents.LOWSOUND_IR_READ, (_, file: unknown) => readFileSync(irPath(file)));
 
 // ── Mini APO : dossier des plugins VST ──────────────────────────────────────
 // L'utilisateur y dépose ses plugins (.dll VST2 64 bits). Rien n'est chargé
 // tant qu'un set ne le demande pas, et chaque plugin tourne à part.
-const VST_DIR = join(DATA_DIR, "low-musical-vst");
+const VST_DIR = join(DATA_DIR, "low-sound-vst");
 const VST_NAME = /^[^\\/:*?"<>|]{1,120}\.dll$/i;
 
 function vstPath(name: unknown) {
@@ -405,19 +432,19 @@ function vstPath(name: unknown) {
     return join(VST_DIR, name);
 }
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_VST_LIST, () => {
+ipcMain.handle(IpcEvents.LOWSOUND_VST_LIST, () => {
     try {
         return readdirSync(VST_DIR).filter(f => VST_NAME.test(f) && statSync(join(VST_DIR, f)).isFile());
     } catch {
         return [];
     }
 });
-ipcMain.handle(IpcEvents.LOWMUSICAL_VST_FOLDER, () => {
+ipcMain.handle(IpcEvents.LOWSOUND_VST_FOLDER, () => {
     mkdirSync(VST_DIR, { recursive: true });
     return shell.openPath(VST_DIR);
 });
 /** Sons encore présents sur le disque (les autres ont été effacés à la main). */
-ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
+ipcMain.handle(IpcEvents.LOWSOUND_SOUND_LIST, () => {
     try {
         return readdirSync(SOUNDS_DIR).filter(f => SOUND_FILE.test(f) && statSync(join(SOUNDS_DIR, f)).isFile());
     } catch {
@@ -429,10 +456,10 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_SOUND_LIST, () => {
 // (ou vers la gauche s'il n'y a pas la place), puis reprend sa taille.
 const widened = new WeakMap<BrowserWindow, { extra: number; shift: number; }>();
 
-ipcMain.handle(IpcEvents.LOWMUSICAL_WIDEN, (_, extra: unknown) => {
+ipcMain.handle(IpcEvents.LOWSOUND_WIDEN, (_, extra: unknown) => {
     const want = typeof extra === "number" && Number.isFinite(extra) ? Math.max(0, Math.min(800, Math.round(extra))) : 0;
     for (const win of BrowserWindow.getAllWindows()) {
-        if (win.isDestroyed() || win.getTitle() !== "low-musical" || !win.webContents.getURL().includes("/popout")) continue;
+        if (win.isDestroyed() || win.getTitle() !== "low-sound" || !win.webContents.getURL().includes("/popout")) continue;
         if (win.isMaximized() || win.isFullScreen()) continue;
         const prev = widened.get(win) ?? { extra: 0, shift: 0 };
         if (prev.extra === want) continue;
@@ -449,10 +476,10 @@ ipcMain.handle(IpcEvents.LOWMUSICAL_WIDEN, (_, extra: unknown) => {
 });
 
 // ── Icône de la fenêtre du panneau (barre des tâches) ───────────────────────
-// La fenêtre du panneau (titre « low-musical ») a sa propre icône éclair et
+// La fenêtre du panneau (titre « low-sound ») a sa propre icône éclair et
 // son propre identifiant Windows : elle a son bouton dans la barre des tâches
 // au lieu d'être rangée sous l'icône de Discord.
-const PANEL_TITLE = "low-musical";
+const PANEL_TITLE = "low-sound";
 const decorated = new WeakSet<BrowserWindow>();
 
 function decoratePanel(win: BrowserWindow) {
@@ -466,7 +493,7 @@ function decoratePanel(win: BrowserWindow) {
             win.setAppDetails({ appId: "lowcord.lowsound", appIconPath: ico, appIconIndex: 0, relaunchDisplayName: "low-sound" });
         }
     } catch (e) {
-        console.error("[low-musical] icône du panneau :", e);
+        console.error("[low-sound] icône du panneau :", e);
     }
 }
 

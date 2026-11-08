@@ -19,6 +19,7 @@ import { createRequire } from "module";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
+import { brotliDecompressSync } from "zlib";
 
 const require = createRequire(import.meta.url);
 const esbuild = require("esbuild");
@@ -62,7 +63,7 @@ const realFiles = {
 const pluginsDir = resolve("src/lowplugins");
 const pluginNames = readdirSync(pluginsDir).filter(n => !n.startsWith("."));
 // Plugins du cœur propres à low-cord : leurs patches sont vérifiés aussi.
-const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts", "lowcordHeaderBar.ts", "lowcordProfileImages.ts", "lowcordMusical.tsx"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
+const CORE_PLUGINS = ["lowcordOptimizer.ts", "lowcordInterface.ts", "lowcordHeaderBar.ts", "lowcordProfileImages.ts", "lowcordSound.tsx"].map(f => resolve("src/plugins/_core", f).replaceAll("\\", "/"));
 const entry = `
 export { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 ${pluginNames.map((n, i) => `import p${i} from "@lowplugins/${n}"; export const plugin_${i} = p${i};`).join("\n")}
@@ -135,7 +136,14 @@ const sources = [
 for (const { path, cache } of sources) {
     let src;
     try {
-        src = readFileSync(path).toString("utf8");
+        const raw = readFileSync(path);
+        src = raw.toString("utf8");
+        // Discord met désormais ses scripts en cache compressés (brotli).
+        if (cache && !src.includes("(e,t,n){")) {
+            try {
+                src = brotliDecompressSync(raw).toString("utf8");
+            } catch { }
+        }
     } catch {
         continue; // fichier supprimé par Discord pendant la lecture
     }

@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — clé de la fenêtre du panneau et réglage « toujours au premier plan ».
+// low-sound — clé de la fenêtre du panneau et réglage « toujours au premier plan ».
 
 import { PopoutActions, PopoutWindowStore, useStateFromStores } from "@webpack/common";
 
 // Les fenêtres de Discord portent toutes une clé « DISCORD_… ».
 // (« _3 » : fenêtre transparente et nouvelle taille, on oublie l'ancienne.)
-export const WINDOW_KEY = "DISCORD_LOWMUSICAL_3";
+export const WINDOW_KEY = "DISCORD_LOWSOUND_3";
 
 export const usePanelOpen = () => useStateFromStores([PopoutWindowStore], () => PopoutWindowStore.getWindowOpen(WINDOW_KEY));
 export const useAlwaysOnTop = () => useStateFromStores([PopoutWindowStore], () => PopoutWindowStore.getIsAlwaysOnTop(WINDOW_KEY));

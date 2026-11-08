@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — blocs « Signal », « Égaliseur » et « Espace » du panneau.
+// low-sound — blocs « Signal », « Égaliseur » et « Espace » du panneau.
 // Signal : tout est visible, rangé par catégorie (Source, Profil, Dynamique,
 // Couleur, Stéréo, Nettoyage, Diffusion). Égaliseur : 10 bandes et, dessous,
 // 3 molettes de tonalité avec leurs préréglages rapides.
@@ -20,7 +20,7 @@ import { Card, Chip, cl, Dropdown, Group, Knob, Segmented, Slider, ToggleRow } f
 import {
     applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive,
     PREF_DEFAULTS, PROFILES, resetSound, saveEqCustom, savePrefs, setBitrate, setEq, setGain, setInput, setLatency,
-    setProcessing, setSpace, setTone, sourceLabel, TONE_PRESETS, useMusical,
+    setProcessing, setSpace, setTone, sourceLabel, TONE_PRESETS, useLowSound,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -119,7 +119,7 @@ function ResetAll() {
 }
 
 export function SignalCard({ act }: { act: Act; }) {
-    const music = useMusical();
+    const music = useLowSound();
     const p = getPrefs();
     const [inputs, setInputs] = useState<string[] | null>(null);
 
@@ -288,7 +288,7 @@ function EqSpectrum() {
 
 /** Module de tonalité sous l'égaliseur : 3 molettes, préréglages rapides, reset. */
 function ToneModule() {
-    useMusical();
+    useLowSound();
     const p = getPrefs();
     const current = Object.entries(TONE_PRESETS).find(([, v]) => v[0] === p.bass && v[1] === p.mid && v[2] === p.treble)?.[0];
     const flat = p.bass === 0 && p.mid === 0 && p.treble === 0;
@@ -314,7 +314,7 @@ function ToneModule() {
 }
 
 export function EqCard() {
-    useMusical();
+    useLowSound();
     const p = getPrefs();
     const presets = [...Object.keys(EQ_PRESETS), ...(p.eqCustom ? [EQ_CUSTOM] : [])];
 
@@ -396,7 +396,7 @@ const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
  * le place, en Auto on règle la distance du mouvement en tirant.
  */
 function RoomPad() {
-    useMusical();
+    useLowSound();
     const p = getPrefs();
     const padRef = useRef<HTMLDivElement>(null);
     const dotRef = useRef<HTMLSpanElement>(null);
@@ -461,7 +461,7 @@ function RoomPad() {
 }
 
 export function SpaceCard() {
-    useMusical();
+    useLowSound();
     const p = getPrefs();
 
     return (

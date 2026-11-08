@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — le panneau est sa propre fenêtre (sans cadre, système de
+// low-sound — le panneau est sa propre fenêtre (sans cadre, système de
 // fenêtres de Discord) : il s'ouvre centré sur Discord et se déplace en le
 // tenant par son en-tête, y compris sur un autre écran. Il est rendu par ce
 // même Discord : l'état des comptes et les réglages sont partagés, et le
@@ -13,7 +13,7 @@
 import { findComponentByCodeLazy } from "@webpack";
 import { PopoutActions, PopoutWindowStore } from "@webpack/common";
 
-import { MusicalPanel } from "./Panel";
+import { SoundPanel } from "./Panel";
 import { WINDOW_KEY } from "./popoutKey";
 
 // Cadre des fenêtres de Discord (thème, raccourcis, styles), ici sans barre de titre.
@@ -36,8 +36,8 @@ export function openPanel() {
     PopoutActions.open(
         WINDOW_KEY,
         key => (
-            <PopoutWindow windowKey={key} title="low-musical" withTitleBar={false} contentClassName="lc-mp-window-content">
-                <MusicalPanel onClose={closePanel} />
+            <PopoutWindow windowKey={key} title="low-sound" withTitleBar={false} contentClassName="lc-ls-window-content">
+                <SoundPanel onClose={closePanel} />
             </PopoutWindow>
         ),
         // Fond transparent : seuls les blocs du panneau sont visibles.

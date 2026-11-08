@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — onglet des réglages : installer, mettre à jour ou retirer le
+// low-sound — onglet des réglages : installer, mettre à jour ou retirer le
 // moteur. Module optionnel, mis à jour séparément de low-cord. Tout s'applique
 // tout de suite, sans redémarrer Discord : les comptes connectés repartent
 // seuls sur le nouveau moteur.
@@ -12,16 +12,16 @@
 import "@lowcord/styles.css";
 
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
-import type { MusicalStatus } from "@main/lowMusical";
+import type { SoundStatus } from "@main/lowSound";
 import { classNameFactory } from "@utils/css";
 import type { IconProps } from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
 
 import { engineReplaced, sessionSnapshot } from "./engine";
 
-const cl = classNameFactory("lc-mu-");
+const cl = classNameFactory("lc-lss-");
 
-export function MusicalIcon({ width = 20, height = 20 }: IconProps) {
+export function SoundIcon({ width = 20, height = 20 }: IconProps) {
     return (
         <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             {/* Éclair */}
@@ -41,8 +41,8 @@ const day = (iso?: string) => {
 
 type Action = "check" | "install" | "uninstall";
 
-function LowMusicalSettings() {
-    const [status, setStatus] = useState<MusicalStatus | null>(null);
+function LowSoundSettings() {
+    const [status, setStatus] = useState<SoundStatus | null>(null);
     const [running, setRunning] = useState<Action | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
@@ -53,23 +53,29 @@ function LowMusicalSettings() {
         setRunning(action);
         setError(null);
         setConfirmRemove(false);
+        const before = sessionSnapshot();
         try {
-            const before = sessionSnapshot();
             const wasInstalled = !!status?.installed;
-            const next = action === "install" ? await VencordNative.lowMusical.install()
-                : action === "uninstall" ? await VencordNative.lowMusical.uninstall()
-                    : await VencordNative.lowMusical.status();
+            const next = action === "install" ? await VencordNative.lowSound.install()
+                : action === "uninstall" ? await VencordNative.lowSound.uninstall()
+                    : await VencordNative.lowSound.status();
             setStatus(next);
             if (action !== "check") {
                 // Appliqué tout de suite : pas besoin de redémarrer Discord.
                 await engineReplaced(next.installed ? next.version ?? null : null, before);
-                doneNote = action === "uninstall" ? "low-musical a été retiré."
+                doneNote = action === "uninstall" ? "low-sound a été retiré."
                     : wasInstalled ? `Mis à jour en v${next.version} : c'est déjà actif${before.keys.length ? ", tes comptes se sont reconnectés" : ""}.`
                         : "Installé : le bouton est à côté de micro / casque, en bas à gauche.";
             }
         } catch (e: any) {
             // Les erreurs du processus principal arrivent préfixées par Electron.
             setError(String(e?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+            // Mise à jour ratée après l'arrêt du moteur : les comptes repartent
+            // sur le moteur déjà installé.
+            if (action === "install" && before.keys.length) {
+                const now = await VencordNative.lowSound.status().catch(() => null);
+                if (now?.installed) await engineReplaced(now.version ?? null, before).catch(() => { });
+            }
         } finally {
             setRunning(null);
             rerender(n => n + 1);
@@ -94,9 +100,9 @@ function LowMusicalSettings() {
         <SettingsTab>
             <div className={cl("card")}>
                 <div className={cl("head")}>
-                    <span className={cl("logo")}><MusicalIcon width={22} height={22} /></span>
+                    <span className={cl("logo")}><SoundIcon width={22} height={22} /></span>
                     <div className={cl("titles")}>
-                        <div className={cl("title")}>low-musical <span className={cl("tag")}>beta</span></div>
+                        <div className={cl("title")}>low-sound <span className={cl("tag")}>beta</span></div>
                         <div className={cl("sub")}>
                             Diffuse de la musique dans un salon vocal avec un ou plusieurs comptes du Token Importer :
                             spatialisation 8D, réverbe, égaliseur, gain, débit et latence réglables.
@@ -106,8 +112,8 @@ function LowMusicalSettings() {
 
                 {installed && !doneNote && (
                     <div className={cl("hint-row")}>
-                        <MusicalIcon width={16} height={16} />
-                        <span>Ouvre low-musical avec le bouton à côté de micro / casque, en bas à gauche.</span>
+                        <SoundIcon width={16} height={16} />
+                        <span>Ouvre low-sound avec le bouton à côté de micro / casque, en bas à gauche.</span>
                     </div>
                 )}
 
@@ -139,7 +145,7 @@ function LowMusicalSettings() {
 
                 {doneNote && !running && (
                     <div className={cl("hint-row")}>
-                        <MusicalIcon width={16} height={16} />
+                        <SoundIcon width={16} height={16} />
                         <span>{doneNote}</span>
                     </div>
                 )}
@@ -150,12 +156,12 @@ function LowMusicalSettings() {
 
                 {installed && (
                     <div className={cl("foot")}>
-                        <button className={cl("link")} disabled={!!running} onClick={() => VencordNative.lowMusical.openFolder()}>
+                        <button className={cl("link")} disabled={!!running} onClick={() => VencordNative.lowSound.openFolder()}>
                             Ouvrir le dossier
                         </button>
                         {confirmRemove ? (
                             <span className={cl("confirm")}>
-                                Retirer low-musical ?
+                                Retirer low-sound ?
                                 <button className={cl("link", "danger")} onClick={() => run("uninstall")}>Oui, désinstaller</button>
                                 <button className={cl("link")} onClick={() => setConfirmRemove(false)}>Annuler</button>
                             </span>
@@ -177,4 +183,4 @@ function LowMusicalSettings() {
     );
 }
 
-export default wrapTab(LowMusicalSettings, "low-musical");
+export default wrapTab(LowSoundSettings, "low-sound");

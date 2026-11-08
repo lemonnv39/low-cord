@@ -53,7 +53,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .worker_threads(4)
-            .thread_name("low-musical")
+            .thread_name("low-sound")
             .enable_all()
             .build()
             .expect("runtime tokio")

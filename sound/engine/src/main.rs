@@ -1,4 +1,4 @@
-//! low-musical — moteur audio (reprise du moteur WalkerCord).
+//! low-sound — moteur audio (reprise du moteur WalkerCord).
 //!
 //! Un ou plusieurs comptes se connectent au gateway Discord, rejoignent un salon
 //! vocal et y DIFFUSENT de l'audio (émission seule) : capture d'un périphérique

@@ -1925,8 +1925,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "low-musical-engine"
-version = "0.14.0"
+name = "low-sound-engine"
+version = "0.15.0"
 dependencies = [
  "base64 0.22.1",
  "cpal",

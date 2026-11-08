@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — bloc « Soundboard » (sous la spatialisation). Tes sons
+// low-sound — bloc « Soundboard » (sous la spatialisation). Tes sons
 // importés (mp3, wav, ogg, flac), gardés d'une session à l'autre. Chaque clic
 // lance le son par-dessus les autres : on peut spammer sans couper celui
 // d'avant. Clic droit sur un son : renommer, découper, supprimer.
@@ -15,7 +15,7 @@ import { ReactDOM, useRef, useState } from "@webpack/common";
 import { Card, cl, ContextMenu, Slider } from "./controls";
 import {
     deleteSound, getPrefs, getSoundErrors, importSounds, playSound, PREF_DEFAULTS, renameSound, setSbVolume, type SoundPad,
-    stopSounds, useMusical,
+    stopSounds, useLowSound,
 } from "./engine";
 import { SoundEditor } from "./SoundEditor";
 
@@ -32,7 +32,7 @@ const TrashIcon = () => icon("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3
 const CutIcon = () => icon("M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12", 11);
 
 export function SoundboardCard({ act }: { act: Act; }) {
-    const music = useMusical();
+    const music = useLowSound();
     const p = getPrefs();
     const errors = getSoundErrors();
     const fileRef = useRef<HTMLInputElement>(null);
@@ -51,7 +51,7 @@ export function SoundboardCard({ act }: { act: Act; }) {
     }
 
     // L'éditeur s'ouvre par-dessus tout le panneau.
-    const panel = cardRef.current?.closest(".lc-mp-panel");
+    const panel = cardRef.current?.closest(".lc-ls-panel");
 
     return (
         <div ref={cardRef} className={cl("card-sb-wrap")}>

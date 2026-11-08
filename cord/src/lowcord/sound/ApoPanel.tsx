@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — volet « Mini APO », ouvert par l'onglet sur le côté du
+// low-sound — volet « Mini APO », ouvert par l'onglet sur le côté du
 // panneau. On y colle (ou importe) un set Equalizer APO tel quel : il est lu
 // en direct, sa courbe s'affiche, et le moteur le joue avant la dynamique et
 // la protection. Les sets se gardent comme les préréglages.
@@ -16,7 +16,7 @@ import { APO_EXAMPLE, APO_FREQS as FREQS, apoResponse, type ApoStage, parseApo, 
 import { cl, Dropdown, Toggle } from "./controls";
 import {
     deleteApoSet, deleteIr, getApoError, getApoVst, getIrResponse, getPrefs, getVstFiles, importIrs, loadApoSet, openVstEditor, openVstFolder,
-refreshVstFiles, saveApoSet, setApoOn, setApoText, setVstParam, useMusical, type VstInfo,
+refreshVstFiles, saveApoSet, setApoOn, setApoText, setVstParam, useLowSound, type VstInfo,
 } from "./engine";
 
 type Act = (fn: () => Promise<unknown>) => void;
@@ -120,9 +120,9 @@ const ADD_LINES = [
 ];
 
 export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
-    useMusical();
+    useLowSound();
     const p = getPrefs();
-    const music = useMusical();
+    const music = useLowSound();
     const vstFiles = getVstFiles();
     const parsed = useMemo(() => parseApo(p.apoText, p.apoIrs, vstFiles), [p.apoText, p.apoIrs, vstFiles]);
     // Le dossier VST est relu régulièrement : un plugin déposé apparaît tout seul.
@@ -180,7 +180,7 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                 <button type="button" className={cl("icon-btn", "icon-btn-glass", saving && "icon-btn-on")} onClick={() => { setSaving(!saving); setName(p.apoName); }} title="Enregistrer ce set" aria-label="Enregistrer">
                     {icon("M5 3h11l3 3v15H5zM8 3v6h8V3M8 21v-7h8v7")}
                 </button>
-                <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => act(openVstFolder)} title="Ouvrir le dossier des plugins VST de low-musical (dépose tes .dll ici)" aria-label="Dossier VST">
+                <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => act(openVstFolder)} title="Ouvrir le dossier des plugins VST de low-sound (dépose tes .dll ici)" aria-label="Dossier VST">
                     {icon("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5 12 16l2.5-2.5")}
                 </button>
                 <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => fileRef.current?.click()} title="Importer un fichier .txt d'Equalizer APO" aria-label="Importer">

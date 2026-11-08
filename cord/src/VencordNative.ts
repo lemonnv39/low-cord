@@ -8,7 +8,7 @@ import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
 import type { Changes, UpdateStatus } from "@main/lowcordUpdater";
-import type { MusicalStatus } from "@main/lowMusical";
+import type { SoundStatus } from "@main/lowSound";
 import type { UserThemeHeader } from "@main/themes";
 import type { UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
@@ -114,42 +114,42 @@ export default {
         changes: (since?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since),
     },
 
-    /** low-musical : installation du moteur (voir src/main/lowMusical.ts). */
-    lowMusical: {
-        status: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_STATUS),
+    /** low-sound : installation du moteur (voir src/main/lowSound.ts). */
+    lowSound: {
+        status: () => invoke<SoundStatus>(IpcEvents.LOWSOUND_STATUS),
         /** Installe ou met à jour vers la dernière version publiée. */
-        install: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_INSTALL),
-        uninstall: () => invoke<MusicalStatus>(IpcEvents.LOWMUSICAL_UNINSTALL),
-        openFolder: () => invoke<void>(IpcEvents.LOWMUSICAL_OPEN_FOLDER),
+        install: () => invoke<SoundStatus>(IpcEvents.LOWSOUND_INSTALL),
+        uninstall: () => invoke<SoundStatus>(IpcEvents.LOWSOUND_UNINSTALL),
+        openFolder: () => invoke<void>(IpcEvents.LOWSOUND_OPEN_FOLDER),
         /** Envoie une commande au moteur (lancé à la demande). */
-        call: <T = any>(cmd: string, args?: Record<string, unknown>) => invoke<T>(IpcEvents.LOWMUSICAL_ENGINE_CALL, cmd, args ?? {}),
-        isRunning: () => invoke<boolean>(IpcEvents.LOWMUSICAL_ENGINE_RUNNING),
+        call: <T = any>(cmd: string, args?: Record<string, unknown>) => invoke<T>(IpcEvents.LOWSOUND_ENGINE_CALL, cmd, args ?? {}),
+        isRunning: () => invoke<boolean>(IpcEvents.LOWSOUND_ENGINE_RUNNING),
         /** Version installée (null = pas installé), lue sur le disque, sans réseau. */
-        installedVersion: () => invoke<string | null>(IpcEvents.LOWMUSICAL_INSTALLED),
+        installedVersion: () => invoke<string | null>(IpcEvents.LOWSOUND_INSTALLED),
         /** Déplacement de la fenêtre du panneau : elle suit la souris jusqu'à dragEnd. */
-        dragStart: () => invoke<boolean>(IpcEvents.LOWMUSICAL_DRAG_START),
-        dragEnd: () => invoke<void>(IpcEvents.LOWMUSICAL_DRAG_END),
+        dragStart: () => invoke<boolean>(IpcEvents.LOWSOUND_DRAG_START),
+        dragEnd: () => invoke<void>(IpcEvents.LOWSOUND_DRAG_END),
         /** Fenêtre du panneau invisible en partage d'écran. */
-        setStreamProof: (on: boolean) => invoke<number>(IpcEvents.LOWMUSICAL_STREAM_PROOF, on),
+        setStreamProof: (on: boolean) => invoke<number>(IpcEvents.LOWSOUND_STREAM_PROOF, on),
         /** soundboard : copie un son importé, renvoie son nom de fichier */
-        importSound: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_SOUND_IMPORT, name, data),
-        deleteSound: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_SOUND_DELETE, file),
-        listSounds: () => invoke<string[]>(IpcEvents.LOWMUSICAL_SOUND_LIST),
+        importSound: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWSOUND_SOUND_IMPORT, name, data),
+        deleteSound: (file: string) => invoke<void>(IpcEvents.LOWSOUND_SOUND_DELETE, file),
+        listSounds: () => invoke<string[]>(IpcEvents.LOWSOUND_SOUND_LIST),
         /** contenu d'un son importé (forme d'onde de l'éditeur) */
-        readSound: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_SOUND_READ, file),
+        readSound: (file: string) => invoke<Uint8Array>(IpcEvents.LOWSOUND_SOUND_READ, file),
         /** élargit la fenêtre du panneau (volet Mini APO), 0 = taille d'origine */
-        widen: (extra: number) => invoke<void>(IpcEvents.LOWMUSICAL_WIDEN, extra),
+        widen: (extra: number) => invoke<void>(IpcEvents.LOWSOUND_WIDEN, extra),
         /** Mini APO : réponses impulsionnelles (Convolution) */
-        importIr: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWMUSICAL_IR_IMPORT, name, data),
-        deleteIr: (file: string) => invoke<void>(IpcEvents.LOWMUSICAL_IR_DELETE, file),
-        readIr: (file: string) => invoke<Uint8Array>(IpcEvents.LOWMUSICAL_IR_READ, file),
-        /** Mini APO : plugins VST déposés dans le dossier de low-musical */
-        listVst: () => invoke<string[]>(IpcEvents.LOWMUSICAL_VST_LIST),
-        openVstFolder: () => invoke<string>(IpcEvents.LOWMUSICAL_VST_FOLDER),
-        stop: () => invoke<void>(IpcEvents.LOWMUSICAL_ENGINE_STOP),
+        importIr: (name: string, data: Uint8Array) => invoke<string>(IpcEvents.LOWSOUND_IR_IMPORT, name, data),
+        deleteIr: (file: string) => invoke<void>(IpcEvents.LOWSOUND_IR_DELETE, file),
+        readIr: (file: string) => invoke<Uint8Array>(IpcEvents.LOWSOUND_IR_READ, file),
+        /** Mini APO : plugins VST déposés dans le dossier de low-sound */
+        listVst: () => invoke<string[]>(IpcEvents.LOWSOUND_VST_LIST),
+        openVstFolder: () => invoke<string>(IpcEvents.LOWSOUND_VST_FOLDER),
+        stop: () => invoke<void>(IpcEvents.LOWSOUND_ENGINE_STOP),
         /** Événements du moteur : { event: "status", data } ou { event: "exit", reason }. */
         onEvent(cb: (msg: any) => void) {
-            ipcRenderer.on(IpcEvents.LOWMUSICAL_EVENT, (_, msg) => cb(msg));
+            ipcRenderer.on(IpcEvents.LOWSOUND_EVENT, (_, msg) => cb(msg));
         },
     },
 

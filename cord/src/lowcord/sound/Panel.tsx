@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — panneau de gestion. Il vit dans sa propre fenêtre (voir
+// low-sound — panneau de gestion. Il vit dans sa propre fenêtre (voir
 // window.tsx), sur une seule page :
 //   Session · [titre + visualisation du son en direct] · Espace
 //             [ Signal ][ Égaliseur ]                 Soundboard
@@ -26,7 +26,7 @@ import { EqCard, SignalCard, SpaceCard } from "./Effects";
 import {
     type AccountState, applyPreset, connectAccounts, deleteUserPreset, disconnect, type EngineState, errorText, exportPreset,
     followMe, getPrefs, importPreset, isActive, isOutdated, isReady, joinMe, PREF_DEFAULTS, PRESET_CUSTOM, PRESETS, releaseEngineIfIdle, savePrefs,
-    saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useMusical, wantMeter,
+    saveUserPreset, setFakeDeafen, setStreamProof, setVolume, stopFollowing, syncBitrate, useLowSound, wantMeter,
 widenPanel, } from "./engine";
 import { setAlwaysOnTop, useAlwaysOnTop } from "./popoutKey";
 import { SoundboardCard } from "./Soundboard";
@@ -201,7 +201,7 @@ function useMyVoice() {
 // ── Session ─────────────────────────────────────────────────────────────────
 
 function SessionCard({ act, pending }: { act: Act; pending: boolean; }) {
-    const music = useMusical();
+    const music = useLowSound();
     const voice = useMyVoice();
     const { accounts, groups } = useAccountGroups();
     const [adding, setAdding] = useState(false);
@@ -322,7 +322,7 @@ const SaveIcon = () => svg(<><path d="M5 3h11l3 3v15H5z" /><path d="M8 3v6h8V3M8
 const MoreIcon = () => svg(<><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></>, 15);
 
 function PresetBar({ act }: { act: Act; }) {
-    useMusical();
+    useLowSound();
     const prefs = getPrefs();
     const [form, setForm] = useState<"save" | "import" | "menu" | null>(null);
     const [text, setText] = useState("");
@@ -342,7 +342,7 @@ function PresetBar({ act }: { act: Act; }) {
                 <div className={cl("preset-pick")}>
                     <Dropdown
                         value={prefs.preset}
-                        placeholder={prefs.preset === PRESET_CUSTOM ? "Perso (réglé à la main)" : "Préréglages low-musical"}
+                        placeholder={prefs.preset === PRESET_CUSTOM ? "Perso (réglé à la main)" : "Préréglages low-sound"}
                         choices={[
                             ...Object.keys(PRESETS).map(name => ({ value: name, label: name })),
                             ...prefs.userPresets.map(p => ({
@@ -360,7 +360,7 @@ function PresetBar({ act }: { act: Act; }) {
                 <button type="button" className={cl("icon-btn", "icon-btn-glass")} onClick={() => setForm(form === "save" ? null : "save")} title="Enregistrer le son actuel comme préréglage" aria-label="Enregistrer"><SaveIcon /></button>
                 <button type="button" className={cl("icon-btn", "icon-btn-glass", form === "menu" && "icon-btn-on")} onClick={() => setForm(form === "menu" ? null : "menu")} title="Exporter, importer, supprimer" aria-label="Plus"><MoreIcon /></button>
                 <span className={cl("stage-sep")} />
-                <Chip on={prefs.streamProof} onClick={() => act(async () => { await setStreamProof(!prefs.streamProof); })} title="La fenêtre de low-musical devient invisible quand tu partages ton écran">Anti-stream</Chip>
+                <Chip on={prefs.streamProof} onClick={() => act(async () => { await setStreamProof(!prefs.streamProof); })} title="La fenêtre de low-sound devient invisible quand tu partages ton écran">Anti-stream</Chip>
             </div>
 
             {form === "menu" && (
@@ -392,7 +392,7 @@ function PresetBar({ act }: { act: Act; }) {
 // ── Fenêtre ─────────────────────────────────────────────────────────────────
 
 /** Éléments où un clic n'attrape pas la fenêtre. */
-const INTERACTIVE = "button, input, label, a, textarea, canvas, form, [role=listbox], [role=option], [role=slider], [role=menu], .lc-mp-pad, .lc-mp-scroll, .lc-mp-modal-back";
+const INTERACTIVE = "button, input, label, a, textarea, canvas, form, [role=listbox], [role=option], [role=slider], [role=menu], .lc-ls-pad, .lc-ls-scroll, .lc-ls-modal-back";
 
 /** Attraper un fond vide déplace la fenêtre (elle suit la souris tant que le bouton est tenu). */
 function useWindowDrag() {
@@ -405,16 +405,16 @@ function useWindowDrag() {
         const end = () => {
             doc.removeEventListener("pointerup", end, true);
             doc.defaultView?.removeEventListener("blur", end);
-            VencordNative.lowMusical.dragEnd();
+            VencordNative.lowSound.dragEnd();
         };
         doc.addEventListener("pointerup", end, true);
         doc.defaultView?.addEventListener("blur", end);
-        VencordNative.lowMusical.dragStart();
+        VencordNative.lowSound.dragStart();
     };
 }
 
 function StatusPill() {
-    const music = useMusical();
+    const music = useLowSound();
     const accounts = Object.values(music.accounts);
     const live = accounts.filter(a => a.state === "in_voice").length;
     const ready = accounts.filter(isActive).length;
@@ -443,7 +443,7 @@ const APO_WIDTH = 440;
 let introPlayed = false;
 
 function PanelBody({ onClose }: { onClose(): void; }) {
-    useMusical();
+    useLowSound();
     const rootRef = useRef<HTMLDivElement>(null);
     const [intro] = useState(() => {
         const first = !introPlayed;
@@ -465,7 +465,7 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     // anti-stream réappliqué à chaque ouverture si l'option est active.
     useEffect(() => {
         const doc = rootRef.current?.ownerDocument;
-        if (doc) doc.title = "low-musical";
+        if (doc) doc.title = "low-sound";
         if (!getPrefs().streamProof) return;
         const timer = setTimeout(() => setStreamProof(true).catch(() => { }), 400);
         return () => clearTimeout(timer);
@@ -522,7 +522,7 @@ function PanelBody({ onClose }: { onClose(): void; }) {
                     </div>
                     {(isOutdated() || error) && (
                         <div className={cl("banner")} onClick={() => setError(null)} title={error ? "Cliquer pour masquer" : undefined}>
-                            {isOutdated() ? "Moteur trop ancien : Paramètres → low-musical → Mettre à jour (sans redémarrer Discord)." : error}
+                            {isOutdated() ? "Moteur trop ancien : Paramètres → low-sound → Mettre à jour (sans redémarrer Discord)." : error}
                         </div>
                     )}
                 </div>
@@ -549,4 +549,4 @@ function PanelBody({ onClose }: { onClose(): void; }) {
     );
 }
 
-export const MusicalPanel = ErrorBoundary.wrap(PanelBody, { noop: true });
+export const SoundPanel = ErrorBoundary.wrap(PanelBody, { noop: true });

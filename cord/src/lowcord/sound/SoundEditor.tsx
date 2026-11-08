@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — découpe d'un son de la soundboard, façon Audacity : forme
+// low-sound — découpe d'un son de la soundboard, façon Audacity : forme
 // d'onde, on glisse pour choisir la partie gardée, poignées de début et de
 // fin, zoom à la molette, écoute de la sélection (sur ton PC seulement).
 // La découpe n'abîme jamais le fichier : seuls le début et la fin sont gardés.

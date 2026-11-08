@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — composants du panneau : carte, curseur, interrupteur,
+// low-sound — composants du panneau : carte, curseur, interrupteur,
 // pastilles, sélecteur segmenté, menu déroulant.
 
 import { classNameFactory } from "@utils/css";
 import { useEffect, useRef, useState } from "@webpack/common";
 import type { CSSProperties, ReactNode } from "react";
 
-export const cl = classNameFactory("lc-mp-");
+export const cl = classNameFactory("lc-ls-");
 
 /** Bloc du panneau : titre (avec actions à droite) et contenu. */
 export function Card({ title, icon, extra, className, children }: {

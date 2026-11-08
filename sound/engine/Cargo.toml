@@ -1,7 +1,7 @@
 [package]
-name = "low-musical-engine"
-version = "0.14.0"
-description = "Moteur audio de low-musical : diffuse de l'audio dans un salon vocal Discord"
+name = "low-sound-engine"
+version = "0.15.0"
+description = "Moteur audio de low-sound : diffuse de l'audio dans un salon vocal Discord"
 authors = ["shitday"]
 edition = "2021"
 publish = false
@@ -15,7 +15,7 @@ publish = false
 # Prérequis de build : cmake + compilateur C++ MSVC (songbird compile Opus).
 
 [[bin]]
-name = "low-musical-engine"
+name = "low-sound-engine"
 path = "src/main.rs"
 
 [dependencies]

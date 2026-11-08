@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — visualisation du son en direct derrière le titre : un
+// low-sound — visualisation du son en direct derrière le titre : un
 // faisceau de fibres lumineuses horizontales (argent, légèrement froid). Il
 // suit les vraies mesures du moteur (le son que les comptes diffusent) :
 // graves au centre, aigus vers les bords.
@@ -189,5 +189,5 @@ export function Visualizer() {
         return () => win.cancelAnimationFrame(raf);
     }, []);
 
-    return <canvas ref={ref} className="lc-mp-visualizer" aria-hidden="true" />;
+    return <canvas ref={ref} className="lc-ls-visualizer" aria-hidden="true" />;
 }

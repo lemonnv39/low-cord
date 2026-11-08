@@ -280,7 +280,7 @@ pub fn wake_pump() {
     static STARTED: OnceLock<()> = OnceLock::new();
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
-            .name("low-musical-horloge".into())
+            .name("low-sound-horloge".into())
             .spawn(|| {
                 const FRAMES: usize = OUT_RATE as usize / 100;
                 let period = std::time::Duration::from_millis(10);

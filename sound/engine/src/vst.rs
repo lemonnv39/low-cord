@@ -12,7 +12,7 @@
 //!    (une copie par canal) ;
 //!  - le plugin reçoit 48 kHz et des blocs de 4096 échantillons au plus.
 //!
-//! Les plugins ne sont chargés que depuis le dossier VST de low-musical
+//! Les plugins ne sont chargés que depuis le dossier VST de low-sound
 //! (chemin vérifié par low-cord), jamais automatiquement.
 //!
 //! Le panneau du plugin (son interface) s'ouvre dans une fenêtre Windows de
@@ -135,7 +135,7 @@ extern "C" fn host_callback(
         AM_GET_SAMPLE_RATE => OUT_RATE as isize,
         AM_GET_BLOCK_SIZE => MAX_BLOCK as isize,
         AM_GET_VENDOR_STRING => copy(b"low-cord"),
-        AM_GET_PRODUCT_STRING => copy(b"low-musical"),
+        AM_GET_PRODUCT_STRING => copy(b"low-sound"),
         AM_GET_VENDOR_VERSION => 1,
         AM_WILL_REPLACE_OR_ACCUMULATE => 1,
         AM_SIZE_WINDOW => {
@@ -328,7 +328,7 @@ impl Plugin {
     /// Charge un plugin depuis sa DLL (point d'entrée VSTPluginMain ou main).
     pub fn load(path: &str) -> Result<Plugin, String> {
         // SAFETY : on charge une DLL choisie par l'utilisateur dans le dossier VST
-        // de low-musical ; elle tourne dans ce processus séparé.
+        // de low-sound ; elle tourne dans ce processus séparé.
         let lib = unsafe { libloading::Library::new(path) }.map_err(|e| {
             let text = e.to_string();
             if text.contains("193") {
@@ -637,7 +637,7 @@ pub fn serve<W: Write + Send + 'static>(
                         let p = guard.as_ref().ok_or("aucun plugin chargé")?;
                         (
                             p.instances[0].effect as usize,
-                            format!("{} — low-musical", p.name),
+                            format!("{} — low-sound", p.name),
                             p.has_editor(),
                         )
                     };
@@ -758,7 +758,7 @@ impl Bridge {
             let waiting = waiting.clone();
             let alive = alive.clone();
             std::thread::Builder::new()
-                .name("low-musical-vst".into())
+                .name("low-sound-vst".into())
                 .spawn(move || {
                     while let Ok((tag, id, body)) = read_msg(&mut stdout) {
                         if let Some(tx) = lock(&waiting).remove(&id) {
@@ -1388,7 +1388,7 @@ mod gui {
             unsafe { SetForegroundWindow(existing) };
             return Ok(());
         }
-        let class = wide("LowMusicalVstPanel");
+        let class = wide("LowSoundVstPanel");
         let title = wide(title);
         let (w, h) = editor_size();
         let (ow, oh) = outer(w, h);
@@ -1435,7 +1435,7 @@ mod gui {
             // hérité du lancement : le second affiche à coup sûr.
             ShowWindow(hwnd, SW_SHOWNORMAL);
             ShowWindow(hwnd, SW_SHOWNORMAL);
-            // Devant tout le reste (la fenêtre du panneau low-musical peut être
+            // Devant tout le reste (la fenêtre du panneau low-sound peut être
             // « toujours au premier plan »), puis comportement normal.
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);

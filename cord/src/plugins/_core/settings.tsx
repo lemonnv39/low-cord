@@ -20,8 +20,8 @@ import { definePluginSettings } from "@api/Settings";
 import { MainSettingsIcon, PlaceholderIcon, PluginsIcon, VesktopSettingsIcon } from "@components/Icons";
 import { LOWCORD_NAME } from "@lowcord/constants";
 import LowCordTab from "@lowcord/LowCordTab";
-import LowMusicalTab, { MusicalIcon } from "@lowcord/musical/LowMusicalTab";
 import LowPluginsTab from "@lowcord/plugins/LowPluginsTab";
+import LowSoundTab, { SoundIcon } from "@lowcord/sound/LowSoundTab";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
 import definePlugin, { IconProps, OptionType } from "@utils/types";
@@ -170,7 +170,7 @@ export default definePlugin({
 
         const { buildEntry } = this;
 
-        // low-cord : section réduite à "low-cord" + "Plugins" + "low-musical" (pas de Themes/Updater/Cloud/Backup/Patch Helper).
+        // low-cord : section réduite à "low-cord" + "Plugins" + "low-sound" (pas de Themes/Updater/Cloud/Backup/Patch Helper).
         const vencordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "vencord_main",
@@ -184,12 +184,12 @@ export default definePlugin({
                 Component: LowPluginsTab,
                 Icon: PluginsIcon
             }),
-            // low-musical : module optionnel, installé depuis cet onglet.
+            // low-sound : module optionnel, installé depuis cet onglet.
             buildEntry({
-                key: "vencord_lowmusical",
-                title: "low-musical",
-                Component: LowMusicalTab,
-                Icon: MusicalIcon
+                key: "vencord_lowsound",
+                title: "low-sound",
+                Component: LowSoundTab,
+                Icon: SoundIcon
             }),
             ...this.customEntries.map(buildEntry),
             // TODO: Remove deprecated customSections in a future update

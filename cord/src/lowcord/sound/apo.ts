@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-musical — Mini APO : lecture d'un « set » Equalizer APO (le texte de
+// low-sound — Mini APO : lecture d'un « set » Equalizer APO (le texte de
 // config.txt), traduit en étapes pour le moteur. Mêmes règles qu'APO :
 //  - Preamp: -6 dB
 //  - Filter: ON PK|PEQ|Modal|LP|LPQ|HP|HPQ|BP|LS|LSC|HS|HSC|NO|AP Fc … Hz [Gain … dB] [Q …|BW Oct …]
@@ -248,7 +248,7 @@ function parseCopy(params: string): { m: [number, number, number, number]; c: [n
 
 const IGNORED: Record<string, string> = {
     INCLUDE: "Include : colle directement le contenu du fichier",
-    DEVICE: "Device : inutile ici (low-musical a sa propre sortie)",
+    DEVICE: "Device : inutile ici (low-sound a sa propre sortie)",
     STAGE: "Stage : inutile ici",
     IF: "conditions (If) : non prises en charge",
     ELSEIF: "conditions : non prises en charge",

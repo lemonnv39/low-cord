@@ -1,9 +1,9 @@
-name: low-musical — build & publish engine
+name: low-sound — build & publish engine
 
-# Moteur audio de low-musical (musical/engine), indépendant de low-cord :
+# Moteur audio de low-sound (sound/engine), indépendant de low-cord :
 # sa propre CI, sa propre branche de publication, ses propres mises à jour.
-# Publie low-musical-engine.exe + manifest.json sur la branche orpheline
-# `musical-builds` (un seul commit, remplacé à chaque version : la branche ne
+# Publie low-sound-engine.exe + manifest.json sur la branche orpheline
+# `sound-builds` (un seul commit, remplacé à chaque version : la branche ne
 # grossit pas). low-cord compare le sha256 du manifeste à l'installation.
 # Les PR ne font que vérifier.
 
@@ -11,19 +11,19 @@ on:
   push:
     branches: [main]
     paths:
-      - "musical/**"
-      - ".github/workflows/musical.yml"
+      - "sound/**"
+      - ".github/workflows/sound.yml"
   pull_request:
     paths:
-      - "musical/**"
-      - ".github/workflows/musical.yml"
+      - "sound/**"
+      - ".github/workflows/sound.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: musical-${{ github.ref }}
+  group: sound-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: musical/engine
+        working-directory: sound/engine
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +42,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: musical/engine
+          workspaces: sound/engine
 
       - name: Format
         run: cargo fmt -- --check
@@ -62,7 +62,7 @@ jobs:
         with:
           tool: cargo-audit
 
-      # Alertes connues et justifiées : musical/engine/.cargo/audit.toml.
+      # Alertes connues et justifiées : sound/engine/.cargo/audit.toml.
       - name: Audit des dépendances
         run: cargo audit
 
@@ -71,7 +71,7 @@ jobs:
       - name: Vérifier le moteur
         run: |
           set -euo pipefail
-          EXE=target/release/low-musical-engine.exe
+          EXE=target/release/low-sound-engine.exe
           WANT=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           GOT=$("$EXE" --version | tr -d '\r')
           test "$GOT" = "$WANT" || { echo "::error::version $GOT au lieu de $WANT"; exit 1; }
@@ -80,24 +80,24 @@ jobs:
           grep -q '"id":1,"ok":true,"result":"'"$WANT"'"' <<<"$OUT" || { echo "::error::réponse version absente"; exit 1; }
           grep -q '"id":2,"ok":true' <<<"$OUT" || { echo "::error::réponse status absente"; exit 1; }
 
-      - name: Publier sur la branche musical-builds
+      - name: Publier sur la branche sound-builds
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           REPO_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
         run: |
           set -euo pipefail
-          EXE=target/release/low-musical-engine.exe
+          EXE=target/release/low-sound-engine.exe
           VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          OUT="$RUNNER_TEMP/musical-builds"
+          OUT="$RUNNER_TEMP/sound-builds"
           rm -rf "$OUT" && mkdir -p "$OUT"
           cp "$EXE" "$OUT/"
           cat > "$OUT/manifest.json" <<JSON
           {
-            "name": "low-musical-engine",
+            "name": "low-sound-engine",
             "version": "${VERSION}",
             "sha": "${GITHUB_SHA}",
             "short": "${GITHUB_SHA::7}",
-            "file": "low-musical-engine.exe",
+            "file": "low-sound-engine.exe",
             "sha256": "$(sha256sum "$EXE" | cut -d' ' -f1)",
             "size": $(stat -c %s "$EXE"),
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -106,10 +106,10 @@ jobs:
           cat "$OUT/manifest.json"
 
           cd "$OUT"
-          git init --quiet -b musical-builds
+          git init --quiet -b sound-builds
           git config user.name "low-cord-ci"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add low-musical-engine.exe manifest.json
-          git commit --quiet -m "musical: low-musical-engine ${VERSION} @${GITHUB_SHA::7}"
-          git push --quiet --force "$REPO_URL" musical-builds
+          git add low-sound-engine.exe manifest.json
+          git commit --quiet -m "sound: low-sound-engine ${VERSION} @${GITHUB_SHA::7}"
+          git push --quiet --force "$REPO_URL" sound-builds
           echo "Publié : $(git rev-parse HEAD)"
