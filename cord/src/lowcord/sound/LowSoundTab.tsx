@@ -21,9 +21,9 @@ import { engineReplaced, sessionSnapshot } from "./engine";
 
 const cl = classNameFactory("lc-lss-");
 
-export function SoundIcon({ width = 20, height = 20 }: IconProps) {
+export function SoundIcon({ width = 20, height = 20, color }: IconProps & { color?: string; }) {
     return (
-        <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" style={color ? { color } : undefined} aria-hidden="true">
             {/* Éclair */}
             <path d="M13.6 1.6a.8.8 0 0 0-1.4-.5L2.9 12.6a.8.8 0 0 0 .6 1.3h7.6l-1.3 8.5a.8.8 0 0 0 1.4.6l9.6-11.6a.8.8 0 0 0-.6-1.3h-7.6z" />
         </svg>

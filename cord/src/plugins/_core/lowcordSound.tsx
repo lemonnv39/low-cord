@@ -27,15 +27,13 @@ function SoundButton(props: { nameplate?: unknown; }) {
 
     const accounts = Object.values(music.accounts);
     const live = accounts.some(a => a.state === "in_voice");
-    // Actif (au moins un compte connecté) : l'éclair passe au rouge, comme le micro coupé.
-    const active = accounts.some(isActive);
+    const connected = accounts.some(isActive);
     return (
         <PanelButton
-            tooltipText={live ? "low-sound · en diffusion" : active ? "low-sound · actif" : "low-sound"}
+            tooltipText={live ? "low-sound · en diffusion" : connected ? "low-sound · comptes connectés" : open ? "low-sound · ouvert" : "low-sound"}
+            // Rouge tant que la fenêtre de low-sound est ouverte (comme le micro coupé).
             icon={() => (
-                <span style={{ display: "flex", color: active ? "var(--status-danger, #f23f43)" : undefined }}>
-                    <SoundIcon width={20} height={20} />
-                </span>
+                <SoundIcon width={20} height={20} color={open ? "var(--status-danger, #f23f43)" : undefined} />
             )}
             role="switch"
             ariaChecked={open}
