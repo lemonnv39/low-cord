@@ -50,6 +50,15 @@ export interface SoundState {
     following?: boolean;
     /** un plugin VST du Mini APO s'est arrêté (message du moteur) */
     vstError?: string | null;
+    /** installation / mise à jour en cours (barre de progression des Paramètres) */
+    install?: InstallProgress | null;
+}
+
+export interface InstallProgress {
+    phase: "download" | "verify" | "install";
+    received: number;
+    total: number;
+    version: string;
 }
 
 /** Réglages gardés d'une session à l'autre et renvoyés au moteur à chaque connexion. */
@@ -329,6 +338,15 @@ function wire() {
     if (wired) return;
     wired = true;
     VencordNative.lowSound.onEvent(msg => {
+        if (msg?.event === "install") {
+            const { phase } = msg;
+            set({
+                install: phase === "download" || phase === "verify" || phase === "install"
+                    ? { phase, received: Number(msg.received) || 0, total: Number(msg.total) || 0, version: String(msg.version ?? "") }
+                    : null,
+            });
+            return;
+        }
         if (msg?.event === "meter" && Array.isArray(msg.bands)) {
             meter = {
                 level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands,

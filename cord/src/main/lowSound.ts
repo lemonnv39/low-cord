@@ -164,10 +164,29 @@ async function install(): Promise<SoundStatus> {
         const latest = await latestManifest();
         const res = await net.fetch(`https://raw.githubusercontent.com/${LOWCORD_REPO}/${latest.commit}/${EXE_NAME}`, { headers: { "User-Agent": "low-cord" } });
         if (!res.ok) throw new Error(`téléchargement : HTTP ${res.status}`);
-        const data = Buffer.from(await res.arrayBuffer());
+        // Lu morceau par morceau : la progression s'affiche dans les Paramètres.
+        const chunks: Uint8Array[] = [];
+        let received = 0, lastSent = 0;
+        progress("download", 0, latest.size, latest.version);
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("téléchargement impossible");
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (received > MAX_SIZE) throw new Error("fichier trop gros");
+            if (Date.now() - lastSent > 80) {
+                lastSent = Date.now();
+                progress("download", received, latest.size, latest.version);
+            }
+        }
+        const data = Buffer.concat(chunks);
+        progress("verify", received, latest.size, latest.version);
         if (data.length !== latest.size) throw new Error("fichier incomplet");
         if (createHash("sha256").update(data).digest("hex") !== latest.sha256) throw new Error("empreinte incorrecte : fichier refusé");
 
+        progress("install", received, latest.size, latest.version);
         mkdirSync(DIR, { recursive: true });
         writeFileSync(tmp, data);
         const got = await engineVersion(tmp);
@@ -180,8 +199,14 @@ async function install(): Promise<SoundStatus> {
     } finally {
         rmSync(tmp, { force: true });
         busy = false;
+        progress("done", 0, 0, "");
     }
     return status();
+}
+
+/** Étape de l'installation, envoyée à Discord (barre de progression). */
+function progress(phase: "download" | "verify" | "install" | "done", received: number, total: number, version: string) {
+    broadcast({ event: "install", phase, received, total, version });
 }
 
 async function uninstall(): Promise<SoundStatus> {

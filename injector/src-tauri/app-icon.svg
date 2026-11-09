@@ -1,5 +1,5 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- low-cord (shitday) : prompt de terminal "l_" blanc sur noir, coins francs -->
+  <!-- low-cord : prompt de terminal "l_" blanc sur noir, coins francs -->
   <rect width="1024" height="1024" rx="96" fill="#0a0a0a"/>
   <rect x="40" y="40" width="944" height="944" rx="64" fill="none" stroke="#2e2e2e" stroke-width="16"/>
   <!-- chevron de prompt -->

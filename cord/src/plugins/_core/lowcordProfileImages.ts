@@ -13,7 +13,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "LowCordProfileImages",
     description: "Shared click / right-click on profile avatars and banners for low-cord plugins",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 

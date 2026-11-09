@@ -4,22 +4,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-sound — onglet des réglages : installer, mettre à jour ou retirer le
-// moteur. Module optionnel, mis à jour séparément de low-cord. Tout s'applique
-// tout de suite, sans redémarrer Discord : les comptes connectés repartent
-// seuls sur le nouveau moteur.
+// low-sound — onglet des réglages : présentation, installation, mise à jour
+// ou retrait du moteur. Module optionnel, mis à jour séparément de low-cord.
+// Tout s'applique tout de suite, sans redémarrer Discord : les comptes
+// connectés repartent seuls sur le nouveau moteur. Le téléchargement affiche
+// sa progression (téléchargement, vérification de l'empreinte, installation).
 
 import "@lowcord/styles.css";
 
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
+import { ShinyLogo } from "@lowcord/ShinyLogo";
 import type { SoundStatus } from "@main/lowSound";
 import { classNameFactory } from "@utils/css";
 import type { IconProps } from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
+import banner from "file://../assets/banner-lowsound.png?base64";
 
-import { engineReplaced, sessionSnapshot } from "./engine";
+import { engineReplaced, sessionSnapshot, useLowSound } from "./engine";
 
 const cl = classNameFactory("lc-lss-");
+const BANNER = `data:image/png;base64,${banner}`;
 
 export function SoundIcon({ width = 20, height = 20, color }: IconProps & { color?: string; }) {
     return (
@@ -41,7 +45,29 @@ const day = (iso?: string) => {
 
 type Action = "check" | "install" | "uninstall";
 
+const STEPS = [
+    { title: "Installe le moteur", text: "Un clic ci-dessus. Il est téléchargé depuis le repo low-cord et son empreinte est vérifiée." },
+    { title: "Ajoute des comptes dédiés", text: "Dans le Token Importer de low-cord. Utilise des comptes à part, pas ton compte principal." },
+    { title: "Ouvre low-sound", text: "Avec l'éclair à côté de micro / casque, en bas à gauche. Connecte tes comptes, puis « Rejoindre ma vocale »." },
+];
+
+const FEATURES = [
+    { title: "Multi-comptes", text: "Autant de comptes que tu veux, qui suivent ta vocale." },
+    { title: "Traitement audio", text: "Compresseur, limiteur, égaliseur 10 bandes, tonalité." },
+    { title: "Spatialisation 8D", text: "Son qui tourne autour de la tête, pièce et réverbe." },
+    { title: "Soundboard", text: "Tes sons, superposables, découpables." },
+    { title: "Mini APO", text: "Tes sets Equalizer APO, IR et plugins VST." },
+    { title: "Discret", text: "Anti-stream, fenêtre à part, rien à redémarrer." },
+];
+
+const PHASES: Record<"download" | "verify" | "install", string> = {
+    download: "Téléchargement",
+    verify: "Vérification de l'empreinte",
+    install: "Installation",
+};
+
 function LowSoundSettings() {
+    const music = useLowSound();
     const [status, setStatus] = useState<SoundStatus | null>(null);
     const [running, setRunning] = useState<Action | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -65,7 +91,7 @@ function LowSoundSettings() {
                 await engineReplaced(next.installed ? next.version ?? null : null, before);
                 doneNote = action === "uninstall" ? "low-sound a été retiré."
                     : wasInstalled ? `Mis à jour en v${next.version} : c'est déjà actif${before.keys.length ? ", tes comptes se sont reconnectés" : ""}.`
-                        : "Installé : le bouton est à côté de micro / casque, en bas à gauche.";
+                        : "Installé : l'éclair est à côté de micro / casque, en bas à gauche.";
             }
         } catch (e: any) {
             // Les erreurs du processus principal arrivent préfixées par Electron.
@@ -87,49 +113,54 @@ function LowSoundSettings() {
     const latest = status?.latest;
     const installed = !!status?.installed;
     const update = !!status?.updateAvailable;
+    const progress = running === "install" ? music.install : null;
+    const pct = progress && progress.total > 0 ? Math.min(100, progress.received / progress.total * 100) : 0;
 
     let state: string;
-    if (running === "install") state = installed ? "Mise à jour en cours…" : "Installation en cours…";
+    if (running === "install") state = installed ? "Mise à jour en cours" : "Installation en cours";
     else if (running === "uninstall") state = "Désinstallation…";
     else if (!status) state = "Vérification…";
-    else if (!installed) state = "Non installé";
-    else if (update) state = `Mise à jour disponible : v${latest!.version}`;
+    else if (!installed) state = "Pas encore installé";
+    else if (update) state = "Mise à jour disponible";
     else state = "Installé et à jour";
 
     return (
         <SettingsTab>
+            {/* Bannière : logo détouré, reflet doré et éclat de l'éclair. */}
+            <div className={cl("banner")}>
+                <ShinyLogo src={BANNER} label="low-sound" tone="gold">
+                    <span className={cl("bolt-flash")} aria-hidden="true" />
+                </ShinyLogo>
+                <p className={cl("tagline")}>
+                    Diffuse ta musique dans un salon vocal avec un ou plusieurs comptes, avec un son travaillé.
+                </p>
+            </div>
+
+            {/* État et actions */}
             <div className={cl("card")}>
-                <div className={cl("head")}>
-                    <span className={cl("logo")}><SoundIcon width={22} height={22} /></span>
-                    <div className={cl("titles")}>
-                        <div className={cl("title")}>low-sound <span className={cl("tag")}>beta</span></div>
-                        <div className={cl("sub")}>
-                            Diffuse de la musique dans un salon vocal avec un ou plusieurs comptes du Token Importer :
-                            spatialisation 8D, réverbe, égaliseur, gain, débit et latence réglables.
-                        </div>
-                    </div>
-                </div>
-
-                {installed && !doneNote && (
-                    <div className={cl("hint-row")}>
-                        <SoundIcon width={16} height={16} />
-                        <span>Ouvre low-sound avec le bouton à côté de micro / casque, en bas à gauche.</span>
-                    </div>
-                )}
-
                 <div className={cl("row")}>
-                    <span className={cl("dot", installed && !update && "dot-on", update && "dot-update")} />
+                    <span className={cl("dot", installed && !update && "dot-on", update && "dot-update", running && "dot-busy")} />
                     <div className={cl("state")}>
                         <div className={cl("state-name")}>{state}</div>
-                        <div className={cl("state-detail")}>
-                            {installed && status?.version && `Version installée : v${status.version}${status.installedAt ? ` · ${day(status.installedAt)}` : ""}`}
-                            {!installed && latest && `Version v${latest.version} · ${mb(latest.size)} Mo`}
+                        <div className={cl("versions")}>
+                            {installed && status?.version && (
+                                <span className={cl("chip")}>
+                                    Installée <b>v{status.version}</b>{status.installedAt ? ` · ${day(status.installedAt)}` : ""}
+                                </span>
+                            )}
+                            {latest && (!installed || update) && (
+                                <span className={cl("chip", "chip-new")}>
+                                    {installed ? "Nouvelle" : "Disponible"} <b>v{latest.version}</b>
+                                    {latest.date ? ` · ${day(latest.date)}` : ""} · {mb(latest.size)} Mo
+                                </span>
+                            )}
+                            {installed && latest && !update && <span className={cl("chip")}>Dernière version</span>}
                         </div>
                     </div>
                     <div className={cl("actions")}>
                         {!installed && (
                             <button className={cl("btn", "btn-primary")} disabled={!!running || !latest} onClick={() => run("install")}>
-                                Installer
+                                <SoundIcon width={14} height={14} /> Installer
                             </button>
                         )}
                         {installed && update && (
@@ -143,9 +174,30 @@ function LowSoundSettings() {
                     </div>
                 </div>
 
+                {/* Progression du téléchargement */}
+                {running === "install" && (
+                    <div className={cl("progress")}>
+                        <div className={cl("progress-head")}>
+                            <span>{progress ? PHASES[progress.phase] : "Préparation"}{progress?.version ? ` · v${progress.version}` : ""}</span>
+                            <span className={cl("progress-num")}>
+                                {progress?.phase === "download" && progress.total > 0 ? `${mb(progress.received)} / ${mb(progress.total)} Mo` : ""}
+                            </span>
+                        </div>
+                        <div className={cl("bar", (!progress || progress.phase !== "download") && "bar-busy")}>
+                            <span style={{ width: `${progress?.phase === "download" ? pct : 100}%` }} />
+                        </div>
+                        <div className={cl("steps")}>
+                            {(["download", "verify", "install"] as const).map((p, i) => {
+                                const at = progress ? ["download", "verify", "install"].indexOf(progress.phase) : -1;
+                                return <span key={p} className={cl("step", i < at && "step-done", i === at && "step-now")}>{PHASES[p]}</span>;
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {doneNote && !running && (
-                    <div className={cl("hint-row")}>
-                        <SoundIcon width={16} height={16} />
+                    <div className={cl("note-ok")}>
+                        <SoundIcon width={14} height={14} />
                         <span>{doneNote}</span>
                     </div>
                 )}
@@ -172,6 +224,31 @@ function LowSoundSettings() {
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Comment ça marche */}
+            <div className={cl("section-title")}>Comment ça marche</div>
+            <div className={cl("how")}>
+                {STEPS.map((s, i) => (
+                    <div key={s.title} className={cl("how-step")}>
+                        <span className={cl("how-n")}>{i + 1}</span>
+                        <div>
+                            <div className={cl("how-title")}>{s.title}</div>
+                            <div className={cl("how-text")}>{s.text}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Ce qu'il y a dedans */}
+            <div className={cl("section-title")}>Dans low-sound</div>
+            <div className={cl("features")}>
+                {FEATURES.map(f => (
+                    <div key={f.title} className={cl("feature")}>
+                        <div className={cl("feature-title")}>{f.title}</div>
+                        <div className={cl("feature-text")}>{f.text}</div>
+                    </div>
+                ))}
             </div>
 
             <p className={cl("note")}>

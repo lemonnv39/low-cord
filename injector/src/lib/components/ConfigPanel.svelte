@@ -92,7 +92,7 @@
         <div class={out.cls}>&gt; {out.text}</div>
     {/if}
 
-    <div class="sig dim">low-cord v{appVersion || "…"} · by <span class="bright">shitday</span></div>
+    <div class="sig dim">low-cord v{appVersion || "…"}</div>
 </section>
 
 <style>

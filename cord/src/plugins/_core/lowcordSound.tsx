@@ -6,14 +6,14 @@
 
 // low-sound — bouton dans le panneau du compte (en bas à gauche), juste
 // avant micro / casque. Visible seulement si low-sound est installé
-// (Paramètres → low-sound). Ouvre le panneau (sa propre fenêtre, centrée
-// sur Discord) ou le ramène au premier plan. Le fermer ne coupe pas la diffusion.
+// (Paramètres → low-sound). Un clic ouvre le panneau (sa propre fenêtre,
+// centrée sur Discord), un second le ferme. Le fermer ne coupe pas la diffusion.
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { isActive, useLowSound } from "@lowcord/sound/engine";
 import { SoundIcon } from "@lowcord/sound/LowSoundTab";
 import { usePanelOpen } from "@lowcord/sound/popoutKey";
-import { openPanel } from "@lowcord/sound/window";
+import { closePanel, openPanel } from "@lowcord/sound/window";
 import definePlugin from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";
 
@@ -38,7 +38,8 @@ function SoundButton(props: { nameplate?: unknown; }) {
             role="switch"
             ariaChecked={open}
             plated={props?.nameplate != null}
-            onClick={openPanel}
+            // Ouvert : un clic le ferme ; fermé : un clic l'ouvre.
+            onClick={() => (open ? closePanel() : openPanel())}
         />
     );
 }
@@ -46,7 +47,7 @@ function SoundButton(props: { nameplate?: unknown; }) {
 export default definePlugin({
     name: "LowCordSound",
     description: "low-sound button in the account panel",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 

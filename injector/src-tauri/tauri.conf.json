@@ -38,9 +38,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "shitday",
-    "copyright": "© shitday — low-cord, GPL-3.0",
-    "shortDescription": "Injecteur low-cord par shitday"
+    "publisher": "low-cord",
+    "copyright": "low-cord — GPL-3.0",
+    "shortDescription": "Injecteur low-cord"
   },
   "plugins": {}
 }

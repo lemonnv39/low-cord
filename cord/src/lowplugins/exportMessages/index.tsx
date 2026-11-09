@@ -247,7 +247,7 @@ export default definePlugin({
     name: "ExportMessages",
     description: "Export a whole private conversation (DM or group), from the first to the last message, as one polished .html file with images, clickable profiles and search.",
     tags: ["Chat", "Utility"],
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     settings,
 
     contextMenus: {

@@ -12,7 +12,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "LowCordInterface",
     description: "low-cord tweaks to the Discord interface",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 

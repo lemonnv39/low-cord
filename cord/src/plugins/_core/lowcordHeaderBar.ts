@@ -13,7 +13,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "LowCordHeaderBar",
     description: "Shared slot for low-cord buttons in Discord's top bar",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 

@@ -14,7 +14,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "LowCordOptimizer",
     description: "Applies the optimizations chosen in the low-cord settings tab",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 

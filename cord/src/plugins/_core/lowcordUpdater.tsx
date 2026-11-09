@@ -105,7 +105,7 @@ function stop() {
 export default definePlugin({
     name: "LowCordUpdater",
     description: "Downloads new low-cord versions automatically and installs them on restart",
-    authors: [{ name: "shitday", id: 0n }],
+    authors: [],
     required: true,
     hidden: true,
 
