@@ -174,6 +174,10 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             description: "Anti move & déco : si quelqu'un te déplace ou te déconnecte, tu y reviens. Tes propres changements sont respectés",
             settings: {
                 notify: { name: "Pop-ups", description: "Prévenir quand tu es ramené dans ton salon" },
+                antiMove: { name: "Anti-déplacement", description: "Te ramener quand on te déplace dans un autre salon" },
+                antiDeco: { name: "Anti-déconnexion", description: "Te ramener quand on te déconnecte" },
+                noServerMute: { name: "Anti-mute serveur", description: "Retirer le mute serveur mis sur toi (permission « Rendre muet » requise)" },
+                noServerDeafen: { name: "Anti-sourdine serveur", description: "Retirer la sourdine serveur mise sur toi (permission « Mettre en sourdine » requise)" },
             },
         },
         ViewIcons: {
@@ -184,7 +188,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
             },
         },
         ImageToolkit: {
-            description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet, la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages et dans la visionneuse d'images",
+            description: "Avatar et bannière du profil de quelqu'un : clic pour l'agrandir, clic droit pour rechercher l'image sur internet (Google Lens, Yandex, Pinterest…), la copier, l'enregistrer ou ouvrir son lien. « Rechercher l'image » aussi sur les images des messages et dans la visionneuse d'images",
         },
         ExportMessages: {
             description: "Clic droit sur une personne ou un groupe → « Exporter la conversation » : tous les messages, du premier au dernier, dans un fichier .html soigné, avec les images, les profils cliquables (bannière, avatar, bio) et la recherche",

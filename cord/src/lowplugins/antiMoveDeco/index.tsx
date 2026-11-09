@@ -7,7 +7,12 @@
 /*
  * AntiMoveDeco — verrouille ton salon vocal : si quelqu'un d'autre te
  * déplace ou te déconnecte, tu y es ramené. Bouton cadenas dans la barre du
- * haut.
+ * haut (clic : activer / désactiver). Clic droit : choisir ce qui est
+ * protégé (gardé d'une session à l'autre) :
+ *  - anti-déplacement, anti-déconnexion ;
+ *  - anti-mute serveur et anti-sourdine serveur : le mute / la sourdine mis
+ *    par un modérateur sont retirés aussitôt. Il faut pour ça les permissions
+ *    « Rendre muet » / « Mettre en sourdine » sur le serveur.
  *
  * Tes propres actions sont respectées : Discord annonce localement chaque
  * choix de salon que TU fais (VOICE_CHANNEL_SELECT) avant que le serveur ne
@@ -23,7 +28,7 @@ import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, PermissionsBits, PermissionStore, SelectedChannelStore, showToast, useEffect, UserStore, useState } from "@webpack/common";
+import { ChannelStore, ContextMenuApi, Menu, PermissionsBits, PermissionStore, RestAPI, SelectedChannelStore, showToast, useEffect, UserStore, useState } from "@webpack/common";
 
 const logger = new Logger("AntiMoveDeco");
 const ChannelActions = findByPropsLazy("selectVoiceChannel", "disconnect");
@@ -33,6 +38,26 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Show a pop-up when you are brought back",
         default: true,
+    },
+    antiMove: {
+        type: OptionType.BOOLEAN,
+        description: "Bring you back when someone moves you to another channel",
+        default: true,
+    },
+    antiDeco: {
+        type: OptionType.BOOLEAN,
+        description: "Bring you back when someone disconnects you",
+        default: true,
+    },
+    noServerMute: {
+        type: OptionType.BOOLEAN,
+        description: "Remove a server mute put on you (needs the Mute Members permission)",
+        default: false,
+    },
+    noServerDeafen: {
+        type: OptionType.BOOLEAN,
+        description: "Remove a server deafen put on you (needs the Deafen Members permission)",
+        default: false,
     },
 });
 
@@ -126,14 +151,60 @@ function onVoiceChannelSelect({ channelId }: { channelId?: string | null; }) {
     if (!ourSelect) intent = { channelId: channelId ?? null, at: Date.now() };
 }
 
-function onVoiceStates({ voiceStates }: { voiceStates?: { userId: string; channelId?: string | null; }[]; }) {
+// ── Mute / sourdine serveur ──────────────────────────────────────────────────
+// Retirés seulement avec la permission sur le salon ; au plus 3 fois en 30 s
+// (un modérateur qui insiste ne déclenche pas une boucle).
+const undone: number[] = [];
+const warnedNoPerm = new Set<string>();
+
+async function undoServer(kind: "mute" | "deaf", guildId: string, channelId: string) {
+    const channel = ChannelStore.getChannel(channelId);
+    const perm = kind === "mute" ? PermissionsBits.MUTE_MEMBERS : PermissionsBits.DEAFEN_MEMBERS;
+    if (!channel || !PermissionStore.can(perm, channel)) {
+        const key = `${kind}:${guildId}`;
+        if (!warnedNoPerm.has(key)) {
+            warnedNoPerm.add(key);
+            showToast({ text: t(kind === "mute" ? "amd.noPermMute" : "amd.noPermDeaf"), variant: "critical" });
+        }
+        return;
+    }
+    const now = Date.now();
+    while (undone.length && now - undone[0] > RETURN_WINDOW) undone.shift();
+    if (undone.length >= MAX_RETURNS) return;
+    undone.push(now);
+    const me = UserStore.getCurrentUser()?.id;
+    try {
+        await RestAPI.patch({ url: `/guilds/${guildId}/members/${me}`, body: { [kind]: false } });
+        notify(t(kind === "mute" ? "amd.unmuted" : "amd.undeafened"));
+    } catch (e) {
+        logger.error(`Retrait du ${kind} serveur impossible`, e);
+    }
+}
+
+interface VoiceState {
+    userId: string;
+    channelId?: string | null;
+    guildId?: string | null;
+    mute?: boolean;
+    deaf?: boolean;
+}
+
+function onVoiceStates({ voiceStates }: { voiceStates?: VoiceState[]; }) {
     if (!target || !Array.isArray(voiceStates)) return;
     const me = UserStore.getCurrentUser()?.id;
     const mine = voiceStates.find(s => s.userId === me);
     if (!mine) return;
 
     const now = (mine.channelId ?? null);
-    if (now === target) return;
+    // Toujours dans le salon verrouillé : seuls le mute / la sourdine serveur comptent.
+    if (now === target) {
+        const guildId = mine.guildId ?? ChannelStore.getChannel(now)?.guild_id;
+        if (guildId) {
+            if (mine.mute && settings.store.noServerMute) undoServer("mute", guildId, now);
+            if (mine.deaf && settings.store.noServerDeafen) undoServer("deaf", guildId, now);
+        }
+        return;
+    }
 
     const chosen = intent && Date.now() - intent.at < INTENT_WINDOW && intent.channelId === now;
     intent = null;
@@ -150,7 +221,52 @@ function onVoiceStates({ voiceStates }: { voiceStates?: { userId: string; channe
         return;
     }
 
+    // Protection coupée pour ce cas : on suit au lieu de ramener.
+    if (now == null && !settings.store.antiDeco) {
+        unlock();
+        notify(t("amd.offLeft"));
+        return;
+    }
+    if (now != null && !settings.store.antiMove) {
+        lock(now);
+        notify(t("amd.followed", { channel: channelName(now) }));
+        return;
+    }
+
     bringBack(now == null ? "disconnected" : "moved");
+}
+
+// ── Menu du clic droit : ce qui est protégé ─────────────────────────────────
+function DangerLabel({ text }: { text: string; }) {
+    return (
+        <span className="lc-amd-danger">
+            {text}
+            <small>{t("amd.menuPerms")}</small>
+        </span>
+    );
+}
+
+function OptionsMenu() {
+    useLang();
+    const s = settings.use(["antiMove", "antiDeco", "noServerMute", "noServerDeafen"]);
+    return (
+        <Menu.Menu navId="lc-amd-options" onClose={ContextMenuApi.closeContextMenu} aria-label={t("amd.menuTitle")}>
+            <Menu.MenuGroup label={t("amd.menuTitle")}>
+                <Menu.MenuCheckboxItem id="lc-amd-move" label={t("amd.menuMove")} checked={s.antiMove} action={() => { settings.store.antiMove = !s.antiMove; }} />
+                <Menu.MenuCheckboxItem id="lc-amd-deco" label={t("amd.menuDeco")} checked={s.antiDeco} action={() => { settings.store.antiDeco = !s.antiDeco; }} />
+            </Menu.MenuGroup>
+            <Menu.MenuSeparator />
+            <Menu.MenuGroup>
+                <Menu.MenuCheckboxItem id="lc-amd-mute" label={<DangerLabel text={t("amd.menuMute")} /> as any} checked={s.noServerMute} action={() => { settings.store.noServerMute = !s.noServerMute; }} />
+                <Menu.MenuCheckboxItem id="lc-amd-deaf" label={<DangerLabel text={t("amd.menuDeaf")} /> as any} checked={s.noServerDeafen} action={() => { settings.store.noServerDeafen = !s.noServerDeafen; }} />
+            </Menu.MenuGroup>
+        </Menu.Menu>
+    );
+}
+
+function openOptions(e: React.MouseEvent) {
+    e.preventDefault();
+    ContextMenuApi.openContextMenu(e as any, () => <OptionsMenu />);
 }
 
 // ── Bouton ───────────────────────────────────────────────────────────────────
@@ -175,7 +291,7 @@ function LockButton() {
 
     const on = target != null;
     return (
-        <div className={on ? "lc-amd-on" : undefined} style={{ display: "contents" }}>
+        <div className={on ? "lc-amd-on" : undefined} style={{ display: "contents" }} onContextMenu={openOptions}>
             <HeaderBarIcon
                 icon={() => <LockIcon on={on} />}
                 tooltip={on ? t("amd.tooltipOn", { channel: channelName(target) }) : t("amd.tooltipOff")}

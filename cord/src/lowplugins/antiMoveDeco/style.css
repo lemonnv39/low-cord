@@ -2,3 +2,16 @@
 .lc-amd-on svg {
     color: var(--status-positive, #23a55a);
 }
+
+/* Options qui demandent les permissions du serveur : en rouge. */
+.lc-amd-danger {
+    display: flex;
+    flex-direction: column;
+    color: var(--text-danger, #f23f43);
+}
+
+.lc-amd-danger small {
+    margin-top: 2px;
+    color: color-mix(in srgb, var(--text-danger, #f23f43) 75%, transparent);
+    font-size: 11px;
+}

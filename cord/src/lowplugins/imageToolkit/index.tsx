@@ -15,6 +15,10 @@
  *
  * Les recherches ouvrent le navigateur avec l'adresse de l'image : rien n'est
  * envoyé tant que tu ne choisis pas un moteur.
+ *
+ * Pinterest ne cherche pas à partir d'un lien : l'image est enregistrée dans
+ * un dossier temporaire (affiché dans l'Explorateur) et copiée, puis Pinterest
+ * s'ouvre : il reste à la glisser (ou la coller) dans sa recherche visuelle.
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
@@ -23,17 +27,19 @@ import { t } from "@lowcord/i18n";
 import { isAnimated, isDiscordCdn, openFullImage, ProfileImage, resizeImage, setProfileImageHandler } from "@lowcord/profileImages";
 import { copyToClipboard } from "@utils/clipboard";
 import { Logger } from "@utils/Logger";
-import definePlugin from "@utils/types";
+import definePlugin, { PluginNative } from "@utils/types";
 import { ContextMenuApi, Menu, showToast } from "@webpack/common";
 import bingLogo from "file://./logos/bing.png?base64";
 import googleLogo from "file://./logos/google.png?base64";
 import iqdbLogo from "file://./logos/iqdb.png?base64";
 import lensLogo from "file://./logos/lens.png?base64";
+import pinterestLogo from "file://./logos/pinterest.png?base64";
 import saucenaoLogo from "file://./logos/saucenao.png?base64";
 import tineyeLogo from "file://./logos/tineye.png?base64";
 import yandexLogo from "file://./logos/yandex.png?base64";
 
 const logger = new Logger("ImageToolkit");
+const Native = VencordNative.pluginHelpers.ImageToolkit as PluginNative<typeof import("./native")>;
 
 // Logos des moteurs (importés plus haut) : embarqués dans le plugin, rien
 // n'est chargé depuis ces sites à l'ouverture du menu.
@@ -46,12 +52,27 @@ const ENGINES: Record<string, { url: string; logo: string; }> = {
     TinEye: { url: "https://www.tineye.com/search?url=", logo: tineyeLogo },
     SauceNAO: { url: "https://saucenao.com/search.php?url=", logo: saucenaoLogo },
     IQDB: { url: "https://iqdb.org/?url=", logo: iqdbLogo },
+    // Pas de recherche par lien chez Pinterest : voir searchPinterest().
+    Pinterest: { url: "", logo: pinterestLogo },
 };
 
 const openExternal = (url: string) => VencordNative.native.openExternal(url);
 
 function search(url: string, engine: string) {
+    if (engine === "Pinterest") return void searchPinterest(url);
     openExternal(ENGINES[engine].url + encodeURIComponent(url));
+}
+
+/** Pinterest : image enregistrée + copiée, dossier affiché, puis Pinterest ouvert. */
+async function searchPinterest(url: string) {
+    try {
+        const { copied } = await Native.prepareForPinterest(url, "image");
+        openExternal("https://www.pinterest.com/");
+        showToast({ text: t(copied ? "it.pinterestReadyCopied" : "it.pinterestReady"), variant: "success" });
+    } catch (e) {
+        logger.error("Préparation de l'image pour Pinterest impossible", e);
+        showToast({ text: t("it.pinterestFailed"), variant: "critical" });
+    }
 }
 
 /** Image en pleine taille, seulement depuis les serveurs de Discord. */
