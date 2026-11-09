@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-cord — onglet Plugins. En-tête (titre, compteurs) + une ligne de
-// recherche, sans filtres : low-cord n'a que peu de plugins, tous utiles.
+// low-cord — onglet Plugins. En-tête (titre, compteurs), puis une barre :
+// filtres par catégorie (Vocal, Messages, Outils…) à gauche, recherche à droite.
 // Deux blocs : nos plugins (activables) et le cœur (toujours actif, discret).
 
 import "@lowcord/styles.css";
@@ -21,6 +21,7 @@ import { useMemo, useState } from "@webpack/common";
 
 import Plugins, { PluginMeta } from "~plugins";
 
+import { CATEGORIES, type Category, categoryOf } from "./categories";
 import { LowPluginCard } from "./LowPluginCard";
 import { PresetPanel } from "./PresetPanel";
 import { UserPluginsSection } from "./UserPluginsSection";
@@ -71,9 +72,14 @@ function LowPluginsSettings() {
     const active = mine.filter(p => isPluginEnabled(p.name)).length;
 
     const [query, setQuery] = useState("");
+    const [category, setCategory] = useState<Category | "all">("all");
     const q = fold(query.trim());
-    const shownMine = mine.filter(p => matches(p, q));
-    const shownCore = core.filter(p => matches(p, q));
+    const inCategory = (p: Plugin) => category === "all" || categoryOf(p.name) === category;
+    const shownMine = mine.filter(p => inCategory(p) && matches(p, q));
+    // Le cœur n'appartient à aucune catégorie : visible seulement avec « Tous ».
+    const shownCore = category === "all" ? core.filter(p => matches(p, q)) : [];
+    // Catégories présentes (avec leur nombre de plugins), « Autres » seulement s'il sert.
+    const counts = CATEGORIES.map(c => ({ ...c, count: mine.filter(p => categoryOf(p.name) === c.id).length })).filter(c => c.count > 0);
 
     return (
         <SettingsTab>
@@ -89,19 +95,47 @@ function LowPluginsSettings() {
                 </div>
             </div>
 
-            <div className={cl("plugins-search")}>
-                <SearchIcon />
-                <input
-                    value={query}
-                    onChange={e => setQuery(e.currentTarget.value)}
-                    onKeyDown={e => { if (e.key === "Escape") setQuery(""); }}
-                    placeholder={t("plugins.search")}
-                    aria-label={t("plugins.search")}
-                    spellCheck={false}
-                />
-                {query && (
-                    <button className={cl("plugins-search-clear")} onClick={() => setQuery("")} aria-label={t("plugins.clearSearch")} title={t("plugins.clearSearch")}>×</button>
-                )}
+            <div className={cl("plugins-toolbar")}>
+                {/* Filtres par catégorie */}
+                <div className={cl("plugins-cats")} role="radiogroup" aria-label={t("plugins.cat.label")}>
+                    <button
+                        role="radio"
+                        aria-checked={category === "all"}
+                        className={cl("plugins-cat", category === "all" && "plugins-cat-on")}
+                        onClick={() => setCategory("all")}
+                        title={t("plugins.cat.count", { count: mine.length })}
+                    >
+                        {t("plugins.cat.all")}
+                    </button>
+                    {counts.map(c => (
+                        <button
+                            key={c.id}
+                            role="radio"
+                            aria-checked={category === c.id}
+                            className={cl("plugins-cat", category === c.id && "plugins-cat-on")}
+                            onClick={() => setCategory(category === c.id ? "all" : c.id)}
+                            title={t("plugins.cat.count", { count: c.count })}
+                        >
+                            {t(c.label)}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Recherche, collée à droite */}
+                <div className={cl("plugins-search")}>
+                    <SearchIcon />
+                    <input
+                        value={query}
+                        onChange={e => setQuery(e.currentTarget.value)}
+                        onKeyDown={e => { if (e.key === "Escape") setQuery(""); }}
+                        placeholder={t("plugins.search")}
+                        aria-label={t("plugins.search")}
+                        spellCheck={false}
+                    />
+                    {query && (
+                        <button className={cl("plugins-search-clear")} onClick={() => setQuery("")} aria-label={t("plugins.clearSearch")} title={t("plugins.clearSearch")}>×</button>
+                    )}
+                </div>
             </div>
 
             {pendingRestart.length > 0 && (
@@ -120,7 +154,7 @@ function LowPluginsSettings() {
 
             <div className={cl("section-head")}>
                 <Forms.FormTitle tag="h5">{t("plugins.section")}</Forms.FormTitle>
-                {q && mine.length > 0 && (
+                {(q || category !== "all") && mine.length > 0 && (
                     <Text variant="text-sm/normal" className={cl("muted")}>
                         {t("plugins.results", { count: shownMine.length })}
                     </Text>
@@ -135,7 +169,7 @@ function LowPluginsSettings() {
                             {shownMine.map(p => <LowPluginCard key={p.name} plugin={p} onRestartNeeded={onRestartNeeded} />)}
                         </div>
                     )
-                    : <div className={cl("empty")}>{t("plugins.noMatch", { query: query.trim() })}</div>}
+                    : <div className={cl("empty")}>{q ? t("plugins.noMatch", { query: query.trim() }) : t("plugins.noMatchCat")}</div>}
 
             <UserPluginsSection refreshKey={userPluginsKey} onRestartNeeded={onRestartNeeded} onChanged={refreshUserPlugins} />
 

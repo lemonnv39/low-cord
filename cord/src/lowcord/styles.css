@@ -632,11 +632,59 @@
     font-size: 12px;
 }
 
+/* Barre : catégories à gauche, recherche compacte collée à droite. */
+.lc-plugins-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin-bottom: 20px;
+}
+
+.lc-plugins-cats {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 0;
+}
+
+.lc-plugins-cat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.lc-plugins-cat:hover {
+    border-color: var(--text-muted);
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-plugins-cat-on,
+.lc-plugins-cat-on:hover {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-primary, #111);
+}
+
 .lc-plugins-search {
     display: flex;
+    flex: none;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 20px;
+    box-sizing: border-box;
+    gap: 8px;
+    width: 210px;
+    margin-left: auto;
     padding: 0 12px;
     border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
     border-radius: 8px;
@@ -671,6 +719,13 @@
 
 .lc-plugins-search-clear:hover {
     color: var(--header-primary, var(--text-strong));
+}
+
+/* Fenêtre étroite : la recherche passe sous les catégories, en pleine largeur. */
+@media (width <= 760px) {
+    .lc-plugins-search {
+        width: 100%;
+    }
 }
 
 /* Fenêtre « Quoi de neuf » */
