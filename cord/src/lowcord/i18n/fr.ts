@@ -50,7 +50,6 @@ export const fr = {
     "plugins.cat.interface": "Interface",
     "plugins.cat.other": "Autres",
     "plugins.cat.label": "Filtrer par catégorie",
-    "plugins.cat.count": "{count} plugin(s)",
     "plugins.noMatchCat": "Aucun plugin de cette catégorie ne correspond.",
     "plugins.noMatch": "Aucun plugin ne correspond à « {query} ».",
     "plugins.results": "{count} résultat(s)",

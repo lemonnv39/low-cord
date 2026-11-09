@@ -5,7 +5,7 @@
  */
 
 // low-cord — onglet Plugins. En-tête (titre, compteurs), puis une barre :
-// filtres par catégorie (Vocal, Messages, Outils…) à gauche, recherche à droite.
+// grande recherche à gauche, menu déroulant de catégories (Vocal, Outils…) à droite.
 // Deux blocs : nos plugins (activables) et le cœur (toujours actif, discret).
 
 import "@lowcord/styles.css";
@@ -17,7 +17,7 @@ import { Button, Forms, Text } from "@lowcord/compat";
 import { pluginDescription, t, useLang } from "@lowcord/i18n";
 import { classNameFactory } from "@utils/css";
 import { Plugin } from "@utils/types";
-import { useMemo, useState } from "@webpack/common";
+import { Select, useMemo, useState } from "@webpack/common";
 
 import Plugins, { PluginMeta } from "~plugins";
 
@@ -96,32 +96,7 @@ function LowPluginsSettings() {
             </div>
 
             <div className={cl("plugins-toolbar")}>
-                {/* Filtres par catégorie */}
-                <div className={cl("plugins-cats")} role="radiogroup" aria-label={t("plugins.cat.label")}>
-                    <button
-                        role="radio"
-                        aria-checked={category === "all"}
-                        className={cl("plugins-cat", category === "all" && "plugins-cat-on")}
-                        onClick={() => setCategory("all")}
-                        title={t("plugins.cat.count", { count: mine.length })}
-                    >
-                        {t("plugins.cat.all")}
-                    </button>
-                    {counts.map(c => (
-                        <button
-                            key={c.id}
-                            role="radio"
-                            aria-checked={category === c.id}
-                            className={cl("plugins-cat", category === c.id && "plugins-cat-on")}
-                            onClick={() => setCategory(category === c.id ? "all" : c.id)}
-                            title={t("plugins.cat.count", { count: c.count })}
-                        >
-                            {t(c.label)}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Recherche, collée à droite */}
+                {/* Recherche (large) */}
                 <div className={cl("plugins-search")}>
                     <SearchIcon />
                     <input
@@ -135,6 +110,21 @@ function LowPluginsSettings() {
                     {query && (
                         <button className={cl("plugins-search-clear")} onClick={() => setQuery("")} aria-label={t("plugins.clearSearch")} title={t("plugins.clearSearch")}>×</button>
                     )}
+                </div>
+
+                {/* Menu déroulant : filtre par catégorie */}
+                <div className={cl("plugins-filter")} aria-label={t("plugins.cat.label")}>
+                    <Select
+                        options={[
+                            { label: `${t("plugins.cat.all")} · ${mine.length}`, value: "all", default: true },
+                            ...counts.map(c => ({ label: `${t(c.label)} · ${c.count}`, value: c.id })),
+                        ]}
+                        select={(v: Category | "all") => setCategory(v)}
+                        isSelected={(v: Category | "all") => v === category}
+                        serialize={String}
+                        closeOnSelect
+                        placeholder={t("plugins.cat.label")}
+                    />
                 </div>
             </div>
 

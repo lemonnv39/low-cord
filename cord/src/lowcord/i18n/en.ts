@@ -48,7 +48,6 @@ export const en = {
     "plugins.cat.interface": "Interface",
     "plugins.cat.other": "Other",
     "plugins.cat.label": "Filter by category",
-    "plugins.cat.count": "{count} plugin(s)",
     "plugins.noMatchCat": "No plugin in this category matches.",
     "plugins.noMatch": "No plugin matches “{query}”.",
     "plugins.results": "{count} result(s)",
