@@ -73,6 +73,8 @@ const AFTER_SPELLING: Rule[] = [
     [new RegExp(`(^|[.!?…]\\s+|\\n)(ou)(\\s+)(?=(?:est|sont|t'es|t’es|es|étais|était|tu es|tu vas|tu étais|vas-tu|on va|on est|il est|elle est)${W})`, "giu"), m => `${m[1]}${caseLike(m[2], "où")}${m[3]}`],
 ];
 
+const PRONOUNS = new Set("je j' tu il elle on ça ca qui que ne me te se le la les lui leur nous vous y en".split(" "));
+
 const SUBJECT_L: Record<string, string> = { "je": "je l'ai", "j'": "je l'ai", "tu": "tu l'as", "il": "il l'a", "elle": "elle l'a", "on": "on l'a", "ils": "ils l'ont", "elles": "elles l'ont" };
 
 function morphRules(speller: ChatSpeller): Rule[] {
@@ -81,6 +83,13 @@ function morphRules(speller: ChatSpeller): Rule[] {
         [new RegExp(`${B}(je|tu|il|elle|on|ils|elles)\\s+la\\s+(\\p{L}+)`, "giu"), m => {
             if (!hasTag(speller.getMorph(m[2].toLowerCase()), ":Q")) return null;
             return `${caseLike(m[1], SUBJECT_L[m[1].toLowerCase()])} ${m[2]}`;
+        }],
+        // « explique toi », « si regarde moi » → trait d'union de l'impératif (Grammalecte ne le
+        // voit qu'en début de phrase). Pas après un sujet ou un pronom (« je te regarde toi »).
+        [new RegExp(`${B}(?:(\\p{L}+['’]?)\\s+)?(\\p{L}+)\\s+(moi|toi)(?=\\s*(?:[?!.,…]|$))`, "giu"), m => {
+            if (m[1] && PRONOUNS.has(m[1].toLowerCase())) return null;
+            if (!speller.getMorph(m[2].toLowerCase()).some(x => x.includes(":E:2s"))) return null;
+            return `${m[1] ? m[0].slice(0, m[0].indexOf(m[2], m[1].length)) : ""}${m[2]}-${m[3]}`;
         }],
         // « tu serrais venue » → « tu serais venue » (conditionnel de être, pas de serrer)
         [new RegExp(`${B}(serr)(ai|ais|ait|aient|ions|iez)(\\s+)(\\p{L}+)`, "giu"), m => {

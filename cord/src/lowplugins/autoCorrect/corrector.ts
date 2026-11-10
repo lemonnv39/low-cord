@@ -69,7 +69,8 @@ export const GRAMMALECTE_OPTIONS: Record<string, boolean> = {
 
 // Règles trop vagues (suggestions au hasard : « ces mon » → « monts ») ou
 // piégées par les anglicismes du chat (« mon pc a crash » → « à crash »).
-const BAD_RULES = /incohérences_globales|substantif_à_substantif/;
+// « si » + verbe → participe : faux dans le chat, où « si » veut souvent dire « oui » / « alors ».
+const BAD_RULES = /incohérences_globales|substantif_à_substantif|conf_si_vconj/;
 // a / à : souvent en concurrence avec un participe (« qui a gagner ») → second temps.
 const RISKY = /conf_à_a|conf_a_à/;
 const DETERMINERS = new Set("le la les l' un une des du mon ton son ma ta sa mes tes ses notre votre leur nos vos leurs ce cet cette ces".split(" "));
