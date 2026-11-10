@@ -83,6 +83,14 @@ function Check() {
 
 interface Box { left: number; top: number; width: number; height: number; }
 
+interface View {
+    pieces: Piece[];
+    /** mots fautifs du texte tapé (soulignés) */
+    before: Piece[];
+    hasFixes: boolean;
+    count: number;
+}
+
 /** Zone de saisie de Discord autour du bouton. */
 function findInput(anchor: HTMLElement | null) {
     const form = anchor?.closest("form");
@@ -141,9 +149,12 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         const id = setTimeout(() => setSlow(true), 250);
         return () => clearTimeout(id);
     }, [live.analyzing]);
-    const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; }>({ box: null, marks: [] });
+    const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; width: number | null; }>({ box: null, marks: [], width: null });
     const lastLayout = useRef("");
     const [, tick] = useState(0);
+    const measureRef = useRef<HTMLSpanElement>(null);
+    const sideRef = useRef<HTMLDivElement>(null);
+    const lastView = useRef<View | null>(null);
 
     // Suit la zone de saisie (taille de fenêtre, défilement, zone qui grandit).
     useEffect(() => {
@@ -162,26 +173,51 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
     }, [anchor]);
 
     const show = isEnabled && livePreview && live.text.trim().length >= 3 && (live.analyzing || live.result != null);
-    // Pendant la frappe, la dernière correction reste affichée et le texte tapé
-    // depuis s'ajoute derrière : l'aperçu suit sans clignoter.
-    let parts: ReturnType<typeof diff> | null = null;
-    const { result, source } = live;
-    if (result && (live.fresh || (source && live.text.startsWith(source)))) {
-        parts = diff(source, result.text);
-        const tail = live.text.slice(source.length);
-        if (tail) parts.after.push({ text: tail, changed: false, at: result.text.length });
-    }
-    const hasFixes = !!parts && !!result?.fixes.length && result.text !== source;
 
-    // Positions recalculées à chaque rendu, appliquées seulement si elles changent.
+    // Ce qui est affiché. Pendant la frappe, la dernière correction reste et le
+    // texte tapé depuis s'ajoute derrière ; si elle ne colle plus (lettre
+    // effacée…), l'affichage précédent reste les quelques ms de l'analyse :
+    // l'aperçu ne clignote jamais.
+    const { result, source } = live;
+    let view: View;
+    if (result && (live.fresh || (source && live.text.startsWith(source)))) {
+        const fixed = !!result.fixes.length && result.text !== source;
+        const tail = live.text.slice(source.length);
+        const d = fixed ? diff(source, result.text) : null;
+        view = {
+            pieces: d ? [...d.after, ...(tail ? [{ text: tail, changed: false, at: 0 }] : [])] : [{ text: live.text, changed: false, at: 0 }],
+            before: d ? d.before : [],
+            hasFixes: fixed,
+            count: result.fixes.length,
+        };
+    } else if (live.analyzing && lastView.current?.hasFixes) {
+        view = lastView.current;
+    } else {
+        view = { pieces: [{ text: live.text, changed: false, at: 0 }], before: [], hasFixes: false, count: 0 };
+    }
+    lastView.current = show ? view : null;
+    const { hasFixes } = view;
+
+    // Clés stables (mot + rang) : seul un mot qui vient d'être corrigé s'anime.
+    const seen = new Map<string, number>();
+    const keyed = view.pieces.map(p => {
+        const n = (seen.get(p.text) ?? 0) + 1;
+        seen.set(p.text, n);
+        return { ...p, key: `${p.changed ? "fix" : "txt"}:${p.text}:${n}` };
+    });
+
+    // Positions et largeur recalculées à chaque rendu, appliquées seulement si elles changent.
     useLayoutEffect(() => {
         const { box: el, editor } = findInput(anchor);
-        let next: { box: Box | null; marks: Box[]; } = { box: null, marks: [] };
+        let next: { box: Box | null; marks: Box[]; width: number | null; } = { box: null, marks: [], width: null };
         if (show && el) {
             const r = el.getBoundingClientRect();
+            // Largeur du texte sur une ligne + état à droite + marges : la barre glisse jusque-là.
+            const natural = (measureRef.current?.offsetWidth ?? 0) + (sideRef.current?.offsetWidth ?? 0) + 12 + 30;
             next = {
                 box: { left: r.left, top: r.top, width: r.width, height: r.height },
-                marks: editor && parts && hasFixes ? squiggles(editor, parts.before.filter(p => p.changed)) : [],
+                marks: editor && hasFixes ? squiggles(editor, view.before.filter(p => p.changed)) : [],
+                width: Math.min(Math.ceil(natural), r.width),
             };
         }
         const k = JSON.stringify(next);
@@ -203,26 +239,25 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         <ErrorBoundary noop>
             <div
                 className={`lc-ac-live${hasFixes ? " lc-ac-live-fix" : ""}`}
-                // Largeur de la phrase seulement (grandit avec la frappe), jamais plus large que la zone de saisie.
-                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width, width: previewWidth === "full" ? box.width : undefined }}
+                // Ajustée : largeur de la phrase, qui glisse à mesure qu'on écrit ; jamais plus large que la zone de saisie.
+                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width, width: previewWidth === "full" ? box.width : layout.width ?? undefined }}
                 onMouseDown={e => e.preventDefault()}
                 onClick={apply}
                 role={hasFixes ? "button" : undefined}
                 title={hasFixes ? t("ac.liveApply") : undefined}
             >
+                <span ref={measureRef} className="lc-ac-live-measure" aria-hidden="true">{keyed.map(p => pretty(p.text)).join("")}</span>
                 <div className="lc-ac-live-text">
-                    {parts && hasFixes
-                        ? parts.after.map((p, i) => p.changed
-                            ? <span key={i} className="lc-ac-live-new">{pretty(p.text)}</span>
-                            : <span key={i}>{pretty(p.text)}</span>)
-                        : <span className="lc-ac-live-plain">{pretty(live.text)}</span>}
+                    {keyed.map(p => p.changed
+                        ? <span key={p.key} className="lc-ac-live-new">{pretty(p.text)}</span>
+                        : <span key={p.key}>{pretty(p.text)}</span>)}
                 </div>
-                <div className="lc-ac-live-side">
+                <div ref={sideRef} className="lc-ac-live-side">
                     {live.analyzing && slow
                         ? <Dots />
                         : hasFixes
-                            ? <span className="lc-ac-live-count">{t("ac.liveCount", { n: result!.fixes.length })}</span>
-                            : live.fresh && <span className="lc-ac-live-ok"><Check />{t("ac.liveClean")}</span>}
+                            ? <span className="lc-ac-live-count">{t("ac.liveCount", { n: view.count })}</span>
+                            : <span className="lc-ac-live-ok"><Check />{t("ac.liveClean")}</span>}
                 </div>
             </div>
             {marks.map((m, i) => (

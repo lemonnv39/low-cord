@@ -456,6 +456,9 @@
     z-index: 1001;
     display: flex;
     width: max-content;
+
+    /* La barre glisse jusqu'à la largeur de la phrase au lieu de sauter. */
+    transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 150ms ease;
     gap: 12px;
     align-items: center;
     box-sizing: border-box;
@@ -487,21 +490,30 @@
     overflow-wrap: anywhere;
 }
 
-.lc-ac-live-plain {
-    color: var(--text-muted);
+/* Mesure de la largeur du texte sur une ligne (invisible). */
+.lc-ac-live-measure {
+    position: absolute;
+    visibility: hidden;
+    white-space: pre;
+    pointer-events: none;
 }
 
 /* Mot corrigé : vert, il « s'écrit » en apparaissant. */
+
+/* Mot corrigé : il se réécrit en vert, de gauche à droite (une seule fois). */
 .lc-ac-live-new {
+    display: inline-block;
     color: var(--status-positive, #23a55a);
     font-weight: 600;
-    animation: lc-ac-write 260ms ease-out;
+    white-space: pre;
+    animation: lc-ac-write 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes lc-ac-write {
     from {
-        opacity: 0;
-        filter: blur(3px);
+        clip-path: inset(0 100% 0 0);
+        opacity: 0.4;
+        transform: translateY(2px);
     }
 }
 
@@ -509,6 +521,10 @@
     display: flex;
     flex: none;
     align-items: center;
+
+    /* Largeur stable : passer de « Aucune faute » aux points ne fait pas sauter la barre. */
+    justify-content: flex-end;
+    min-width: 7.6em;
     color: var(--text-muted);
     font-size: 12px;
 }
