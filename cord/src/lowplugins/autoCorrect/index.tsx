@@ -30,8 +30,8 @@ import definePlugin from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
 
 import { ensureEngine, refreshEngine, warmup } from "./engine";
-import { correctText, resetLive, startLive, stopLive } from "./live";
-import { LivePreview, replaceInput } from "./LivePreview";
+import { correctText, resetLive, startLive, stopLive, useLive } from "./live";
+import { LivePreview, replaceInput, setInputAnchor } from "./LivePreview";
 import { closePanel, isPanelOpen, openPanel } from "./Panel";
 import { ButtonState, getEngineState, setButtonState, settings, useButtonState } from "./settings";
 
@@ -134,7 +134,10 @@ export function AutoCorrectIcon({ state = "idle", off = false, size = 20 }: { st
 const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
     useLang();
     const { isEnabled, mode } = settings.use(["isEnabled", "mode"]);
-    const state = useButtonState();
+    const sending = useButtonState();
+    // Pendant la frappe, l'analyse en direct fait aussi tourner l'icône.
+    const { analyzing } = useLive();
+    const state = sending === "idle" && analyzing && isEnabled ? "working" : sending;
     // Repère dans la barre de chat : l'aperçu se place au-dessus de la zone de saisie qui le contient.
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
@@ -164,7 +167,7 @@ const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
                 }}
             >
                 <AutoCorrectIcon state={state} off={!isEnabled} />
-                <span ref={setAnchor} hidden />
+                <span ref={el => { setAnchor(el); setInputAnchor(el); }} hidden />
             </ChatBarButton>
             <LivePreview anchor={anchor} />
         </>

@@ -18,10 +18,36 @@ import { ChannelStore, ComponentDispatch, ReactDOM, useEffect, useLayoutEffect, 
 import { diff, getLive, Piece, useLive } from "./live";
 import { settings } from "./settings";
 
-/** Remplace le texte de la zone de saisie (comme Discord pour un brouillon : vider puis insérer). */
+/** Repère dans la barre de chat principale (posé par le bouton) : sert à retrouver sa zone de saisie. */
+let inputAnchor: HTMLElement | null = null;
+export const setInputAnchor = (el: HTMLElement | null) => { if (el) inputAnchor = el; };
+
+/**
+ * Remplace le texte de la zone de saisie. On sélectionne tout puis on tape le
+ * nouveau texte (insertText) : l'éditeur de Discord le traite comme une vraie
+ * frappe (annulable avec Ctrl+Z). Lancé au tour suivant : appelé pendant un
+ * envoi, Discord doit d'abord finir de traiter l'Entrée.
+ */
 export function replaceInput(text: string) {
-    ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
-    ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
+    const fallback = () => {
+        // La méthode de Discord pour remettre un brouillon.
+        ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
+        ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
+    };
+    setTimeout(() => {
+        const { editor } = findInput(inputAnchor);
+        if (!editor?.isConnected) return fallback();
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        // L'éditeur prend la sélection en compte au tour suivant : on tape ensuite.
+        setTimeout(() => {
+            if (!document.execCommand("insertText", false, text)) fallback();
+        }, 30);
+    }, 0);
 }
 
 /** Mentions, salons et emojis lisibles (« <@123> » → « @pseudo »). */

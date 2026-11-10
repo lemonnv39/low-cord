@@ -11,7 +11,7 @@
 // alimente l'aperçu au-dessus de la zone de texte et le soulignement des
 // fautes, et il est gardé : à l'Entrée, la correction est déjà prête.
 
-import { FluxDispatcher, SelectedChannelStore, useEffect, useState } from "@webpack/common";
+import { DraftStore, DraftType, FluxDispatcher, SelectedChannelStore, useEffect, useState } from "@webpack/common";
 
 import { Native } from "./engine";
 import { activeGroups, getEngineState, settings, userWords } from "./settings";
@@ -135,8 +135,18 @@ function onClear(e: { channelId: string; draftType: number; }) {
     if (e.draftType === 0 && e.channelId === state.channelId) resetLive();
 }
 
-function onChannel() {
+// Changement de salon : l'aperçu repart du brouillon gardé par Discord pour
+// ce salon (message tapé puis laissé sans l'envoyer).
+function onChannel(e: { channelId?: string | null; }) {
     resetLive();
+    const channelId = e?.channelId;
+    if (!channelId) return;
+    // Après que Discord a fini d'afficher le salon (et sa zone de saisie).
+    setTimeout(() => {
+        if (SelectedChannelStore.getChannelId() !== channelId) return;
+        const draft = DraftStore.getDraft(channelId, DraftType.ChannelMessage);
+        if (draft) schedule(channelId, draft);
+    }, 50);
 }
 
 export function startLive() {
