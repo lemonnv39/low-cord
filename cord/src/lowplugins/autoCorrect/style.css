@@ -456,9 +456,6 @@
     z-index: 1001;
     display: flex;
     width: max-content;
-
-    /* La barre glisse jusqu'à la largeur de la phrase au lieu de sauter. */
-    transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 150ms ease;
     gap: 12px;
     align-items: center;
     box-sizing: border-box;
@@ -490,13 +487,6 @@
     overflow-wrap: anywhere;
 }
 
-/* Mesure de la largeur du texte sur une ligne (invisible). */
-.lc-ac-live-measure {
-    position: absolute;
-    visibility: hidden;
-    white-space: pre;
-    pointer-events: none;
-}
 
 /* Mot corrigé : vert, il « s'écrit » en apparaissant. */
 

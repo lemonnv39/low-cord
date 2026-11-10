@@ -149,11 +149,9 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         const id = setTimeout(() => setSlow(true), 250);
         return () => clearTimeout(id);
     }, [live.analyzing]);
-    const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; width: number | null; }>({ box: null, marks: [], width: null });
+    const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; }>({ box: null, marks: [] });
     const lastLayout = useRef("");
     const [, tick] = useState(0);
-    const measureRef = useRef<HTMLSpanElement>(null);
-    const sideRef = useRef<HTMLDivElement>(null);
     const lastView = useRef<View | null>(null);
 
     // Suit la zone de saisie (taille de fenêtre, défilement, zone qui grandit).
@@ -206,18 +204,15 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         return { ...p, key: `${p.changed ? "fix" : "txt"}:${p.text}:${n}` };
     });
 
-    // Positions et largeur recalculées à chaque rendu, appliquées seulement si elles changent.
+    // Positions recalculées à chaque rendu, appliquées seulement si elles changent.
     useLayoutEffect(() => {
         const { box: el, editor } = findInput(anchor);
-        let next: { box: Box | null; marks: Box[]; width: number | null; } = { box: null, marks: [], width: null };
+        let next: { box: Box | null; marks: Box[]; } = { box: null, marks: [] };
         if (show && el) {
             const r = el.getBoundingClientRect();
-            // Largeur du texte sur une ligne + état à droite + marges : la barre glisse jusque-là.
-            const natural = (measureRef.current?.offsetWidth ?? 0) + (sideRef.current?.offsetWidth ?? 0) + 12 + 30;
             next = {
                 box: { left: r.left, top: r.top, width: r.width, height: r.height },
                 marks: editor && hasFixes ? squiggles(editor, view.before.filter(p => p.changed)) : [],
-                width: Math.min(Math.ceil(natural), r.width),
             };
         }
         const k = JSON.stringify(next);
@@ -239,20 +234,19 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         <ErrorBoundary noop>
             <div
                 className={`lc-ac-live${hasFixes ? " lc-ac-live-fix" : ""}`}
-                // Ajustée : largeur de la phrase, qui glisse à mesure qu'on écrit ; jamais plus large que la zone de saisie.
-                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width, width: previewWidth === "full" ? box.width : layout.width ?? undefined }}
+                // Ajustée : largeur du texte (grandit avec la frappe), jamais plus large que la zone de saisie.
+                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width, width: previewWidth === "full" ? box.width : undefined }}
                 onMouseDown={e => e.preventDefault()}
                 onClick={apply}
                 role={hasFixes ? "button" : undefined}
                 title={hasFixes ? t("ac.liveApply") : undefined}
             >
-                <span ref={measureRef} className="lc-ac-live-measure" aria-hidden="true">{keyed.map(p => pretty(p.text)).join("")}</span>
                 <div className="lc-ac-live-text">
                     {keyed.map(p => p.changed
                         ? <span key={p.key} className="lc-ac-live-new">{pretty(p.text)}</span>
                         : <span key={p.key}>{pretty(p.text)}</span>)}
                 </div>
-                <div ref={sideRef} className="lc-ac-live-side">
+                <div className="lc-ac-live-side">
                     {live.analyzing && slow
                         ? <Dots />
                         : hasFixes
