@@ -18,15 +18,21 @@
 // fichiers lui sont lus par nous), et chaque analyse est coupée au-delà de
 // 2 s. Il est chargé au premier caractère tapé et libéré après 15 min sans
 // servir.
+//
+// Le modèle de fréquences (fr-ngrams, correction par le contexte) est
+// publié sur la branche `autocorrect-data` du repo : téléchargé une fois, à
+// un commit précis, refusé si son empreinte diffère.
 
+import { LOWCORD_REPO } from "@lowcord/constants";
 import { DATA_DIR } from "@main/utils/constants";
 import { createHash } from "crypto";
 import { IpcMainInvokeEvent, net } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { Context, createContext, runInContext } from "vm";
-import { inflateRawSync } from "zlib";
+import { gunzipSync, inflateRawSync } from "zlib";
 
+import { loadModel, NgramModel } from "./context";
 import { correct as runCorrect, CorrectOptions, Fix, GRAMMALECTE_OPTIONS, GrammarError, Speller } from "./corrector";
 
 const VERSION = "2.3.0";
@@ -34,7 +40,14 @@ const XPI_URL = "https://addons.mozilla.org/firefox/downloads/file/4643560/gramm
 const XPI_SHA256 = "443030004dbf62ecd5fc42f7b96872b96c9e3765f1cba4704a2a4170bb945256";
 const XPI_SIZE = 7231947;
 
+// Modèle de fréquences du français parlé (OpenSubtitles 2018, OPUS).
+const MODEL_COMMIT = "edda81b740d68486eec4135c7bd936f3126c0726";
+const MODEL_SHA256 = "b8ba314ca007970ea4c3d15cb8ba1ea070138cf8d4781ff9c04d4deffd0d1b33";
+const MODEL_SIZE = 12765588;
+const MODEL_URL = `https://raw.githubusercontent.com/${LOWCORD_REPO}/${MODEL_COMMIT}/fr-ngrams.bin.gz`;
+
 const ROOT = join(DATA_DIR, "autocorrect");
+const MODEL_FILE = join(ROOT, `fr-ngrams-${MODEL_SHA256.slice(0, 12)}.bin.gz`);
 const DIR = join(ROOT, `grammalecte-${VERSION}`);
 const READY = join(DIR, ".ready");
 
@@ -55,6 +68,7 @@ const PARSE_TIMEOUT = 2000;
 let busy: Promise<void> | null = null;
 let lastError: string | undefined;
 let ctx: Context | null = null;
+let model: NgramModel | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface EngineStatus {
@@ -65,7 +79,7 @@ export interface EngineStatus {
     error?: string;
 }
 
-const installed = () => existsSync(READY);
+const installed = () => existsSync(READY) && existsSync(MODEL_FILE);
 
 function status(): EngineStatus {
     return { installed: installed(), version: VERSION, busy: busy != null, loaded: ctx != null, error: lastError };
@@ -133,13 +147,25 @@ async function download() {
     }
 }
 
+async function downloadModel() {
+    const res = await net.fetch(MODEL_URL, { headers: { "User-Agent": "low-cord" } });
+    if (!res.ok) throw new Error(`modèle : HTTP ${res.status}`);
+    const data = Buffer.from(await res.arrayBuffer());
+    if (data.length !== MODEL_SIZE) throw new Error("modèle incomplet");
+    if (createHash("sha256").update(data).digest("hex") !== MODEL_SHA256) throw new Error("empreinte du modèle incorrecte : fichier refusé");
+    const tmp = `${MODEL_FILE}.download-${process.pid}`;
+    writeFileSync(tmp, data);
+    renameSync(tmp, MODEL_FILE);
+}
+
 /** Installe le moteur s'il ne l'est pas (un seul téléchargement à la fois). */
 export async function install(_?: IpcMainInvokeEvent) {
     if (installed()) return status();
     busy ??= (async () => {
         try {
             mkdirSync(ROOT, { recursive: true });
-            await download();
+            if (!existsSync(READY)) await download();
+            if (!existsSync(MODEL_FILE)) await downloadModel();
             lastError = undefined;
         } catch (e: any) {
             lastError = String(e?.message ?? e);
@@ -194,8 +220,15 @@ function load() {
 
 function unload() {
     ctx = null;
+    model = null;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = null;
+}
+
+/** Modèle de fréquences, chargé avec le moteur (environ 0,5 s, une fois). */
+function getModel() {
+    if (!model && existsSync(MODEL_FILE)) model = loadModel(gunzipSync(readFileSync(MODEL_FILE)));
+    return model ?? undefined;
 }
 
 function touch() {
@@ -241,6 +274,7 @@ export function warmup(_?: IpcMainInvokeEvent) {
     if (!installed()) return false;
     try {
         load();
+        getModel();
         touch();
         return true;
     } catch (e: any) {
@@ -261,10 +295,11 @@ export function correct(_: IpcMainInvokeEvent, text: unknown, options: unknown):
         whitelist: Array.isArray(o.whitelist) ? o.whitelist.map(String).slice(0, 2000) : [],
         custom: o.custom !== false,
         accents: o.accents !== false,
+        context: o.context !== false,
     };
     touch();
     try {
-        return runCorrect(text, parse, opts, speller);
+        return runCorrect(text, parse, opts, speller, getModel());
     } catch (e: any) {
         // Analyse trop longue ou moteur en erreur : on repart d'un moteur neuf la prochaine fois.
         lastError = String(e?.message ?? e);

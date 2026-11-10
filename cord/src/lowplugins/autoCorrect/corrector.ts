@@ -22,6 +22,7 @@
 // Module pur (sans Discord) : testé hors de Discord.
 
 import { chatAfter, chatBefore } from "./chat";
+import { contextFix, NgramModel } from "./context";
 
 export interface GrammarError {
     nStart: number;
@@ -47,6 +48,8 @@ export interface CorrectOptions {
      * d'accord) et lettre muette oubliée en fin de mot (salu → salut)
      */
     accents: boolean;
+    /** correction par le contexte (modèle de fréquences), si le modèle est chargé */
+    context?: boolean;
     /** mots (en minuscules) à ne jamais toucher */
     whitelist: string[];
     /** petites règles maison pour les fautes que Grammalecte laisse passer */
@@ -342,7 +345,7 @@ const lessThan = (a: number[], b: number[]) => {
  * Corrige `text`. `parse` renvoie les erreurs de Grammalecte pour un texte.
  * Ne lève jamais d'erreur sur un texte normal ; au pire, rien n'est corrigé.
  */
-export function correct(text: string, parse: (text: string) => GrammarError[], options: CorrectOptions, speller?: Speller) {
+export function correct(text: string, parse: (text: string) => GrammarError[], options: CorrectOptions, speller?: Speller, model?: NgramModel) {
     const groups = new Set(options.groups);
     const whitelist = new Set(options.whitelist.map(w => w.toLowerCase()));
     // Apostrophes courbes seulement si le message en contient déjà.
@@ -373,6 +376,15 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
 
     // Puis les règles qui lisent des mots corrigés (« il etait la » → « était là »).
     if (options.custom) chat(f => chatAfter(cur, spansOf, speller, f));
+
+    // Le contexte, comme un clavier de téléphone : le mot le plus probable entre ses voisins
+    // (« saluts » → « salut », « tu va » → « tu vas »).
+    if (model && options.context !== false) {
+        const isValid = (w: string) => !!speller && speller.isValid(w.replace(/'/g, "’"));
+        const r = contextFix(cur, model, { keep: w => SLANG.has(w) || whitelist.has(w), spans: spansOf(cur), isValid });
+        cur = r.text;
+        for (const f of r.fixes) fixes.push({ ...f, group: "context" });
+    }
 
     if (options.custom) {
         const { spans } = protect(cur);

@@ -38,6 +38,11 @@ export const settings = definePluginSettings({
             { label: "Full width of the text box", value: "full" },
         ],
     },
+    context: {
+        type: OptionType.BOOLEAN,
+        description: "Pick the most likely word from its neighbours, like a phone keyboard (saluts → salut, tu va → tu vas)",
+        default: true,
+    },
     accents: {
         type: OptionType.BOOLEAN,
         description: "Forgotten accents and apostrophes (daccord → d'accord, c'etait → c'était, deja → déjà)",

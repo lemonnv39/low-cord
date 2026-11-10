@@ -69,6 +69,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 },
                 previewWidth: { name: "Largeur de l'aperçu", description: "Ajustée à la phrase (grandit pendant la frappe) ou pleine largeur", options: { fit: "Ajustée à la phrase", full: "Pleine largeur" } },
                 livePreview: { name: "Aperçu en direct", description: "Le message corrigé s'affiche au-dessus pendant que tu tapes, fautes soulignées en rouge" },
+                context: { name: "Contexte", description: "Le mot le plus probable d'après ses voisins, comme un clavier de téléphone (saluts → salut, tu va → tu vas)" },
                 accents: { name: "Accents et apostrophes", description: "Oubliés : daccord → d'accord, c'etait → c'était, deja → déjà" },
                 homophones: { name: "Homophones", description: "son/sont, a/à, ça/sa, et/est…" },
                 conjugation: { name: "Conjugaison", description: "tu va → tu vas, il a manger → il a mangé" },

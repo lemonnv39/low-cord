@@ -28,7 +28,7 @@ const CACHE_SIZE = 20;
 /** Options envoyées au moteur (les mêmes pour l'aperçu et l'envoi). */
 export const engineOptions = () => {
     const s = settings.store;
-    return { groups: activeGroups(), whitelist: userWords(), custom: s.common, accents: s.accents };
+    return { groups: activeGroups(), whitelist: userWords(), custom: s.common, accents: s.accents, context: s.context };
 };
 
 // ── Cache : texte → correction (pour des réglages donnés) ───────────────────
