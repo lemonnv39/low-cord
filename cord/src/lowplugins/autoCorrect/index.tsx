@@ -41,7 +41,7 @@ const TIMEOUT = 2500;
 
 // ── Envoi ────────────────────────────────────────────────────────────────────
 /** Mode confirmation : texte corrigé en attente de la 2ᵉ Entrée, par salon. */
-const pending = new Map<string, string>();
+const pending = new Map<string, { original: string; corrected: string; }>();
 const same = (a: string, b: string) => a.trim() === b.trim();
 
 function skip(content: string) {
@@ -65,7 +65,11 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     const waiting = pending.get(channelId);
     pending.delete(channelId);
     if (waiting != null) {
-        if (!same(waiting, content) && !skip(content)) {
+        // Texte doublé (corrigé + original, ou corrigé deux fois) : seulement le corrigé.
+        const rest = content.includes(waiting.corrected) ? content.replace(waiting.corrected, "").trim() : null;
+        if (rest != null && rest !== content.trim() && (rest === waiting.original.trim() || rest === waiting.corrected.trim())) {
+            msg.content = waiting.corrected;
+        } else if (!same(waiting.corrected, content) && !skip(content)) {
             try {
                 const again = await withTimeout(correctText(content), TIMEOUT);
                 if (again?.fixes?.length) msg.content = again.text;
@@ -102,8 +106,8 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     s.totalFixed = (s.totalFixed ?? 0) + result.fixes.length;
 
     if (s.mode === "confirm") {
-        pending.set(channelId, result.text);
-        replaceInput(result.text, channelId);
+        pending.set(channelId, { original: content, corrected: result.text });
+        replaceInput(result.text);
         setButtonState("pending");
         return { cancel: true };
     }

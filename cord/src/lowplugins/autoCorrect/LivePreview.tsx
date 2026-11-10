@@ -13,7 +13,7 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { t, useLang } from "@lowcord/i18n";
-import { ChannelStore, ComponentDispatch, DraftStore, DraftType, ReactDOM, useEffect, useLayoutEffect, useRef, UserStore, useState } from "@webpack/common";
+import { ChannelStore, ComponentDispatch, ReactDOM, useEffect, useLayoutEffect, useRef, UserStore, useState } from "@webpack/common";
 
 import { diff, getLive, Piece, useLive } from "./live";
 import { settings } from "./settings";
@@ -24,26 +24,29 @@ export const setInputAnchor = (el: HTMLElement | null) => { if (el) inputAnchor 
 
 /**
  * Remplace le texte de la zone de saisie, après le traitement de l'Entrée
- * par Discord. D'abord sa propre méthode (vider puis insérer, comme pour un
- * brouillon) ; si le brouillon n'a pas changé, en secours : tout sélectionner
- * et taper le texte.
+ * par Discord : tout sélectionner, puis taper le texte par-dessus (comme une
+ * vraie frappe, annulable). Ne peut pas doubler le texte : la sélection est
+ * remplacée. « Vider puis insérer » de Discord seulement si la frappe est
+ * refusée (il peut ajouter au lieu de remplacer).
  */
-export function replaceInput(text: string, channelId: string) {
-    setTimeout(() => {
+export function replaceInput(text: string) {
+    const discordWay = () => {
         ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
         ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
+    };
+    setTimeout(() => {
+        const { editor } = findInput(inputAnchor);
+        if (!editor?.isConnected) return discordWay();
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        // L'éditeur prend la sélection en compte au tour suivant : on tape ensuite.
         setTimeout(() => {
-            if (DraftStore.getDraft(channelId, DraftType.ChannelMessage).trim() === text.trim()) return;
-            const { editor } = findInput(inputAnchor);
-            if (!editor?.isConnected) return;
-            editor.focus();
-            const range = document.createRange();
-            range.selectNodeContents(editor);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-            setTimeout(() => document.execCommand("insertText", false, text), 30);
-        }, 150);
+            if (!document.execCommand("insertText", false, text)) discordWay();
+        }, 30);
     }, 0);
 }
 
@@ -193,7 +196,7 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
 
     const apply = () => {
         const cur = getLive();
-        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text, cur.channelId!);
+        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text);
     };
 
     return ReactDOM.createPortal(
