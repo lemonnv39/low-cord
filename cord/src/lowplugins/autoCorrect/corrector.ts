@@ -136,6 +136,33 @@ const sameStem = (list: string[]) => list.every(s => stem(s) === stem(list[0]));
 export interface Speller {
     isValid(word: string): boolean;
     suggest(word: string): string[];
+    /** nature du mot dans le dictionnaire (« >casser/:V1…:Q:A:m:s/* ») */
+    getMorph(word: string): string[];
+}
+
+// ── « sont » au lieu de « son » que Grammalecte ne voit pas ────────────────────
+// « je lui ai cassé sont bras », « il a pris sont sac », « avec sont frère » :
+// « sont » entre un participe passé singulier (ou une préposition) et un nom
+// singulier qui n'est ni adjectif ni participe → « son ». « Les vélos cassés
+// sont lourds » ne bouge pas (participe pluriel, adjectif après).
+const has = (morph: string[], ...tags: string[]) => morph.some(m => tags.every(t => m.includes(t)));
+const singular = (morph: string[], tag: string) => morph.some(m => m.includes(tag) && /:[si](?:[:/]|$)/.test(m));
+
+function fixSontSon(text: string, spans: [number, number][], speller: Speller, whitelist: Set<string>, fixes: Fix[]) {
+    if (whitelist.has("sont")) return text;
+    return text.replace(/(\p{L}+)(\s+)(sont)(\s+)(\p{L}+)/giu, (m: string, prev: string, s1: string, sont: string, s2: string, next: string, at: number) => {
+        const pos = at + prev.length + s1.length;
+        if (overlaps(pos, pos + sont.length, spans)) return m;
+        const before = speller.getMorph(prev.toLowerCase());
+        const after = speller.getMorph(next.toLowerCase());
+        const afterParticiple = singular(before, ":Q");
+        const afterPreposition = has(before, ":G:R");
+        const noun = singular(after, ":N") && !has(after, ":A") && !has(after, ":Q");
+        if (!(afterParticiple || afterPreposition) || !noun) return m;
+        const to = keepCase(sont, "son");
+        fixes.push({ from: sont, to, group: "conf" });
+        return prev + s1 + to + s2 + next;
+    });
 }
 
 const bare = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-'’]/g, "").toLowerCase();
@@ -254,6 +281,11 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
         cur = fixAccents(cur, spans, speller, parse, whitelist, curly, fixes);
     }
 
+    if (speller && groups.has("conf")) {
+        const { spans } = protect(cur);
+        cur = fixSontSon(cur, spans, speller, whitelist, fixes);
+    }
+
     if (options.custom) {
         const { spans } = protect(cur);
         for (const [re, fn] of CUSTOM) {
@@ -292,8 +324,10 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
                 if (group === "gn" && DETERMINERS.has(low)) continue;
                 const suggestions = error.aSuggestions
                     .map(s => curly ? s : s.replace(/’/g, "'"))
-                    // Proche du mot tapé (« fais » ne devient pas « fission ») : au plus ~40 % de lettres changées.
-                    .filter(s => s && s.toLowerCase() !== low && distance(bare(s), bare(orig)) <= Math.max(2, Math.ceil(bare(orig).length * 0.4)));
+                    // Proche du mot tapé (« fais » ne devient pas « fission ») : au plus ~40 % de
+                    // lettres changées, sauf entre petits mots courants (« est » → « ai »).
+                    .filter(s => s && s.toLowerCase() !== low && (PREFERRED.includes(s.toLowerCase())
+                        || distance(bare(s), bare(orig)) <= Math.max(2, Math.ceil(bare(orig).length * 0.4))));
                 if (!suggestions.length) continue;
                 const pool = suggestions.length === 1 || sameStem(suggestions)
                     ? [suggestions[0]]
@@ -322,6 +356,12 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
             cur = best.next;
             errors = best.after;
         }
+    }
+    // Encore une fois : la grammaire a pu faire apparaître le participe
+    // (« est casser sont bras » → « ai cassé sont bras » → « son bras »).
+    if (speller && groups.has("conf")) {
+        const { spans } = protect(cur);
+        cur = fixSontSon(cur, spans, speller, whitelist, fixes);
     }
     return { text: cur, fixes };
 }

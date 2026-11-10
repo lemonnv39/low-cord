@@ -222,6 +222,12 @@ const speller: Speller = {
         context.__word = word;
         return runInContext("gc_engine.getSpellChecker().isValid(__word)", context, { timeout: PARSE_TIMEOUT }) === true;
     },
+    getMorph(word) {
+        const context = load();
+        context.__word = word;
+        const list = runInContext("Array.from(gc_engine.getSpellChecker().getMorph(__word) || [])", context, { timeout: PARSE_TIMEOUT });
+        return Array.isArray(list) ? list.map(String) : [];
+    },
     suggest(word) {
         const context = load();
         context.__word = word;
