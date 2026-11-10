@@ -117,13 +117,42 @@ async function latestManifest(): Promise<SoundManifest> {
 }
 
 /** Lance l'exe avec --version : il doit démarrer et annoncer la bonne version. */
-function engineVersion(exe: string) {
+function engineVersionOnce(exe: string) {
     return new Promise<string>((resolve, reject) => {
-        execFile(exe, ["--version"], { timeout: 10_000, windowsHide: true }, (err, stdout) => {
-            if (err) reject(new Error(`le moteur ne démarre pas : ${err.message}`));
-            else resolve(String(stdout).trim());
-        });
+        try {
+            execFile(exe, ["--version"], { timeout: 10_000, windowsHide: true }, (err, stdout) => {
+                if (err) reject(err);
+                else resolve(String(stdout).trim());
+            });
+        } catch (e) {
+            // Windows peut refuser le lancement tout de suite (erreur levée, pas renvoyée).
+            reject(e);
+        }
     });
+}
+
+/** Windows a refusé de lancer l'exe (antivirus, Smart App Control…). */
+const blockedByWindows = (e: any) => ["UNKNOWN", "EACCES", "EPERM", "EBUSY"].includes(e?.code) || /spawn (UNKNOWN|EACCES|EPERM|EBUSY)/.test(String(e?.message));
+
+const BLOCKED_TEXT = "Windows a bloqué le moteur (antivirus ou Smart App Control). Autorise low-sound-engine.exe "
+    + "dans ton antivirus, ou coupe Smart App Control (Sécurité Windows → Contrôle des applications et du navigateur), puis réessaie.";
+
+/**
+ * Juste après l'écriture d'un exe, l'antivirus le scanne et Windows peut
+ * refuser de le lancer quelques instants : on réessaie pendant ~6 s.
+ */
+async function engineVersion(exe: string) {
+    for (let i = 0; ; i++) {
+        try {
+            return await engineVersionOnce(exe);
+        } catch (e: any) {
+            if (blockedByWindows(e) && i < 12) {
+                await new Promise(r => setTimeout(r, 500));
+                continue;
+            }
+            throw new Error(blockedByWindows(e) ? BLOCKED_TEXT : `le moteur ne démarre pas : ${e?.message ?? e}`);
+        }
+    }
 }
 
 let busy = false;
@@ -158,7 +187,8 @@ async function retryLocked<T>(fn: () => T, tries = 25): Promise<T> {
 async function install(): Promise<SoundStatus> {
     if (busy) throw new Error("une opération est déjà en cours");
     busy = true;
-    const tmp = join(DIR, `.download-${process.pid}.exe`);
+    // Nom ordinaire (pas un fichier « caché ») : mieux toléré par les antivirus.
+    const tmp = join(DIR, `download-${process.pid}.exe`);
     try {
         await stopEngine();
         const latest = await latestManifest();
@@ -254,7 +284,12 @@ function startEngine(): ChildProcess {
     if (busy) throw new Error("installation en cours");
     if (!readInstalled()) throw new Error("low-sound n'est pas installé");
 
-    const proc = spawn(ENGINE_EXE, [], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    let proc: ChildProcess;
+    try {
+        proc = spawn(ENGINE_EXE, [], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    } catch (e: any) {
+        throw new Error(blockedByWindows(e) ? BLOCKED_TEXT : `le moteur ne démarre pas : ${e?.message ?? e}`);
+    }
     engine = proc;
 
     createInterface({ input: proc.stdout! }).on("line", line => {
@@ -284,7 +319,7 @@ function startEngine(): ChildProcess {
         broadcast({ event: "exit", reason });
     };
     proc.on("exit", code => finish(code === 0 ? "moteur arrêté" : `le moteur s'est arrêté (code ${code})`));
-    proc.on("error", e => finish(`le moteur ne démarre pas : ${e.message}`));
+    proc.on("error", e => finish(blockedByWindows(e) ? BLOCKED_TEXT : `le moteur ne démarre pas : ${e.message}`));
     proc.stdin!.on("error", () => { }); // moteur déjà fermé : on ignore
     return proc;
 }
@@ -533,7 +568,7 @@ app.whenReady().then(() => {
     try {
         if (!existsSync(DIR)) return;
         for (const f of readdirSync(DIR)) {
-            if (f.startsWith(".download-")) rmSync(join(DIR, f), { force: true });
+            if (f.startsWith(".download-") || /^download-\d+\.exe$/.test(f)) rmSync(join(DIR, f), { force: true });
         }
     } catch { }
 });
