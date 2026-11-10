@@ -151,30 +151,37 @@ function Panel() {
                 <Switch on={s.isEnabled} onChange={v => { set("isEnabled")(v); if (v) ensureEngine(true); }} label={t("ac.title")} />
             </div>
 
+            {/* Paysage : trois colonnes côte à côte. */}
             <div className={`lc-ac-body${s.isEnabled ? "" : " lc-ac-dim"}`}>
-                <div className="lc-ac-label">{t("ac.mode")}</div>
-                <div className="lc-ac-modes" role="radiogroup">
-                    {(["auto", "confirm"] as const).map(m => (
-                        <button key={m} role="radio" aria-checked={s.mode === m} className={`lc-ac-mode${s.mode === m ? " lc-ac-mode-on" : ""}`} onClick={() => set("mode")(m)}>
-                            <span>{t(m === "auto" ? "ac.modeAuto" : "ac.modeConfirm")}</span>
-                            <small>{t(m === "auto" ? "ac.modeAutoHint" : "ac.modeConfirmHint")}</small>
-                        </button>
-                    ))}
-                </div>
+                <section className="lc-ac-col">
+                    <div className="lc-ac-label">{t("ac.mode")}</div>
+                    <div className="lc-ac-modes" role="radiogroup">
+                        {(["auto", "confirm"] as const).map(m => (
+                            <button key={m} role="radio" aria-checked={s.mode === m} className={`lc-ac-mode${s.mode === m ? " lc-ac-mode-on" : ""}`} onClick={() => set("mode")(m)}>
+                                <span>{t(m === "auto" ? "ac.modeAuto" : "ac.modeConfirm")}</span>
+                                <small>{t(m === "auto" ? "ac.modeAutoHint" : "ac.modeConfirmHint")}</small>
+                            </button>
+                        ))}
+                    </div>
+                    <Check checked={s.livePreview} onChange={set("livePreview")} label={t("ac.livePreview")} hint={t("ac.livePreviewHint")} />
+                </section>
 
-                <Check checked={s.livePreview} onChange={set("livePreview")} label={t("ac.livePreview")} hint={t("ac.livePreviewHint")} />
+                <section className="lc-ac-col">
+                    <div className="lc-ac-label">{t("ac.fixes")}</div>
+                    <div className="lc-ac-checks">
+                        <Check checked={s.accents} onChange={set("accents")} label={t("ac.accents")} hint={t("ac.accentsHint")} />
+                        <Check checked={s.homophones} onChange={set("homophones")} label={t("ac.homophones")} hint={t("ac.homophonesHint")} />
+                        <Check checked={s.conjugation} onChange={set("conjugation")} label={t("ac.conjugation")} hint={t("ac.conjugationHint")} />
+                        <Check checked={s.agreement} onChange={set("agreement")} label={t("ac.agreement")} hint={t("ac.agreementHint")} />
+                        <Check checked={s.hyphens} onChange={set("hyphens")} label={t("ac.hyphens")} hint={t("ac.hyphensHint")} />
+                        <Check checked={s.common} onChange={set("common")} label={t("ac.common")} hint={t("ac.commonHint")} />
+                    </div>
+                </section>
 
-                <div className="lc-ac-label">{t("ac.fixes")}</div>
-                <Check checked={s.accents} onChange={set("accents")} label={t("ac.accents")} hint={t("ac.accentsHint")} />
-                <Check checked={s.homophones} onChange={set("homophones")} label={t("ac.homophones")} hint={t("ac.homophonesHint")} />
-                <Check checked={s.conjugation} onChange={set("conjugation")} label={t("ac.conjugation")} hint={t("ac.conjugationHint")} />
-                <Check checked={s.agreement} onChange={set("agreement")} label={t("ac.agreement")} hint={t("ac.agreementHint")} />
-                <Check checked={s.hyphens} onChange={set("hyphens")} label={t("ac.hyphens")} hint={t("ac.hyphensHint")} />
-                <Check checked={s.common} onChange={set("common")} label={t("ac.common")} hint={t("ac.commonHint")} />
-
-                <div className="lc-ac-label">{t("ac.words")}</div>
-                <Words />
-
+                <section className="lc-ac-col">
+                    <div className="lc-ac-label">{t("ac.words")}</div>
+                    <Words />
+                </section>
             </div>
 
             <div className="lc-ac-foot">

@@ -106,18 +106,27 @@ const onSend: MessageSendListener = async (channelId, msg) => {
 };
 
 // ── Bouton ───────────────────────────────────────────────────────────────────
-/** Carré avec un rond : le rond tourne pendant la correction, puis devient un cercle de petits traits. */
+/**
+ * Feuille de texte + point d'état en bas à droite : vert actif, rouge coupé,
+ * anneau qui tourne pendant la correction, pulsation une fois corrigé (et
+ * lente en attendant la 2ᵉ Entrée en mode confirmation).
+ */
 export function AutoCorrectIcon({ state = "idle", off = false, size = 20 }: { state?: ButtonState; off?: boolean; size?: number; }) {
     return (
         <svg className={`lc-ac-icon lc-ac-${off ? "off" : state}`} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" strokeWidth="2" />
-            {/* Repos : rond plein trait. */}
-            <circle className="lc-ac-ring" cx="12" cy="12" r="4.6" stroke="currentColor" strokeWidth="2" />
-            {/* Correction en cours : arc qui tourne. */}
-            <circle className="lc-ac-spin" cx="12" cy="12" r="4.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="9 20" />
-            {/* Corrigé : cercle de petits traits. */}
-            <circle className="lc-ac-ticks" cx="12" cy="12" r="4.6" stroke="currentColor" strokeWidth="2.6" strokeDasharray="1.2 1.69" />
-            {off && <path d="M4 20 20 4" stroke="var(--status-danger, #f23f43)" strokeWidth="2.2" strokeLinecap="round" />}
+            <mask id="lc-ac-cut">
+                <rect width="24" height="24" fill="#fff" />
+                <circle cx="18.5" cy="18.5" r="5.6" fill="#000" />
+            </mask>
+            <g mask="url(#lc-ac-cut)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+                <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+                <path d="M10 9H8" />
+                <path d="M16 13H8" />
+                <path d="M16 17H8" />
+            </g>
+            <circle className="lc-ac-dot-state" cx="18.5" cy="18.5" r="3.4" />
+            <circle className="lc-ac-dot-spin" cx="18.5" cy="18.5" r="3.4" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeDasharray="12 10" />
         </svg>
     );
 }
