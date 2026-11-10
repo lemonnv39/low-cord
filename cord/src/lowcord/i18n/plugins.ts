@@ -58,6 +58,9 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        PingFilter: {
+            description: "Règle les notifications (pings, mentions) de tous tes serveurs d'un coup : aucune, seulement quand on te mentionne, mentions + @everyone… Barre de progression, récapitulatif, annulation, et journal des ghost pings. Tout se règle ici, dans ses paramètres",
+        },
         AutoCorrect: {
             description: "Corrige la grammaire française de tes messages à l'envoi (son/sont, a/à, accords, conjugaison) sans toucher à l'argot (tkt, slt, mdr…). Bouton dans la barre de chat : clic pour activer, clic droit pour les réglages",
             settings: {

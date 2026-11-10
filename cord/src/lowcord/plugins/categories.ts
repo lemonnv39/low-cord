@@ -36,6 +36,7 @@ const BY_PLUGIN: Record<string, Category> = {
     SilentTyping: "messages",
     // Serveurs
     PermissionsViewer: "servers",
+    PingFilter: "servers",
     ServerInfo: "servers",
     ShowHiddenChannels: "servers",
     ShowHiddenThings: "servers",

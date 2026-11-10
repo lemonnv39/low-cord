@@ -1,0 +1,508 @@
+.lc-pf {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+}
+
+.lc-pf-intro {
+    margin: 0 0 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.lc-pf-label {
+    margin: 12px 0 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.lc-pf-muted {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-pf-empty {
+    padding: 14px 0;
+    text-align: center;
+}
+
+/* Choix */
+.lc-pf-profiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 6px;
+}
+
+.lc-pf-profile {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px 11px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.lc-pf-profile:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.lc-pf-profile:hover:not(:disabled) {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+}
+
+.lc-pf-profile-on {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
+}
+
+.lc-pf-radio {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+}
+
+.lc-pf-profile-on .lc-pf-radio {
+    border-color: var(--header-primary, var(--text-strong));
+    background: radial-gradient(circle, var(--header-primary, var(--text-strong)) 45%, transparent 50%);
+}
+
+.lc-pf-profile-text,
+.lc-pf-check-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lc-pf-profile-text span {
+    font-weight: 600;
+}
+
+.lc-pf-profile-text small,
+.lc-pf-check-text small {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+/* Cases à cocher */
+.lc-pf-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 4px 14px;
+}
+
+.lc-pf-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 4px 2px;
+    cursor: pointer;
+}
+
+.lc-pf-disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.lc-pf-check input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lc-pf-box {
+    position: relative;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border: 2px solid var(--text-muted);
+    border-radius: 5px;
+}
+
+.lc-pf-check input:checked + .lc-pf-box {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+}
+
+.lc-pf-check input:checked + .lc-pf-box::after {
+    position: absolute;
+    top: 0;
+    left: 3.5px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--background-base-low, var(--background-primary, #1e1f22));
+    border-width: 0 2px 2px 0;
+    content: "";
+    transform: rotate(45deg);
+}
+
+.lc-pf-check input:focus-visible + .lc-pf-box {
+    outline: 2px solid var(--focus-primary, #00b0f4);
+    outline-offset: 2px;
+}
+
+/* Serveurs et journal : ligne qui se déplie */
+.lc-pf-row-btn {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.lc-pf-row-btn:hover:not(:disabled) {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+}
+
+.lc-pf-row-btn > span:first-child {
+    flex: 1;
+}
+
+.lc-pf-chevron {
+    color: var(--text-muted);
+}
+
+.lc-pf-picker,
+.lc-pf-journal-body {
+    margin-top: 6px;
+    padding: 8px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+    border-radius: 9px;
+}
+
+.lc-pf-picker-bar,
+.lc-pf-tabs {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.lc-pf-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 9px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 7px;
+    outline: none;
+    background: var(--background-mod-subtle, rgb(0 0 0 / 20%));
+    color: inherit;
+    font-size: 13px;
+}
+
+.lc-pf-input:focus {
+    border-color: var(--header-primary, var(--text-strong));
+}
+
+.lc-pf-mini {
+    padding: 5px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.lc-pf-mini:hover {
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-pf-list,
+.lc-pf-log {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 240px;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) transparent;
+    scrollbar-width: thin;
+}
+
+.lc-pf-guild {
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    text-align: left;
+    cursor: pointer;
+}
+
+.lc-pf-guild:hover {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
+}
+
+.lc-pf-guild-on {
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-pf-guild img,
+.lc-pf-guild-ph {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+}
+
+.lc-pf-guild-ph {
+    display: grid;
+    place-items: center;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.lc-pf-guild-name {
+    flex: 1;
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-pf-guild-state {
+    font-size: 12px;
+}
+
+.lc-pf-guild-on .lc-pf-guild-state {
+    color: var(--status-positive, #23a55a);
+}
+
+/* Progression */
+.lc-pf-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.lc-pf-progress-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+}
+
+.lc-pf-num {
+    color: var(--text-muted);
+    font-family: var(--font-code, monospace);
+    font-size: 12px;
+}
+
+.lc-pf-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+}
+
+.lc-pf-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--header-primary, var(--text-strong));
+    transition: width 200ms ease;
+}
+
+.lc-pf-current {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Récapitulatif */
+.lc-pf-recap {
+    margin-top: 10px;
+    padding: 11px 13px;
+    border: 1px solid rgb(35 165 90 / 35%);
+    border-radius: 10px;
+    background: rgb(35 165 90 / 6%);
+}
+
+.lc-pf-recap-title {
+    margin-bottom: 6px;
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 700;
+}
+
+.lc-pf-recap ul {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.5;
+}
+
+.lc-pf-recap-foot {
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-pf-error,
+.lc-pf-error-inline,
+.lc-pf-error-line {
+    color: var(--text-danger, #f23f43);
+}
+
+.lc-pf-error {
+    margin-top: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: rgb(242 63 67 / 8%);
+    font-size: 13px;
+}
+
+.lc-pf-error-line {
+    font-size: 12px;
+}
+
+/* Boutons */
+.lc-pf-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin: 12px 0 4px;
+}
+
+.lc-pf-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.lc-pf-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.lc-pf-btn:hover:not(:disabled) {
+    background: var(--background-mod-normal, rgb(255 255 255 / 6%));
+}
+
+.lc-pf-btn-primary {
+    border-color: transparent;
+    background: var(--header-primary, var(--text-strong));
+    color: var(--background-base-low, var(--background-primary, #1e1f22));
+    font-weight: 600;
+}
+
+.lc-pf-btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--header-primary, #fff) 85%, transparent);
+}
+
+/* Journal */
+.lc-pf-journal {
+    margin-top: 6px;
+}
+
+.lc-pf-tabs button[role="tab"] {
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.lc-pf-tabs .lc-pf-tab-on {
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 600;
+}
+
+.lc-pf-spacer {
+    flex: 1;
+}
+
+.lc-pf-log-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+}
+
+.lc-pf-log-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 13px;
+}
+
+.lc-pf-tag {
+    padding: 1px 7px;
+    border-radius: 5px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.lc-pf-tag-delete {
+    background: rgb(242 63 67 / 14%);
+    color: var(--text-danger, #f23f43);
+}
+
+.lc-pf-tag-edit {
+    background: rgb(240 178 50 / 14%);
+    color: #f0b232;
+}
+
+.lc-pf-link {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-link, #00a8fc);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.lc-pf-link:hover {
+    text-decoration: underline;
+}
+
+.lc-pf-quote {
+    padding-left: 8px;
+    border-left: 2px solid var(--border-subtle, rgb(255 255 255 / 15%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
