@@ -32,6 +32,7 @@ const BY_PLUGIN: Record<string, Category> = {
     ExportMessages: "messages",
     MessageCleaner: "messages",
     MessageLogger: "messages",
+    AutoCorrect: "messages",
     SilentTyping: "messages",
     // Serveurs
     PermissionsViewer: "servers",

@@ -58,6 +58,25 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        AutoCorrect: {
+            description: "Corrige la grammaire française de tes messages à l'envoi (son/sont, a/à, accords, conjugaison) sans toucher à l'argot (tkt, slt, mdr…). Bouton dans la barre de chat : clic pour activer, clic droit pour les réglages",
+            settings: {
+                isEnabled: { name: "Activé", description: "Corriger les messages avant de les envoyer" },
+                mode: {
+                    name: "Envoi",
+                    description: "Comment partent les messages corrigés",
+                    options: { auto: "Envoi auto après correction", confirm: "Montrer la correction, Entrée encore pour envoyer" },
+                },
+                homophones: { name: "Homophones", description: "son/sont, a/à, ça/sa, et/est…" },
+                conjugation: { name: "Conjugaison", description: "tu va → tu vas, il a manger → il a mangé" },
+                agreement: { name: "Accords", description: "Genre et nombre (les chat → les chats)" },
+                hyphens: { name: "Traits d'union", description: "dis moi → dis-moi" },
+                common: { name: "Fautes courantes du chat", description: "sa va → ça va, ont y va → on y va" },
+                showToast: { name: "Montrer les corrections", description: "Petit message avec ce qui a été corrigé" },
+                words: { name: "Mots à ne jamais corriger", description: "Séparés par des virgules" },
+                ignorePrefixes: { name: "Préfixes ignorés", description: "Les messages qui commencent par l'un d'eux partent tels quels (commandes de bots), séparés par des espaces" },
+            },
+        },
         SilentTyping: {
             description: "Cache le fait que tu écris (l'indicateur « … est en train d'écrire » n'est plus envoyé)",
             settings: {

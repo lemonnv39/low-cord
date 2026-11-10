@@ -1,0 +1,391 @@
+/* ── Icône : carré + rond ────────────────────────────────────────────── */
+.lc-ac-icon circle {
+    transform-origin: 12px 12px;
+    transition: opacity 180ms ease;
+}
+
+.lc-ac-icon .lc-ac-spin,
+.lc-ac-icon .lc-ac-ticks {
+    opacity: 0;
+}
+
+/* Correction en cours : l'arc tourne à la place du rond. */
+.lc-ac-working .lc-ac-ring {
+    opacity: 0.25;
+}
+
+.lc-ac-working .lc-ac-spin {
+    opacity: 1;
+    animation: lc-ac-spin 0.7s linear infinite;
+}
+
+/* Corrigé : le rond devient un cercle de petits traits. */
+.lc-ac-done .lc-ac-ring,
+.lc-ac-pending .lc-ac-ring {
+    opacity: 0;
+}
+
+.lc-ac-done .lc-ac-ticks,
+.lc-ac-pending .lc-ac-ticks {
+    opacity: 1;
+    animation: lc-ac-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.lc-ac-done {
+    color: var(--status-positive, #23a55a);
+}
+
+/* Mode confirmation : en attente de la 2ᵉ Entrée, les traits tournent doucement. */
+.lc-ac-pending {
+    color: var(--status-positive, #23a55a);
+}
+
+.lc-ac-pending .lc-ac-ticks {
+    animation: lc-ac-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4), lc-ac-spin 6s linear 420ms infinite;
+}
+
+.lc-ac-off {
+    opacity: 0.6;
+}
+
+@keyframes lc-ac-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes lc-ac-pop {
+    from {
+        transform: scale(0.4) rotate(-90deg);
+        opacity: 0;
+    }
+}
+
+/* ── Panneau de réglages ─────────────────────────────────────────────── */
+.lc-ac-panel {
+    position: fixed;
+    z-index: 1002;
+    display: flex;
+    flex-direction: column;
+    width: 330px;
+    max-height: min(560px, calc(100vh - 120px));
+    overflow: hidden;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+    border-radius: 12px;
+    background: var(--background-floating, var(--background-surface-high, #111214));
+    box-shadow: var(--shadow-high, 0 12px 32px rgb(0 0 0 / 45%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 14px;
+    animation: lc-ac-panel-in 160ms ease-out;
+}
+
+@keyframes lc-ac-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+.lc-ac-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-ac-title {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lc-ac-title span {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.lc-ac-title small,
+.lc-ac-muted {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-ac-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding: 4px 14px 12px;
+    transition: opacity 150ms ease;
+}
+
+.lc-ac-dim {
+    opacity: 0.5;
+}
+
+.lc-ac-label {
+    margin: 10px 0 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* Interrupteur */
+.lc-ac-switch {
+    position: relative;
+    flex: none;
+    width: 40px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 16%));
+    cursor: pointer;
+    transition: background 160ms ease;
+}
+
+.lc-ac-switch span {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 160ms ease;
+}
+
+.lc-ac-switch-on {
+    background: var(--status-positive, #23a55a);
+}
+
+.lc-ac-switch-on span {
+    transform: translateX(16px);
+}
+
+/* Modes */
+.lc-ac-modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.lc-ac-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-normal, var(--text-default));
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.lc-ac-mode span {
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.lc-ac-mode small {
+    color: var(--text-muted);
+    font-size: 11.5px;
+    line-height: 1.35;
+}
+
+.lc-ac-mode:hover {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+}
+
+.lc-ac-mode-on {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--background-mod-subtle, rgb(255 255 255 / 5%));
+}
+
+/* Cases à cocher */
+.lc-ac-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 5px 2px;
+    cursor: pointer;
+}
+
+.lc-ac-check input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lc-ac-box {
+    position: relative;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border: 2px solid var(--text-muted);
+    border-radius: 5px;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.lc-ac-check input:checked + .lc-ac-box {
+    border-color: var(--header-primary, var(--text-strong));
+    background: var(--header-primary, var(--text-strong));
+}
+
+.lc-ac-check input:checked + .lc-ac-box::after {
+    position: absolute;
+    top: 1px;
+    left: 4.5px;
+    width: 4px;
+    height: 9px;
+    border: solid var(--background-floating, #111214);
+    border-width: 0 2px 2px 0;
+    content: "";
+    transform: rotate(45deg);
+}
+
+.lc-ac-check input:focus-visible + .lc-ac-box {
+    outline: 2px solid var(--focus-primary, #00b0f4);
+    outline-offset: 2px;
+}
+
+.lc-ac-check-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.lc-ac-check-text small {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Mots à ne jamais corriger */
+.lc-ac-words {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lc-ac-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.lc-ac-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 9px;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    font-size: 12.5px;
+}
+
+.lc-ac-chip button {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lc-ac-chip button:hover {
+    background: var(--background-mod-strong, rgb(255 255 255 / 12%));
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-ac-input {
+    padding: 7px 10px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 7px;
+    outline: none;
+    background: var(--background-mod-subtle, rgb(0 0 0 / 20%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+}
+
+.lc-ac-input:focus {
+    border-color: var(--header-primary, var(--text-strong));
+}
+
+/* Pied : état du moteur */
+.lc-ac-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-ac-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.lc-ac-dot-on {
+    background: var(--status-positive, #23a55a);
+}
+
+.lc-ac-dot-busy {
+    background: #f0b232;
+    animation: lc-ac-blink 1s ease-in-out infinite;
+}
+
+@keyframes lc-ac-blink {
+    50% {
+        opacity: 0.35;
+    }
+}
+
+.lc-ac-engine {
+    flex: 1;
+    min-width: 0;
+}
+
+.lc-ac-count {
+    font-variant-numeric: tabular-nums;
+}
+
+.lc-ac-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-link, #00a8fc);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.lc-ac-link:hover {
+    text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lc-ac-working .lc-ac-spin,
+    .lc-ac-done .lc-ac-ticks,
+    .lc-ac-pending .lc-ac-ticks,
+    .lc-ac-panel,
+    .lc-ac-dot-busy {
+        animation: none;
+    }
+}
