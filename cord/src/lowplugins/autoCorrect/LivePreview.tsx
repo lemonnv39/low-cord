@@ -187,7 +187,8 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         <ErrorBoundary noop>
             <div
                 className={`lc-ac-live${hasFixes ? " lc-ac-live-fix" : ""}`}
-                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, width: box.width }}
+                // Largeur de la phrase seulement (grandit avec la frappe), jamais plus large que la zone de saisie.
+                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width }}
                 onMouseDown={e => e.preventDefault()}
                 onClick={apply}
                 role={hasFixes ? "button" : undefined}
