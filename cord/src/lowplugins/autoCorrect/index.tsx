@@ -30,7 +30,7 @@ import definePlugin from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
 
 import { ensureEngine, refreshEngine, warmup } from "./engine";
-import { correctText, resetLive, startLive, stopLive, useLive } from "./live";
+import { correctText, registerChat, resetLive, startLive, stopLive, useLive } from "./live";
 import { LivePreview, replaceInput, setInputAnchor } from "./LivePreview";
 import { closePanel, isPanelOpen, openPanel } from "./Panel";
 import { ButtonState, getEngineState, setButtonState, settings, useButtonState } from "./settings";
@@ -107,7 +107,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
 
     if (s.mode === "confirm") {
         pending.set(channelId, { original: content, corrected: result.text });
-        replaceInput(result.text);
+        replaceInput(result.text, channelId);
         setButtonState("pending");
         return { cancel: true };
     }
@@ -143,7 +143,12 @@ export function AutoCorrectIcon({ state = "idle", off = false, size = 20 }: { st
     );
 }
 
-const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
+// Zones de saisie de messages : chat principal, chat d'un salon vocal (sidebar / guild_room),
+// overlay. Pas l'édition d'un message, ni les champs de profil, de forum…
+const MESSAGE_CHATS = new Set(["normal", "sidebar", "guild_room", "overlay"]);
+
+const AutoCorrectButton: ChatBarButtonFactory = ({ type, channel }) => {
+    const isChat = MESSAGE_CHATS.has(type?.analyticsName) && !!channel?.id;
     useLang();
     const { isEnabled, mode } = settings.use(["isEnabled", "mode"]);
     const sending = useButtonState();
@@ -153,9 +158,13 @@ const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
     // Repère dans la barre de chat : l'aperçu se place au-dessus de la zone de saisie qui le contient.
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
-    useEffect(() => { if (isMainChat) warmup(); }, [isMainChat, channel?.id]);
+    useEffect(() => {
+        if (!isChat) return;
+        warmup();
+        return registerChat(channel.id);
+    }, [isChat, channel?.id]);
 
-    if (!isMainChat) return null;
+    if (!isChat) return null;
 
     const tooltip = !isEnabled
         ? t("ac.tooltipOff")
@@ -179,9 +188,9 @@ const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
                 }}
             >
                 <AutoCorrectIcon state={state} off={!isEnabled} />
-                <span ref={el => { setAnchor(el); setInputAnchor(el); }} hidden />
+                <span ref={el => { setAnchor(el); setInputAnchor(channel.id, el); }} hidden />
             </ChatBarButton>
-            <LivePreview anchor={anchor} />
+            <LivePreview anchor={anchor} channelId={channel.id} />
         </>
     );
 };

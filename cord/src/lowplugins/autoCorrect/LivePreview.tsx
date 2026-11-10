@@ -18,9 +18,12 @@ import { ChannelStore, ComponentDispatch, ReactDOM, useEffect, useLayoutEffect, 
 import { diff, getLive, Piece, useLive } from "./live";
 import { settings } from "./settings";
 
-/** Repère dans la barre de chat principale (posé par le bouton) : sert à retrouver sa zone de saisie. */
-let inputAnchor: HTMLElement | null = null;
-export const setInputAnchor = (el: HTMLElement | null) => { if (el) inputAnchor = el; };
+/** Repère posé par le bouton dans chaque barre de chat ouverte, par salon : sert à retrouver sa zone de saisie. */
+const anchors = new Map<string, HTMLElement>();
+export function setInputAnchor(channelId: string, el: HTMLElement | null) {
+    if (el) anchors.set(channelId, el);
+    else anchors.delete(channelId);
+}
 
 /**
  * Remplace le texte de la zone de saisie, après le traitement de l'Entrée
@@ -29,13 +32,13 @@ export const setInputAnchor = (el: HTMLElement | null) => { if (el) inputAnchor 
  * remplacée. « Vider puis insérer » de Discord seulement si la frappe est
  * refusée (il peut ajouter au lieu de remplacer).
  */
-export function replaceInput(text: string) {
+export function replaceInput(text: string, channelId: string) {
     const discordWay = () => {
         ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
         ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
     };
     setTimeout(() => {
-        const { editor } = findInput(inputAnchor);
+        const { editor } = findInput(anchors.get(channelId) ?? null);
         if (!editor?.isConnected) return discordWay();
         editor.focus();
         const range = document.createRange();
@@ -137,7 +140,7 @@ function squiggles(editor: HTMLElement, wrong: Piece[]) {
     return rects;
 }
 
-export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
+export function LivePreview({ anchor, channelId }: { anchor: HTMLElement | null; channelId: string; }) {
     useLang();
     const live = useLive();
     const { isEnabled, livePreview, previewWidth } = settings.use(["isEnabled", "livePreview", "previewWidth"]);
@@ -162,7 +165,8 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
         };
     }, [anchor]);
 
-    const show = isEnabled && livePreview && live.text.trim().length >= 3 && (live.analyzing || live.result != null);
+    // Seulement dans la zone de saisie du salon où l'on écrit (chat principal ou chat vocal).
+    const show = isEnabled && livePreview && live.channelId === channelId && live.text.trim().length >= 3 && (live.analyzing || live.result != null);
 
     // Ce qui est affiché. Pendant la frappe, la dernière correction reste et le
     // texte tapé depuis s'ajoute derrière ; si elle ne colle plus (lettre
@@ -219,7 +223,7 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
 
     const apply = () => {
         const cur = getLive();
-        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text);
+        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text, cur.channelId!);
     };
 
     return ReactDOM.createPortal(

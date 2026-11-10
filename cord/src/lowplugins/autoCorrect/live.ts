@@ -128,9 +128,23 @@ function schedule(channelId: string, text: string) {
     }, DELAY);
 }
 
+// Salons dont une zone de saisie est à l'écran (chat principal, chat d'un salon vocal…).
+const openChats = new Map<string, number>();
+
+/** Une zone de saisie apparaît pour ce salon (renvoie de quoi la retirer). */
+export function registerChat(channelId: string) {
+    openChats.set(channelId, (openChats.get(channelId) ?? 0) + 1);
+    return () => {
+        const n = (openChats.get(channelId) ?? 1) - 1;
+        if (n > 0) openChats.set(channelId, n);
+        else openChats.delete(channelId);
+    };
+}
+
 function onDraft(e: { channelId: string; draft: string; draftType: number; }) {
     // 0 = message du salon (pas une réponse à un fil, une commande…).
-    if (e.draftType !== 0 || e.channelId !== SelectedChannelStore.getChannelId()) return;
+    if (e.draftType !== 0) return;
+    if (e.channelId !== SelectedChannelStore.getChannelId() && !openChats.has(e.channelId)) return;
     schedule(e.channelId, e.draft ?? "");
 }
 
@@ -141,12 +155,12 @@ function onClear(e: { channelId: string; draftType: number; }) {
 // Changement de salon : l'aperçu repart du brouillon gardé par Discord pour
 // ce salon (message tapé puis laissé sans l'envoyer).
 function onChannel(e: { channelId?: string | null; }) {
-    resetLive();
     const channelId = e?.channelId;
-    if (!channelId) return;
     // Après que Discord a fini d'afficher le salon (et sa zone de saisie).
     setTimeout(() => {
-        if (SelectedChannelStore.getChannelId() !== channelId) return;
+        // L'aperçu en cours reste s'il appartient à une zone toujours ouverte (chat vocal à côté).
+        if (state.channelId && !openChats.has(state.channelId) && state.channelId !== SelectedChannelStore.getChannelId()) resetLive();
+        if (!channelId || SelectedChannelStore.getChannelId() !== channelId || state.text) return;
         const draft = DraftStore.getDraft(channelId, DraftType.ChannelMessage);
         if (draft) schedule(channelId, draft);
     }, 50);
