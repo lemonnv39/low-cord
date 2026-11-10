@@ -1,4 +1,4 @@
-// Vencord 60c1ba5
+// Vencord 955a54b
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
