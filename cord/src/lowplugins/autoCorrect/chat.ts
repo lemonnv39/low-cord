@@ -55,6 +55,8 @@ const REGEX_RULES: Rule[] = [
     // « quesque tu fais », « esque tu viens » → « qu'est-ce que », « est-ce que »
     [new RegExp(`${B}(?:quesque|qu'esque|qu’esque|keske|qu'est ce que|qu’est ce que)${W}`, "giu"), m => caseLike(m[0], "qu'est-ce que")],
     [new RegExp(`${START}(esque|est ce que)${W}`, "giu"), m => `${m[1]}${caseLike(m[2], "est-ce que")}`],
+    // « peu tu venir », « veu tu » en début de phrase → « peux-tu », « veux-tu »
+    [new RegExp(`${START}(peu|peut|peux|veu|veut|veux)\\s+tu${W}`, "giu"), m => `${m[1]}${caseLike(m[2], m[2].toLowerCase().startsWith("p") ? "peux" : "veux")}-tu`],
     // « appel moi », « envoi moi » en début de phrase : le verbe à l'impératif, pas le nom
     [new RegExp(`${START}(appel|rappel|envoi|renvoi)\\s+(moi|toi|le|la|les|nous|lui|leur)${W}`, "giu"), m => {
         const verb: Record<string, string> = { appel: "appelle", rappel: "rappelle", envoi: "envoie", renvoi: "renvoie" };
@@ -130,6 +132,27 @@ function morphRules(speller: ChatSpeller): Rule[] {
             const plural = ["ils", "elles", "qui", "eux", "ceux", "celles"].includes(prev) || speller.getMorph(prev).some(x => /:p(?:[:/]|$)/.test(x));
             if (!plural) return null;
             return `${m[1]} sont `;
+        }],
+        // « je parl », « tu mang » : verbe en -er sans son « e » après un sujet → « je parle »
+        // (seulement si le mot tapé n'existe pas et que la forme en « e » est un verbe conjugué).
+        [new RegExp(`${B}(je|j'|tu|il|elle|on|ils|elles|ça|ca)\\s+(\\p{L}{2,})${W}`, "giu"), m => {
+            const w = m[2].toLowerCase();
+            // Pas un anglicisme (« je ghost », « je stream ») : ceux-là restent tels quels.
+            if (/e$/.test(w) || /w|k[^f]|ck|sh|th|ee|oo|ea|gh|y$/.test(w) || speller.getMorph(w).length) return null;
+            const withE = speller.getMorph(w + "e");
+            if (!withE.some(x => /:V1/.test(x) && /:Ip/.test(x))) return null;
+            return `${m[1]} ${m[2]}e`;
+        }],
+        // Question en début de phrase : « est tu pense » → « est-ce que tu pense » (verbe conjugué
+        // derrière), « est tu sûr / là » → « es-tu sûr / là » (adjectif, adverbe, participe).
+        [new RegExp(`${START}(est|es)\\s+(tu)\\s+(\\p{L}+)`, "giu"), m => {
+            const morph = speller.getMorph(m[4].toLowerCase());
+            if (!morph.length) return null;
+            const adjective = morph.some(x => /:[AWQ]/.test(x));
+            const verb = morph.some(x => /:V/.test(x) && /:(?:Ip|Iq|If|Is|K)/.test(x));
+            if (verb && !adjective) return `${m[1]}${caseLike(m[2], "est-ce que")} ${m[3]} ${m[4]}`;
+            if (adjective) return `${m[1]}${caseLike(m[2], "es")}-${m[3]} ${m[4]}`;
+            return null;
         }],
         // « tu serrais venue » → « tu serais venue » (conditionnel de être, pas de serrer)
         [new RegExp(`${B}(serr)(ai|ais|ait|aient|ions|iez)(\\s+)(\\p{L}+)`, "giu"), m => {
