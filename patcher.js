@@ -1,4 +1,4 @@
-// Vencord ff999f4
+// Vencord 777c86d
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
