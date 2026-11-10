@@ -363,6 +363,19 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
     // Fautes typiques du chat (« je men fou », « tes ou », « sava »).
     if (options.custom) chat(f => chatBefore(cur, spansOf, f));
 
+    const isValidWord = (w: string) => !!speller && speller.isValid(w.replace(/'/g, "’"));
+    const keepWord = (w: string) => SLANG.has(w) || whitelist.has(w);
+    const contextPass = (onlyUnknown: boolean) => {
+        if (!model || options.context === false) return;
+        const r = contextFix(cur, model, { keep: keepWord, spans: spansOf(cur), isValid: isValidWord, onlyUnknown });
+        cur = r.text;
+        for (const f of r.fixes) fixes.push({ ...f, group: "context" });
+    };
+
+    // Les mots inconnus d'abord par le contexte (« compran » → « comprends », « fote » → « fautes ») :
+    // la prononciation et les voisins valent mieux que la 1ʳᵉ suggestion du dictionnaire.
+    contextPass(true);
+
     // D'abord l'orthographe sûre : la grammaire travaille ensuite sur des mots connus.
     if (options.accents && speller) {
         const { spans } = protect(cur);
@@ -379,12 +392,9 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
 
     // Le contexte, comme un clavier de téléphone : le mot le plus probable entre ses voisins
     // (« saluts » → « salut », « tu va » → « tu vas »).
-    if (model && options.context !== false) {
-        const isValid = (w: string) => !!speller && speller.isValid(w.replace(/'/g, "’"));
-        const r = contextFix(cur, model, { keep: w => SLANG.has(w) || whitelist.has(w), spans: spansOf(cur), isValid });
-        cur = r.text;
-        for (const f of r.fixes) fixes.push({ ...f, group: "context" });
-    }
+    // Deux passages : le 1er peut corriger un voisin dont le 2ᵉ a besoin (« sa bizar » → « ça bizarre »).
+    contextPass(false);
+    contextPass(false);
 
     if (options.custom) {
         const { spans } = protect(cur);

@@ -28,6 +28,36 @@ export interface NgramModel {
     cnts: Uint16Array;
     /** forme sans accents → mots du vocabulaire (candidats aux accents près et terminaisons) */
     byBare: Map<string, number[]>;
+    /** prononciation approximative → mots (fautes « à l'oreille » : fote → faute) */
+    byPhon: Map<string, number[]>;
+}
+
+/**
+ * Prononciation approximative d'un mot français (dans l'esprit de Soundex) :
+ * « fote » et « fautes » donnent la même clé, « compran » et « comprends »
+ * aussi. Les lettres muettes de fin sont retirées.
+ */
+export function phonetic(word: string) {
+    // « ç » se lit « s » (avant de retirer les accents, qui l'effaceraient).
+    let s = bare(word.toLowerCase().replace(/ç/g, "s")).replace(/[^a-z]/g, "");
+    const rules: [RegExp, string][] = [
+        [/^h/, ""], [/([^cs])h/g, "$1"],
+        [/ph/g, "f"], [/gn/g, "N"], [/s?ch|sh/g, "S"], [/qu/g, "k"], [/gu(?=[eiy])/g, "g"],
+        [/c(?=[eiy])/g, "s"], [/c/g, "k"], [/g(?=[eiy])/g, "j"], [/x/g, "ks"], [/w/g, "v"], [/y/g, "i"],
+        [/ill/g, "i"], [/eau|au/g, "o"], [/oi/g, "Wa"], [/ou/g, "U"],
+        // Nasales avant « ai / ei » (« certain », « maintenant »).
+        [/(?:ain|ein|in|im|un|um)(?=[^aeiouAIOUW]|$)/g, "I"], [/ai|ei/g, "e"], [/(?:er|ez|et)$/, "e"],
+        [/(?:an|am|en|em)(?=[^aeiouAIOUW]|$)/g, "A"], [/(?:on|om)(?=[^aeiouAIOUW]|$)/g, "O"],
+        [/ss/g, "s"], [/([aeiouAIOUW])s(?=[aeiouAIOUW])/g, "$1z"],
+        [/(.)\1+/g, "$1"],
+    ];
+    for (const [re, to] of rules) s = s.replace(re, to);
+    // Lettres muettes de fin, en boucle : « fautes » et « fote » → « fo », « comprends » → « kOprA ».
+    for (let prev = ""; prev !== s && s.length > 1;) {
+        prev = s;
+        s = s.replace(/e$/, "").replace(/[sxtdzp]$/, "");
+    }
+    return s;
 }
 
 const BOS = 0, EOS = 1;
@@ -66,13 +96,17 @@ export function loadModel(buf: Uint8Array): NgramModel {
 
     // Index des candidats : seulement les mots assez fréquents (le reste est du bruit de sous-titres).
     const byBare = new Map<string, number[]>();
+    const byPhon = new Map<string, number[]>();
+    const push = (map: Map<string, number[]>, k: string, i: number) => {
+        const l = map.get(k);
+        if (l) l.push(i); else map.set(k, [i]);
+    };
     for (let i = 2; i < V; i++) {
         if (uni[i] < 20) continue;
-        const b = bare(words[i]);
-        const l = byBare.get(b);
-        if (l) l.push(i); else byBare.set(b, [i]);
+        push(byBare, bare(words[i]), i);
+        if (uni[i] >= 50 && !/['’]/.test(words[i])) push(byPhon, phonetic(words[i]), i);
     }
-    return { words, index, uni, total, rowStart, cols, cnts, byBare };
+    return { words, index, uni, total, rowStart, cols, cnts, byBare, byPhon };
 }
 
 function pairCount(m: NgramModel, a: number, b: number) {
@@ -118,6 +152,19 @@ export interface ContextOptions {
     spans: [number, number][];
     /** le mot existe-t-il en français (dictionnaire de Grammalecte) ? */
     isValid: (word: string) => boolean;
+    /** seulement les mots inconnus (passage avant les autres couches d'orthographe) */
+    onlyUnknown?: boolean;
+}
+
+/** Distance d'édition (pour départager deux mots qui se prononcent pareil). */
+function letters(a: string, b: string) {
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        const row = [i];
+        for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = row;
+    }
+    return prev[b.length];
 }
 
 // Homophones courants du chat, au-delà des accents et des terminaisons.
@@ -152,7 +199,7 @@ export interface ContextFix { from: string; to: string; }
  * ou homophone, plus cher) et gain de probabilité exigé pour remplacer
  * (log 3 ≈ 20 fois plus probable). Calibrés sur les bases de test.
  */
-export const TUNING = { costAccent: 0.5, costEdit: 4.5, costHomophone: 1.5, marginUnknown: 2, marginKnown: 3 };
+export const TUNING = { costAccent: 0.5, costEdit: 4.5, costHomophone: 1.5, costPhon: 2, costPhonLetter: 1.5, marginUnknown: 2, marginKnown: 3 };
 
 function keepCase(orig: string, to: string) {
     if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase()) return to.toUpperCase();
@@ -185,6 +232,8 @@ export function contextFix(text: string, m: NgramModel, opts: ContextOptions) {
         const startOfSentence = i === 0 || boundary(i - 1);
         if (w !== low && (!startOfSentence || (w.length > 1 && w === w.toUpperCase()))) continue;
 
+        const valid = opts.isValid(low);
+        if (opts.onlyUnknown && valid) continue;
         const prev = boundary(i - 1) ? BOS : idOf(out[i - 1]);
         const next = boundary(i) ? EOS : idOf(out[i + 1]);
         const self = m.index.get(low) ?? -1;
@@ -194,11 +243,17 @@ export function contextFix(text: string, m: NgramModel, opts: ContextOptions) {
         let best = -1, bestScore = -Infinity;
         // Mot inconnu du dictionnaire (argot, prénom, faute de frappe) : seulement les accents ;
         // les fautes de frappe sont l'affaire des couches d'orthographe, qui ont leurs garde-fous.
-        const valid = opts.isValid(low);
         const pool = new Set(candidates(m, low));
         for (const h of HOMOPHONE_OF.get(low) ?? []) {
             const i = m.index.get(h);
             if (i !== undefined) pool.add(i);
+        }
+        // Faute « à l'oreille » (fote → fautes, compran → comprends) : mot inconnu, pas un
+        // anglicisme, pas un mot fréquent dans les sous-titres (prénom, argot courant).
+        const byEar = new Set<number>();
+        if (!valid && low.length >= 3 && /[aeiouyéèêàâîôû]/.test(low) && !/w|ck|sh|th|ee|oo|ea|gh|y$/.test(low)
+            && !(self >= 0 && m.uni[self] >= 100)) {
+            for (const i of m.byPhon.get(phonetic(low)) ?? []) { byEar.add(i); pool.add(i); }
         }
         for (const c of pool) {
             if (c === self) continue;
@@ -206,11 +261,14 @@ export function contextFix(text: string, m: NgramModel, opts: ContextOptions) {
             // Pas d'apostrophe ni de mot coupé : le découpage les sépare déjà.
             if (/['’]/.test(cw) !== /['’]/.test(low)) continue;
             const accentOnly = bare(cw) === bare(low);
-            if (!valid && !accentOnly) continue;
+            if (!valid && !accentOnly && !byEar.has(c)) continue;
             if (valid && !closeRelative(low, cw)) continue;
             // Le candidat doit lui-même être un vrai mot (pas un nom propre en minuscules du corpus).
             if (!opts.isValid(cw)) continue;
-            const cost = accentOnly ? TUNING.costAccent : HOMOPHONE_OF.get(low)?.includes(cw) ? TUNING.costHomophone : TUNING.costEdit;
+            const cost = accentOnly ? TUNING.costAccent
+                // Même prononciation : le plus proche en lettres de ce qui a été tapé (fote → fautes, pas fausses).
+                : byEar.has(c) ? TUNING.costPhon + TUNING.costPhonLetter * letters(bare(low), bare(cw))
+                    : HOMOPHONE_OF.get(low)?.includes(cw) ? TUNING.costHomophone : TUNING.costEdit;
             const s = score(c) - cost;
             if (s > bestScore) { bestScore = s; best = c; }
         }

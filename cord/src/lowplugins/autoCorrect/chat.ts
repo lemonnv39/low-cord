@@ -32,7 +32,7 @@ function caseLike(orig: string, to: string) {
 // Début de phrase, ou après un petit mot de liaison du chat.
 const START = "(^|[.!?…]\\s+|\\n|(?<![\\p{L}\\d_'’])(?:mais|et|bah|ben|wsh|wesh|frr|mdr|ptdr|si|quand|genre|bon|ah|oh|eh|tkt|non|oui|ouais)\\s+)";
 
-const C_EST_NEXT = "pas|trop|bon|bien|mort|chaud|ouf|vrai|nul|grave|normal|ça|ca|quoi|qui|pour|comme|moi|toi|lui|cool|génial|genial|fini|bizarre|chiant|marrant|drôle|drole|dingue|fou|clair|sûr|sur|possible|mieux|pire|incroyable|magnifique|beau|joli|lourd|relou|chelou|une|un";
+const C_EST_NEXT = "pas|trop|bon|bien|mort|chaud|ouf|vrai|vrais|vré|nul|grave|normal|ça|ca|quoi|qui|pour|comme|moi|toi|lui|cool|génial|genial|fini|bizarre|chiant|marrant|drôle|drole|dingue|fou|clair|sûr|sur|possible|mieux|pire|incroyable|magnifique|beau|joli|lourd|relou|chelou|une|un";
 const T_ES_NEXT = "ou|où|con|conne|chiant|chiante|ouf|qui|là|la|sérieux|serieux|sérieuse|serieuse|bête|bete|nul|nulle|beau|belle|fou|folle|grave|sûr|sur|sure|sûre|mort|morte|chaud|chaude|pas|trop|vraiment|toujours|déjà|deja|malade|fatigué|fatiguée|fatigue|dispo|co|en|dans|chez|bizarre|marrant|marrante|drôle|drole|bg|beau|moche|relou|chelou|parti|partie|rentré|rentrée|réveillé|réveillée|sur|devant|derrière|ici|où";
 const T_AS_NEXT = "vu|fait|dit|pris|eu|été|raison|tort|compris|mangé|entendu|reçu|capté|bu|joué|gagné|perdu|pas|déjà|deja|encore|quoi|combien|faim|soif|peur|sommeil|besoin|envie|cru|lu|réussi|reussi|fini|oublié|regardé|essayé|acheté|trouvé|vu|cassé|écouté|ecouté|kiffé|aimé|mis|écrit|ecrit|appelé|parlé|répondu|repondu|vu|grandi|changé|reçu|l'air|lair|ton|ta|tes|un|une|des|du|le|la|les|rien|tout|bien|trop";
 const A_NEXT = "toute|tout à l'heure|tout a l'heure|demain|plus|bientôt|bientot|tous|toutes|vous|toi|la prochaine|ce soir|plus tard|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|la semaine prochaine|tt";
@@ -55,6 +55,14 @@ const REGEX_RULES: Rule[] = [
     // « quesque tu fais », « esque tu viens » → « qu'est-ce que », « est-ce que »
     [new RegExp(`${B}(?:quesque|qu'esque|qu’esque|keske|qu'est ce que|qu’est ce que)${W}`, "giu"), m => caseLike(m[0], "qu'est-ce que")],
     [new RegExp(`${START}(esque|est ce que)${W}`, "giu"), m => `${m[1]}${caseLike(m[2], "est-ce que")}`],
+    // Formes en « k » du chat (kan, ki, ke), seulement devant un sujet ou un verbe courant.
+    [new RegExp(`${B}(kan)(\\s+)(?=(?:tu|t'|t’|il|elle|on|je|j'|j’|ils|elles|vous|nous|c'est|c’est|même|meme|ça|ca)${W})`, "giu"), m => `${caseLike(m[1], "quand")}${m[2]}`],
+    [new RegExp(`${B}(ki)(\\s+)(?=(?:est|a|va|veut|vient|fait|joue|peut|sait|c'est|c’est|t'es|t’es|es|sont|ont)${W})`, "giu"), m => `${caseLike(m[1], "qui")}${m[2]}`],
+    [new RegExp(`${B}(ke)(\\s+)(?=(?:tu|t'|t’|il|elle|on|je|j'|j’|ils|elles|vous|nous|c'est|c’est|ça|ca)${W})`, "giu"), m => `${caseLike(m[1], "que")}${m[2]}`],
+    // « il é la », « c é bon » → « est » (é tout seul)
+    [new RegExp(`${B}(il|elle|on|ça|ca|qui|tout|c'|c’)\\s*é${W}`, "giu"), m => /^c['’]$/i.test(m[1]) ? `${m[1]}est` : `${m[1]} est`],
+    // « sé pa grave », « cé trop bien », « ce pas grave » en début de phrase → « c'est »
+    [new RegExp(`${START}(sé|cé|se|ce)(\\s+)(?=(?:pas|pa|trop|tro|vrai|vré|vrais|mort|chaud|ouf|nul|grave|normal|ça|moi|toi|lui|clair|sûr|possible|mieux|pire|fini|bien|bon|cool|génial|genial)${W})`, "giu"), m => `${m[1]}${caseLike(m[2], "c'est")}${m[3]}`],
     // « est quand », « est toi », « est alors » en début de phrase → « et » (le modèle de
     // fréquences ne peut pas trancher : « Est-ce que » commence beaucoup de phrases).
     [new RegExp(`${START}(est)(\\s+)(?=(?:quand|toi|moi|lui|eux|nous|vous|alors|après|apres|puis|donc|si|pourquoi|comment|où|ou|mais|là|ensuite|sinon|aussi|ça|ca|voilà|voila|bah|ben|bref|oui|non|maintenant|demain|hier|encore|même|meme|surtout|du coup|après ça|toi aussi)${W})`, "giu"), m => `${m[1]}${caseLike(m[2], "et")}${m[3]}`],
