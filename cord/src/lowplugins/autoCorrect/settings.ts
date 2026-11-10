@@ -30,6 +30,14 @@ export const settings = definePluginSettings({
         description: "Live preview while typing: corrected message above the text box, mistakes underlined in red",
         default: true,
     },
+    previewWidth: {
+        type: OptionType.SELECT,
+        description: "Width of the live preview",
+        options: [
+            { label: "Fits the sentence (grows while typing)", value: "fit", default: true },
+            { label: "Full width of the text box", value: "full" },
+        ],
+    },
     accents: {
         type: OptionType.BOOLEAN,
         description: "Forgotten accents and apostrophes (daccord → d'accord, c'etait → c'était, deja → déjà)",

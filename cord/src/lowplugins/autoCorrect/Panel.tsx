@@ -114,7 +114,7 @@ function Words() {
 
 function Panel() {
     useLang();
-    const s = settings.use(["isEnabled", "mode", "livePreview", "accents", "homophones", "conjugation", "agreement", "hyphens", "common", "totalFixed"]);
+    const s = settings.use(["isEnabled", "mode", "livePreview", "accents", "homophones", "conjugation", "agreement", "hyphens", "common", "previewWidth"]);
     const engine = useEngineState();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState<{ left: number; bottom: number; } | null>(null);
@@ -164,6 +164,15 @@ function Panel() {
                         ))}
                     </div>
                     <Check checked={s.livePreview} onChange={set("livePreview")} label={t("ac.livePreview")} hint={t("ac.livePreviewHint")} />
+                    {s.livePreview && (
+                        <div className="lc-ac-seg" role="radiogroup" aria-label={t("ac.previewWidth")}>
+                            {(["fit", "full"] as const).map(w => (
+                                <button key={w} role="radio" aria-checked={s.previewWidth === w} className={s.previewWidth === w ? "lc-ac-seg-on" : undefined} onClick={() => set("previewWidth")(w)}>
+                                    {t(w === "fit" ? "ac.widthFit" : "ac.widthFull")}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </section>
 
                 <section className="lc-ac-col">
@@ -184,14 +193,14 @@ function Panel() {
                 </section>
             </div>
 
-            <div className="lc-ac-foot">
-                <span className={`lc-ac-dot${engine?.installed ? " lc-ac-dot-on" : engine?.busy ? " lc-ac-dot-busy" : ""}`} />
-                <span className="lc-ac-engine">{engineText}</span>
-                {!engine?.installed && !engine?.busy && (
-                    <button className="lc-ac-link" onClick={() => ensureEngine(true)}>{t("ac.engineInstall")}</button>
-                )}
-                {(s.totalFixed ?? 0) > 0 && <span className="lc-ac-count">{t("ac.count", { n: s.totalFixed })}</span>}
-            </div>
+            {/* Moteur : seulement s'il demande de l'attention (téléchargement, erreur). */}
+            {!engine?.installed && (
+                <div className="lc-ac-foot">
+                    <span className={`lc-ac-dot${engine?.busy ? " lc-ac-dot-busy" : ""}`} />
+                    <span className="lc-ac-engine">{engineText}</span>
+                    {!engine?.busy && <button className="lc-ac-link" onClick={() => ensureEngine(true)}>{t("ac.engineInstall")}</button>}
+                </div>
+            )}
         </div>
     );
 }

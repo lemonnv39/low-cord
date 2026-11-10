@@ -19,7 +19,9 @@
 //  - Deux temps : homophones et conjugaison d'abord, accords ensuite (un
 //    accord calculé sur un mot encore faux serait faux lui aussi).
 //
-// Module pur (aucune dépendance) : testé hors de Discord.
+// Module pur (sans Discord) : testé hors de Discord.
+
+import { chatAfter, chatBefore } from "./chat";
 
 export interface GrammarError {
     nStart: number;
@@ -79,7 +81,13 @@ export const SLANG = new Set((
     "tkt tqt slt mdr ptdr xptdr jsp wsh wesh frr frero gg wp ptn nn jpp c chui chuis jsuis j'suis y'a ya bg oklm askip "
     + "wallah mskn pk pq pcq stp svp dsl bjr bsr cc cv mtn tjrs tjs qd qqn qqch osef lol xd ok okay ouais ouai nan ui "
     + "jte jme jle j'te j'me j'le j'vais t'es t'as t'étais t'avais bah ben bon hein euh ah oh wtf gl hf afk brb irl dm mp go "
-    + "lag spawn stream ranked tryhard cheh sah wallah frero jvais jsuis"
+    + "lag spawn stream ranked tryhard cheh sah wallah frero jvais jsuis vénère venere chelou relou deg ouf "
+    // Anglicismes du jeu et d'internet : souvent inconnus du dictionnaire, jamais à « corriger ».
+    + "game games gamer gamers story stories chill follow check block cringe flex hype crush skill skills random replay "
+    + "focus troll spam ghost clean carry rush push kill kills loot noob ping feed buff nerf clutch squad team teams live "
+    + "stuff fake fail win nice cool sorry bro love crazy vibe vibes mood safe sus real bad good best sick insane hack cheat "
+    + "server serv ticket mod modo admin role emote sticker pseudo vocal voc mute unmute stream streamer twitch insta snap "
+    + "tiktok tweet discord spoil spoiler scam scammer boost booster nitro skin skins rank ranked elo smurf toxic tilt tilted"
 ).split(" "));
 
 // Fautes très courantes sur Discord que Grammalecte laisse passer
@@ -179,17 +187,45 @@ const VOWEL = /[aeiouyàâäéèêëîïôöûüù]/;
 // Un « s » ajouté ferait des pluriels d'abréviations (« dispo » → « dispos ») :
 // seulement pour ces mots, où on l'oublie vraiment.
 const S_WORDS = new Set("pas jamais toujours tous fais vais mais plus moins dans sans vers gros alors depuis parfois temps dessus dessous jours ans gens fois tes mes ses nos vos leurs suis sais peux veux dois crois vois".split(" "));
+// Faute de frappe sur un mot inconnu : la 1ʳᵉ suggestion du dictionnaire si
+// elle est à une lettre près (deux pour un long mot), même 1ʳᵉ lettre, et
+// jamais sur un mot à l'allure anglaise (story, chill, follow…).
+const ENGLISH = /w|k|ck|sh|th|ee|oo|ea|gh|y$|ll$|^ch[^aeiouyéèê]/;
+
+function typo(word: string, suggestions: string[], sentence: (c: string) => string, parse: (text: string) => GrammarError[]) {
+    const low = word.toLowerCase();
+    const b = bare(low);
+    // Les mots courts du chat (dispo, ilyes, rayan…) ressemblent trop souvent à un autre mot.
+    if (low.length < 6 || !VOWEL.test(low) || ENGLISH.test(low) || /[-'’]/.test(low)) return null;
+    // Connu avec une majuscule (« Lucas », « Yanis ») : un prénom, pas une faute.
+    if (suggestions.some(s => s.toLowerCase() === low)) return null;
+    const max = b.length >= 8 ? 2 : 1;
+    const found = suggestions
+        .slice(0, 3)
+        .filter(s => s === s.toLowerCase() && !/\s/.test(s) && bare(s)[0] === b[0]).map((s, i) => ({ s, i, d: distance(bare(s), b) }))
+        .filter(x => x.d <= max);
+    if (!found.length) return null;
+    const best = Math.min(...found.map(x => x.d));
+    const close = found.filter(x => x.d === best);
+    if (close.length === 1) return close[0].s;
+    // Plusieurs à égalité (« seraid » → serai / serais / serait) : la phrase tranche.
+    const ranked = close.map(x => ({ ...x, errors: parse(sentence(x.s)).length }));
+    ranked.sort((a, b2) => a.errors - b2.errors || a.i - b2.i);
+    return ranked[0].s;
+}
+
 // À égalité, le mot le plus courant gagne (« pa » → « pas », pas « pat »).
-const COMMON = new Set([...S_WORDS, ..."salut tout fait faut faux avant petit nuit part tard trop beaucoup deux peux veux mieux vieux prix choix doux nous vous quand grand long rond chaud froid nord sud bout mot debut".split(" ")]);
+const COMMON = new Set([...S_WORDS, ..."salut tout fait faut faux avant petit nuit part tard trop beaucoup deux peux veux mieux vieux prix choix doux nous vous quand grand long rond chaud froid nord sud bout mot debut".split(" "),
+    ..."vient viens tient tiens prend prends rend rends attend attends entend entends répond réponds comprend comprends dit dis met mets sort sors dort dors sait vaut veut peut doit croit voit fout".split(" ")]);
 
 /** Le mot avec une lettre muette en plus, s'il en existe un ; plusieurs : la phrase tranche. */
 function silentLetter(word: string, sentence: (candidate: string) => string, speller: Speller, parse: (text: string) => GrammarError[]) {
     if (!VOWEL.test(word) || /['’-]/.test(word)) return null;
     const low = word.toLowerCase();
+    // Seulement vers un mot courant : « rayan » ne devient pas « rayant ».
     const found = SILENT_ENDINGS
-        .filter(e => e !== "s" || S_WORDS.has(low + e))
         .map(e => low + e)
-        .filter(c => speller.isValid(c));
+        .filter(c => COMMON.has(c) && speller.isValid(c));
     if (found.length <= 1) return found[0] ?? null;
     // « tu fai » → « fais », « il fai » → « fait » : celle qui laisse le moins d'erreurs.
     const ranked = found.map((c, i) => ({ c, i, rare: COMMON.has(c) ? 0 : 1, errors: parse(sentence(c)).length }));
@@ -218,7 +254,8 @@ function fixAccents(text: string, spans: [number, number][], speller: Speller, p
         const elided = /^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)’(.+)$/i.exec(probe);
         if (elided && speller.isValid(elided[1])) continue;
         const target = bare(word);
-        let pick = speller.suggest(probe).find(sugg => {
+        const suggestions = speller.suggest(probe);
+        let pick = suggestions.find(sugg => {
             if (bare(sugg) !== target) return false;
             // Pas de sigle ni de nom propre (« fai » ≠ « FAI ») : seule la 1ʳᵉ lettre peut changer de casse.
             if (sugg.slice(1) !== sugg.slice(1).toLowerCase() || (sugg[0] !== sugg[0].toLowerCase() && word[0] === word[0].toLowerCase())) return false;
@@ -226,7 +263,8 @@ function fixAccents(text: string, spans: [number, number][], speller: Speller, p
             return apos.length === 1 || apos.slice(1).every(part => part.length >= 3 || SHORT_AFTER_APOS.has(part.toLowerCase()));
         });
         const before = out + text.slice(last, at);
-        pick ??= silentLetter(word, c => before + c + text.slice(at + word.length), speller, parse) ?? undefined;
+        const sentence = (c: string) => before + c + text.slice(at + word.length);
+        pick ??= silentLetter(word, sentence, speller, parse) ?? typo(word, suggestions, sentence, parse) ?? undefined;
         if (!pick) continue;
         const to = keepCase(word, curly ? pick : pick.replace(/’/g, "'"));
         if (to === word) continue;
@@ -275,6 +313,16 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
     const fixes: Fix[] = [];
     let cur = text;
 
+    const spansOf = (s: string) => protect(s).spans;
+    const chat = (run: (fixes: { from: string; to: string; }[]) => string) => {
+        const found: { from: string; to: string; }[] = [];
+        cur = run(found);
+        for (const f of found) fixes.push({ ...f, group: "custom" });
+    };
+
+    // Fautes typiques du chat (« je men fou », « tes ou », « sava »).
+    if (options.custom) chat(f => chatBefore(cur, spansOf, f));
+
     // D'abord l'orthographe sûre : la grammaire travaille ensuite sur des mots connus.
     if (options.accents && speller) {
         const { spans } = protect(cur);
@@ -285,6 +333,9 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
         const { spans } = protect(cur);
         cur = fixSontSon(cur, spans, speller, whitelist, fixes);
     }
+
+    // Puis les règles qui lisent des mots corrigés (« il etait la » → « était là »).
+    if (options.custom) chat(f => chatAfter(cur, spansOf, speller, f));
 
     if (options.custom) {
         const { spans } = protect(cur);
@@ -357,6 +408,9 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
             errors = best.after;
         }
     }
+    // Et après la grammaire (« je sui la » → « je suis la » → « là »).
+    if (options.custom) chat(f => chatAfter(cur, spansOf, speller, f));
+
     // Encore une fois : la grammaire a pu faire apparaître le participe
     // (« est casser sont bras » → « ai cassé sont bras » → « son bras »).
     if (speller && groups.has("conf")) {

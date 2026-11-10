@@ -21,7 +21,8 @@ export interface Result {
     fixes: { from: string; to: string; group: string; }[];
 }
 
-const DELAY = 300;
+// Court : la correction suit la frappe (une analyse prend quelques ms).
+const DELAY = 70;
 const CACHE_SIZE = 20;
 
 /** Options envoyées au moteur (les mêmes pour l'aperçu et l'envoi). */
@@ -61,12 +62,14 @@ export interface LiveState {
     text: string;
     /** correction du texte tapé (ou du précédent, pendant l'analyse) */
     result: Result | null;
+    /** texte dont `result` est la correction */
+    source: string;
     /** `result` correspond-il exactement à `text` ? */
     fresh: boolean;
     analyzing: boolean;
 }
 
-let state: LiveState = { channelId: null, text: "", result: null, fresh: false, analyzing: false };
+let state: LiveState = { channelId: null, text: "", result: null, source: "", fresh: false, analyzing: false };
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<LiveState>) {
@@ -90,7 +93,7 @@ export function useLive() {
 export function resetLive() {
     if (timer) clearTimeout(timer);
     timer = null;
-    set({ text: "", result: null, fresh: false, analyzing: false });
+    set({ text: "", result: null, source: "", fresh: false, analyzing: false });
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -103,12 +106,12 @@ function schedule(channelId: string, text: string) {
     // Un ou deux caractères, commande de bot, correcteur coupé : pas d'aperçu.
     const prefixes = s.ignorePrefixes.split(/\s+/).filter(Boolean);
     if (!s.isEnabled || !s.livePreview || !getEngineState()?.installed || text.trim().length < 3 || prefixes.some(p => text.startsWith(p))) {
-        set({ channelId, text, result: null, fresh: false, analyzing: false });
+        set({ channelId, text, result: null, source: "", fresh: false, analyzing: false });
         return;
     }
     const hit = cached(text);
     if (hit) {
-        set({ channelId, text, result: hit, fresh: true, analyzing: false });
+        set({ channelId, text, result: hit, source: text, fresh: true, analyzing: false });
         return;
     }
     set({ channelId, text, fresh: false, analyzing: true });
@@ -118,9 +121,9 @@ function schedule(channelId: string, text: string) {
         try {
             const result = await correctText(text);
             // Une frappe plus récente a déjà relancé l'analyse : ce résultat est périmé.
-            if (id === seq) set({ result, fresh: true, analyzing: false });
+            if (id === seq) set({ result, source: text, fresh: true, analyzing: false });
         } catch {
-            if (id === seq) set({ result: null, fresh: false, analyzing: false });
+            if (id === seq) set({ result: null, source: "", fresh: false, analyzing: false });
         }
     }, DELAY);
 }

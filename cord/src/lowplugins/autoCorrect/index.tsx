@@ -59,10 +59,18 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     if (!s.isEnabled) return;
     const { content } = msg;
 
-    // 2ᵉ Entrée en mode confirmation : le texte corrigé part tel quel.
+    // 2ᵉ Entrée en mode confirmation : le message part, toujours (jamais deux
+    // annulations de suite : si le texte corrigé n'a pas pris dans la zone de
+    // saisie, il est corrigé ici et envoyé quand même).
     const waiting = pending.get(channelId);
     pending.delete(channelId);
-    if (waiting != null && same(waiting, content)) {
+    if (waiting != null) {
+        if (!same(waiting, content) && !skip(content)) {
+            try {
+                const again = await withTimeout(correctText(content), TIMEOUT);
+                if (again?.fixes?.length) msg.content = again.text;
+            } catch { }
+        }
         setButtonState("done");
         resetLive();
         return;
@@ -95,7 +103,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
 
     if (s.mode === "confirm") {
         pending.set(channelId, result.text);
-        replaceInput(result.text);
+        replaceInput(result.text, channelId);
         setButtonState("pending");
         return { cancel: true };
     }

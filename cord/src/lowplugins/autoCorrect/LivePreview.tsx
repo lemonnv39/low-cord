@@ -13,7 +13,7 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { t, useLang } from "@lowcord/i18n";
-import { ChannelStore, ComponentDispatch, ReactDOM, useEffect, useLayoutEffect, useRef, UserStore, useState } from "@webpack/common";
+import { ChannelStore, ComponentDispatch, DraftStore, DraftType, ReactDOM, useEffect, useLayoutEffect, useRef, UserStore, useState } from "@webpack/common";
 
 import { diff, getLive, Piece, useLive } from "./live";
 import { settings } from "./settings";
@@ -23,30 +23,27 @@ let inputAnchor: HTMLElement | null = null;
 export const setInputAnchor = (el: HTMLElement | null) => { if (el) inputAnchor = el; };
 
 /**
- * Remplace le texte de la zone de saisie. On sélectionne tout puis on tape le
- * nouveau texte (insertText) : l'éditeur de Discord le traite comme une vraie
- * frappe (annulable avec Ctrl+Z). Lancé au tour suivant : appelé pendant un
- * envoi, Discord doit d'abord finir de traiter l'Entrée.
+ * Remplace le texte de la zone de saisie, après le traitement de l'Entrée
+ * par Discord. D'abord sa propre méthode (vider puis insérer, comme pour un
+ * brouillon) ; si le brouillon n'a pas changé, en secours : tout sélectionner
+ * et taper le texte.
  */
-export function replaceInput(text: string) {
-    const fallback = () => {
-        // La méthode de Discord pour remettre un brouillon.
+export function replaceInput(text: string, channelId: string) {
+    setTimeout(() => {
         ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
         ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
-    };
-    setTimeout(() => {
-        const { editor } = findInput(inputAnchor);
-        if (!editor?.isConnected) return fallback();
-        editor.focus();
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        // L'éditeur prend la sélection en compte au tour suivant : on tape ensuite.
         setTimeout(() => {
-            if (!document.execCommand("insertText", false, text)) fallback();
-        }, 30);
+            if (DraftStore.getDraft(channelId, DraftType.ChannelMessage).trim() === text.trim()) return;
+            const { editor } = findInput(inputAnchor);
+            if (!editor?.isConnected) return;
+            editor.focus();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+            setTimeout(() => document.execCommand("insertText", false, text), 30);
+        }, 150);
     }, 0);
 }
 
@@ -64,11 +61,12 @@ function pretty(text: string) {
         .replace(/<a?(:[\w~]+:)\d+>/g, "$1");
 }
 
-function Spinner() {
+/** Trois points qui ondulent : discret pendant la frappe. */
+function Dots() {
     return (
-        <svg className="lc-ac-live-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="1.5 3.53" />
-        </svg>
+        <span className="lc-ac-live-dots" aria-hidden="true">
+            <i /><i /><i />
+        </span>
     );
 }
 
@@ -132,7 +130,14 @@ function squiggles(editor: HTMLElement, wrong: Piece[]) {
 export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
     useLang();
     const live = useLive();
-    const { isEnabled, livePreview } = settings.use(["isEnabled", "livePreview"]);
+    const { isEnabled, livePreview, previewWidth } = settings.use(["isEnabled", "livePreview", "previewWidth"]);
+    // Les points n'apparaissent que si l'analyse traîne : sinon la correction est déjà là.
+    const [slow, setSlow] = useState(false);
+    useEffect(() => {
+        if (!live.analyzing) return setSlow(false);
+        const id = setTimeout(() => setSlow(true), 250);
+        return () => clearTimeout(id);
+    }, [live.analyzing]);
     const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; }>({ box: null, marks: [] });
     const lastLayout = useRef("");
     const [, tick] = useState(0);
@@ -154,8 +159,16 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
     }, [anchor]);
 
     const show = isEnabled && livePreview && live.text.trim().length >= 3 && (live.analyzing || live.result != null);
-    const parts = live.result ? diff(live.text, live.result.text) : null;
-    const hasFixes = !!live.result?.fixes.length && live.result.text !== live.text;
+    // Pendant la frappe, la dernière correction reste affichée et le texte tapé
+    // depuis s'ajoute derrière : l'aperçu suit sans clignoter.
+    let parts: ReturnType<typeof diff> | null = null;
+    const { result, source } = live;
+    if (result && (live.fresh || (source && live.text.startsWith(source)))) {
+        parts = diff(source, result.text);
+        const tail = live.text.slice(source.length);
+        if (tail) parts.after.push({ text: tail, changed: false, at: result.text.length });
+    }
+    const hasFixes = !!parts && !!result?.fixes.length && result.text !== source;
 
     // Positions recalculées à chaque rendu, appliquées seulement si elles changent.
     useLayoutEffect(() => {
@@ -180,7 +193,7 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
 
     const apply = () => {
         const cur = getLive();
-        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text);
+        if (cur.result && cur.fresh && cur.result.text !== cur.text) replaceInput(cur.result.text, cur.channelId!);
     };
 
     return ReactDOM.createPortal(
@@ -188,7 +201,7 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
             <div
                 className={`lc-ac-live${hasFixes ? " lc-ac-live-fix" : ""}`}
                 // Largeur de la phrase seulement (grandit avec la frappe), jamais plus large que la zone de saisie.
-                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width }}
+                style={{ left: box.left, bottom: window.innerHeight - box.top + 6, maxWidth: box.width, width: previewWidth === "full" ? box.width : undefined }}
                 onMouseDown={e => e.preventDefault()}
                 onClick={apply}
                 role={hasFixes ? "button" : undefined}
@@ -202,11 +215,11 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
                         : <span className="lc-ac-live-plain">{pretty(live.text)}</span>}
                 </div>
                 <div className="lc-ac-live-side">
-                    {live.analyzing
-                        ? <Spinner />
+                    {live.analyzing && slow
+                        ? <Dots />
                         : hasFixes
-                            ? <span className="lc-ac-live-count">{t("ac.liveCount", { n: live.result!.fixes.length })}</span>
-                            : <span className="lc-ac-live-ok"><Check />{t("ac.liveClean")}</span>}
+                            ? <span className="lc-ac-live-count">{t("ac.liveCount", { n: result!.fixes.length })}</span>
+                            : live.fresh && <span className="lc-ac-live-ok"><Check />{t("ac.liveClean")}</span>}
                 </div>
             </div>
             {marks.map((m, i) => (
