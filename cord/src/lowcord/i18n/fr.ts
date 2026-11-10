@@ -679,6 +679,8 @@ export const fr = {
     "ac.modeConfirm": "Confirmation",
     "ac.modeConfirmHint": "Entrée : corrigé, Entrée encore : envoyé",
     "ac.fixes": "Corriger",
+    "ac.accents": "Accents et apostrophes",
+    "ac.accentsHint": "daccord → d'accord, c'etait → c'était, deja → déjà",
     "ac.homophones": "Homophones",
     "ac.homophonesHint": "son/sont, a/à, ça/sa, et/est, ces/c'est…",
     "ac.conjugation": "Conjugaison",

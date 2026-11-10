@@ -25,6 +25,11 @@ export const settings = definePluginSettings({
             { label: "Show the correction, press Enter again to send", value: "confirm" },
         ],
     },
+    accents: {
+        type: OptionType.BOOLEAN,
+        description: "Forgotten accents and apostrophes (daccord → d'accord, c'etait → c'était, deja → déjà)",
+        default: true,
+    },
     homophones: {
         type: OptionType.BOOLEAN,
         description: "Homophones (son/sont, a/à, ça/sa, et/est…)",

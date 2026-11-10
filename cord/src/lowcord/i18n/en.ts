@@ -675,6 +675,8 @@ export const en = {
     "ac.modeConfirm": "Confirm",
     "ac.modeConfirmHint": "Enter: corrected, Enter again: sent",
     "ac.fixes": "Correct",
+    "ac.accents": "Accents and apostrophes",
+    "ac.accentsHint": "daccord → d'accord, c'etait → c'était, deja → déjà",
     "ac.homophones": "Homophones",
     "ac.homophonesHint": "son/sont, a/à, ça/sa, et/est, ces/c'est…",
     "ac.conjugation": "Conjugation",

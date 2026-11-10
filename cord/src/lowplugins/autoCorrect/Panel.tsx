@@ -114,7 +114,7 @@ function Words() {
 
 function Panel() {
     useLang();
-    const s = settings.use(["isEnabled", "mode", "homophones", "conjugation", "agreement", "hyphens", "common", "showToast", "totalFixed"]);
+    const s = settings.use(["isEnabled", "mode", "accents", "homophones", "conjugation", "agreement", "hyphens", "common", "showToast", "totalFixed"]);
     const engine = useEngineState();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState<{ left: number; bottom: number; } | null>(null);
@@ -163,6 +163,7 @@ function Panel() {
                 </div>
 
                 <div className="lc-ac-label">{t("ac.fixes")}</div>
+                <Check checked={s.accents} onChange={set("accents")} label={t("ac.accents")} hint={t("ac.accentsHint")} />
                 <Check checked={s.homophones} onChange={set("homophones")} label={t("ac.homophones")} hint={t("ac.homophonesHint")} />
                 <Check checked={s.conjugation} onChange={set("conjugation")} label={t("ac.conjugation")} hint={t("ac.conjugationHint")} />
                 <Check checked={s.agreement} onChange={set("agreement")} label={t("ac.agreement")} hint={t("ac.agreementHint")} />

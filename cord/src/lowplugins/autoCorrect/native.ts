@@ -27,7 +27,7 @@ import { join } from "path";
 import { Context, createContext, runInContext } from "vm";
 import { inflateRawSync } from "zlib";
 
-import { correct as runCorrect, CorrectOptions, Fix, GRAMMALECTE_OPTIONS, GrammarError } from "./corrector";
+import { correct as runCorrect, CorrectOptions, Fix, GRAMMALECTE_OPTIONS, GrammarError, Speller } from "./corrector";
 
 const VERSION = "2.3.0";
 const XPI_URL = "https://addons.mozilla.org/firefox/downloads/file/4643560/grammalecte_fr-2.3.0.xpi";
@@ -215,6 +215,21 @@ function parse(text: string): GrammarError[] {
     }));
 }
 
+/** Dictionnaire de Grammalecte : mot connu ? suggestions ? */
+const speller: Speller = {
+    isValid(word) {
+        const context = load();
+        context.__word = word;
+        return runInContext("gc_engine.getSpellChecker().isValid(__word)", context, { timeout: PARSE_TIMEOUT }) === true;
+    },
+    suggest(word) {
+        const context = load();
+        context.__word = word;
+        const list = runInContext("Array.from(gc_engine.getSpellChecker().suggest(__word, 8)).flat()", context, { timeout: PARSE_TIMEOUT });
+        return Array.isArray(list) ? list.map(String) : [];
+    },
+};
+
 /** Charge le moteur à l'avance (premier caractère tapé) : la correction est prête à l'envoi. */
 export function warmup(_?: IpcMainInvokeEvent) {
     if (!installed()) return false;
@@ -239,10 +254,11 @@ export function correct(_: IpcMainInvokeEvent, text: unknown, options: unknown):
         groups: Array.isArray(o.groups) ? o.groups.map(String) : [],
         whitelist: Array.isArray(o.whitelist) ? o.whitelist.map(String).slice(0, 2000) : [],
         custom: o.custom !== false,
+        accents: o.accents !== false,
     };
     touch();
     try {
-        return runCorrect(text, parse, opts);
+        return runCorrect(text, parse, opts, speller);
     } catch (e: any) {
         // Analyse trop longue ou moteur en erreur : on repart d'un moteur neuf la prochaine fois.
         lastError = String(e?.message ?? e);

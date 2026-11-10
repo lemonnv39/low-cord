@@ -79,7 +79,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     setButtonState("working");
     let result: { text: string; fixes: { from: string; to: string; }[]; };
     try {
-        result = await withTimeout(Native.correct(content, { groups: activeGroups(), whitelist: userWords(), custom: s.common }), TIMEOUT);
+        result = await withTimeout(Native.correct(content, { groups: activeGroups(), whitelist: userWords(), custom: s.common, accents: s.accents }), TIMEOUT);
     } catch (e) {
         // Jamais bloquer un message : il part sans correction.
         logger.warn("Correction impossible, message envoyé tel quel", e);

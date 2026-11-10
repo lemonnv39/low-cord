@@ -67,6 +67,7 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                     description: "Comment partent les messages corrigés",
                     options: { auto: "Envoi auto après correction", confirm: "Montrer la correction, Entrée encore pour envoyer" },
                 },
+                accents: { name: "Accents et apostrophes", description: "Oubliés : daccord → d'accord, c'etait → c'était, deja → déjà" },
                 homophones: { name: "Homophones", description: "son/sont, a/à, ça/sa, et/est…" },
                 conjugation: { name: "Conjugaison", description: "tu va → tu vas, il a manger → il a mangé" },
                 agreement: { name: "Accords", description: "Genre et nombre (les chat → les chats)" },
