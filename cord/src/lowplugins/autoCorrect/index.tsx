@@ -23,7 +23,7 @@
 import "./style.css";
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { addMessagePreSendListener, MessageSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { MessageSendListener } from "@api/MessageEvents";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
@@ -165,19 +165,21 @@ export default definePlugin({
     tags: ["Chat", "Utility"],
     settings,
 
+    // Déclaré ici (pas ajouté à la main) : c'est ce qui active le crochet
+    // d'envoi de low-cord (MessageEventsAPI).
+    onBeforeMessageSend: onSend,
+
     chatBarButton: {
         icon: () => <AutoCorrectIcon />,
         render: AutoCorrectButton,
     },
 
     async start() {
-        addMessagePreSendListener(onSend);
         await refreshEngine();
         if (settings.store.isEnabled) ensureEngine(!getEngineState()?.installed);
     },
 
     stop() {
-        removeMessagePreSendListener(onSend);
         pending.clear();
         closePanel();
         setButtonState("idle");
