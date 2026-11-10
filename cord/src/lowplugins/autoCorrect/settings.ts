@@ -25,6 +25,11 @@ export const settings = definePluginSettings({
             { label: "Show the correction, press Enter again to send", value: "confirm" },
         ],
     },
+    livePreview: {
+        type: OptionType.BOOLEAN,
+        description: "Live preview while typing: corrected message above the text box, mistakes underlined in red",
+        default: true,
+    },
     accents: {
         type: OptionType.BOOLEAN,
         description: "Forgotten accents and apostrophes (daccord → d'accord, c'etait → c'était, deja → déjà)",

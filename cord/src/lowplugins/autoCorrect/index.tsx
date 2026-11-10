@@ -27,11 +27,13 @@ import { MessageSendListener } from "@api/MessageEvents";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
-import { ComponentDispatch, showToast, useEffect } from "@webpack/common";
+import { showToast, useEffect, useState } from "@webpack/common";
 
-import { ensureEngine, Native, refreshEngine, warmup } from "./engine";
+import { ensureEngine, refreshEngine, warmup } from "./engine";
+import { correctText, resetLive, startLive, stopLive } from "./live";
+import { LivePreview, replaceInput } from "./LivePreview";
 import { closePanel, isPanelOpen, openPanel } from "./Panel";
-import { activeGroups, ButtonState, getEngineState, setButtonState, settings, useButtonState, userWords } from "./settings";
+import { ButtonState, getEngineState, setButtonState, settings, useButtonState } from "./settings";
 
 const logger = new Logger("AutoCorrect");
 
@@ -52,12 +54,6 @@ function withTimeout<T>(p: Promise<T>, ms: number) {
     return Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("délai dépassé")), ms))]);
 }
 
-function replaceInput(text: string) {
-    // Comme Discord quand il remet un brouillon : on vide, puis on insère.
-    ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
-    ComponentDispatch.dispatchToLastSubscribed("INSERT_TEXT", { rawText: text, plainText: text });
-}
-
 const onSend: MessageSendListener = async (channelId, msg) => {
     const s = settings.store;
     if (!s.isEnabled) return;
@@ -68,6 +64,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     pending.delete(channelId);
     if (waiting != null && same(waiting, content)) {
         setButtonState("done");
+        resetLive();
         return;
     }
     if (skip(content) || !getEngineState()?.installed) {
@@ -79,7 +76,8 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     setButtonState("working");
     let result: { text: string; fixes: { from: string; to: string; }[]; };
     try {
-        result = await withTimeout(Native.correct(content, { groups: activeGroups(), whitelist: userWords(), custom: s.common, accents: s.accents }), TIMEOUT);
+        // Déjà analysé par l'aperçu pendant la frappe : la correction est instantanée.
+        result = await withTimeout(correctText(content), TIMEOUT);
     } catch (e) {
         // Jamais bloquer un message : il part sans correction.
         logger.warn("Correction impossible, message envoyé tel quel", e);
@@ -89,6 +87,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
 
     if (typeof result?.text !== "string" || !result.fixes?.length || same(result.text, content)) {
         setButtonState("done");
+        resetLive();
         return;
     }
 
@@ -105,6 +104,7 @@ const onSend: MessageSendListener = async (channelId, msg) => {
 
     msg.content = result.text;
     setButtonState("done");
+    resetLive();
     if (s.showToast) showToast({ text: t("ac.fixedToast", { n: result.fixes.length, fixes: summary }), variant: "success" });
 };
 
@@ -129,6 +129,8 @@ const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
     useLang();
     const { isEnabled, mode } = settings.use(["isEnabled", "mode"]);
     const state = useButtonState();
+    // Repère dans la barre de chat : l'aperçu se place au-dessus de la zone de saisie qui le contient.
+    const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
     useEffect(() => { if (isMainChat) warmup(); }, [isMainChat, channel?.id]);
 
@@ -139,22 +141,27 @@ const AutoCorrectButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
         : state === "pending" ? t("ac.tooltipPending") : t(mode === "confirm" ? "ac.tooltipOnConfirm" : "ac.tooltipOnAuto");
 
     return (
-        <ChatBarButton
-            tooltip={tooltip}
+        <>
+            <ChatBarButton
+                tooltip={tooltip}
                 onClick={() => {
                     settings.store.isEnabled = !settings.store.isEnabled;
                     pending.clear();
                     setButtonState("idle");
+                    resetLive();
                     if (settings.store.isEnabled) ensureEngine(true);
                 }}
                 onContextMenu={e => {
                     e.preventDefault();
                     if (isPanelOpen()) return closePanel();
-                openPanel((e.currentTarget as HTMLElement).getBoundingClientRect());
-            }}
-        >
-            <AutoCorrectIcon state={state} off={!isEnabled} />
-        </ChatBarButton>
+                    openPanel((e.currentTarget as HTMLElement).getBoundingClientRect());
+                }}
+            >
+                <AutoCorrectIcon state={state} off={!isEnabled} />
+                <span ref={setAnchor} hidden />
+            </ChatBarButton>
+            <LivePreview anchor={anchor} />
+        </>
     );
 };
 
@@ -175,11 +182,13 @@ export default definePlugin({
     },
 
     async start() {
+        startLive();
         await refreshEngine();
         if (settings.store.isEnabled) ensureEngine(!getEngineState()?.installed);
     },
 
     stop() {
+        stopLive();
         pending.clear();
         closePanel();
         setButtonState("idle");

@@ -164,6 +164,8 @@ function fixAccents(text: string, spans: [number, number][], speller: Speller, w
         const target = bare(word);
         const pick = speller.suggest(probe).find(sugg => {
             if (bare(sugg) !== target) return false;
+            // Pas de sigle ni de nom propre (« fai » ≠ « FAI ») : seule la 1ʳᵉ lettre peut changer de casse.
+            if (sugg.slice(1) !== sugg.slice(1).toLowerCase() || (sugg[0] !== sugg[0].toLowerCase() && word[0] === word[0].toLowerCase())) return false;
             const apos = sugg.split(/['’]/);
             return apos.length === 1 || apos.slice(1).every(part => part.length >= 3 || SHORT_AFTER_APOS.has(part.toLowerCase()));
         });
