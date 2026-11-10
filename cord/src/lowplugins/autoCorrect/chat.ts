@@ -55,6 +55,9 @@ const REGEX_RULES: Rule[] = [
     // « quesque tu fais », « esque tu viens » → « qu'est-ce que », « est-ce que »
     [new RegExp(`${B}(?:quesque|qu'esque|qu’esque|keske|qu'est ce que|qu’est ce que)${W}`, "giu"), m => caseLike(m[0], "qu'est-ce que")],
     [new RegExp(`${START}(esque|est ce que)${W}`, "giu"), m => `${m[1]}${caseLike(m[2], "est-ce que")}`],
+    // « est quand », « est toi », « est alors » en début de phrase → « et » (le modèle de
+    // fréquences ne peut pas trancher : « Est-ce que » commence beaucoup de phrases).
+    [new RegExp(`${START}(est)(\\s+)(?=(?:quand|toi|moi|lui|eux|nous|vous|alors|après|apres|puis|donc|si|pourquoi|comment|où|ou|mais|là|ensuite|sinon|aussi|ça|ca|voilà|voila|bah|ben|bref|oui|non|maintenant|demain|hier|encore|même|meme|surtout|du coup|après ça|toi aussi)${W})`, "giu"), m => `${m[1]}${caseLike(m[2], "et")}${m[3]}`],
     // « peu tu venir », « veu tu » en début de phrase → « peux-tu », « veux-tu »
     [new RegExp(`${START}(peu|peut|peux|veu|veut|veux)\\s+tu${W}`, "giu"), m => `${m[1]}${caseLike(m[2], m[2].toLowerCase().startsWith("p") ? "peux" : "veux")}-tu`],
     // « appel moi », « envoi moi » en début de phrase : le verbe à l'impératif, pas le nom

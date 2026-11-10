@@ -152,7 +152,7 @@ export interface ContextFix { from: string; to: string; }
  * ou homophone, plus cher) et gain de probabilité exigé pour remplacer
  * (log 3 ≈ 20 fois plus probable). Calibrés sur les bases de test.
  */
-export const TUNING = { costAccent: 0.5, costEdit: 4.5, marginUnknown: 2, marginKnown: 3 };
+export const TUNING = { costAccent: 0.5, costEdit: 4.5, costHomophone: 1.5, marginUnknown: 2, marginKnown: 3 };
 
 function keepCase(orig: string, to: string) {
     if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase()) return to.toUpperCase();
@@ -210,7 +210,7 @@ export function contextFix(text: string, m: NgramModel, opts: ContextOptions) {
             if (valid && !closeRelative(low, cw)) continue;
             // Le candidat doit lui-même être un vrai mot (pas un nom propre en minuscules du corpus).
             if (!opts.isValid(cw)) continue;
-            const cost = accentOnly ? TUNING.costAccent : TUNING.costEdit;
+            const cost = accentOnly ? TUNING.costAccent : HOMOPHONE_OF.get(low)?.includes(cw) ? TUNING.costHomophone : TUNING.costEdit;
             const s = score(c) - cost;
             if (s > bestScore) { bestScore = s; best = c; }
         }
