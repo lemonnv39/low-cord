@@ -74,7 +74,6 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 agreement: { name: "Accords", description: "Genre et nombre (les chat → les chats)" },
                 hyphens: { name: "Traits d'union", description: "dis moi → dis-moi" },
                 common: { name: "Fautes courantes du chat", description: "sa va → ça va, ont y va → on y va" },
-                showToast: { name: "Montrer les corrections", description: "Petit message avec ce qui a été corrigé" },
                 words: { name: "Mots à ne jamais corriger", description: "Séparés par des virgules" },
                 ignorePrefixes: { name: "Préfixes ignorés", description: "Les messages qui commencent par l'un d'eux partent tels quels (commandes de bots), séparés par des espaces" },
             },

@@ -60,11 +60,6 @@ export const settings = definePluginSettings({
         description: "Common chat mistakes (sa va → ça va, ont y va → on y va)",
         default: true,
     },
-    showToast: {
-        type: OptionType.BOOLEAN,
-        description: "Show a pop-up with the corrections",
-        default: true,
-    },
     words: {
         type: OptionType.STRING,
         description: "Words never corrected, separated by commas",

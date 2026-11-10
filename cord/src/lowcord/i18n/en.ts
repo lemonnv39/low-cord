@@ -696,8 +696,6 @@ export const en = {
     "ac.wordsEmpty": "None (slang like tkt, slt, mdr already passes)",
     "ac.wordsPlaceholder": "Add a word, then Enter",
     "ac.wordRemove": "Remove {word}",
-    "ac.toast": "Show corrections",
-    "ac.toastHint": "Small pop-up with what was corrected",
     "ac.engineReady": "Grammalecte {version} · ready",
     "ac.engineSleeping": "Grammalecte {version} · installed",
     "ac.engineDownloading": "Downloading the engine (7 MB)…",
@@ -708,6 +706,4 @@ export const en = {
     "ac.downloading": "Downloading the checker (7 MB, only once)…",
     "ac.installed": "Checker ready: your messages will be corrected when you send them.",
     "ac.installFailed": "Could not download the checker. Try again from its settings (right-click its button).",
-    "ac.fixedToast": "Corrected: {fixes}",
-    "ac.confirmToast": "Corrected: {fixes} · Enter to send",
 } satisfies Record<keyof typeof fr, string>;

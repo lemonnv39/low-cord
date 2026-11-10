@@ -27,7 +27,7 @@ import { MessageSendListener } from "@api/MessageEvents";
 import { t, useLang } from "@lowcord/i18n";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
-import { showToast, useEffect, useState } from "@webpack/common";
+import { useEffect, useState } from "@webpack/common";
 
 import { ensureEngine, refreshEngine, warmup } from "./engine";
 import { correctText, resetLive, startLive, stopLive } from "./live";
@@ -92,20 +92,17 @@ const onSend: MessageSendListener = async (channelId, msg) => {
     }
 
     s.totalFixed = (s.totalFixed ?? 0) + result.fixes.length;
-    const summary = result.fixes.slice(0, 4).map(f => `${f.from} → ${f.to}`).join(" · ") + (result.fixes.length > 4 ? " …" : "");
 
     if (s.mode === "confirm") {
         pending.set(channelId, result.text);
         replaceInput(result.text);
         setButtonState("pending");
-        if (s.showToast) showToast({ text: t("ac.confirmToast", { fixes: summary }) });
         return { cancel: true };
     }
 
     msg.content = result.text;
     setButtonState("done");
     resetLive();
-    if (s.showToast) showToast({ text: t("ac.fixedToast", { n: result.fixes.length, fixes: summary }), variant: "success" });
 };
 
 // ── Bouton ───────────────────────────────────────────────────────────────────

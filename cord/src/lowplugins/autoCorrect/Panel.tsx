@@ -114,7 +114,7 @@ function Words() {
 
 function Panel() {
     useLang();
-    const s = settings.use(["isEnabled", "mode", "livePreview", "accents", "homophones", "conjugation", "agreement", "hyphens", "common", "showToast", "totalFixed"]);
+    const s = settings.use(["isEnabled", "mode", "livePreview", "accents", "homophones", "conjugation", "agreement", "hyphens", "common", "totalFixed"]);
     const engine = useEngineState();
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState<{ left: number; bottom: number; } | null>(null);
@@ -175,7 +175,6 @@ function Panel() {
                 <div className="lc-ac-label">{t("ac.words")}</div>
                 <Words />
 
-                <Check checked={s.showToast} onChange={set("showToast")} label={t("ac.toast")} hint={t("ac.toastHint")} />
             </div>
 
             <div className="lc-ac-foot">

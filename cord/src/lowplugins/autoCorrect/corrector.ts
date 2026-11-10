@@ -40,7 +40,10 @@ export interface Fix {
 export interface CorrectOptions {
     /** familles de règles actives (voir GROUPS) */
     groups: string[];
-    /** accents, apostrophes et traits d'union oubliés (daccord → d'accord) */
+    /**
+     * orthographe sûre : accents, apostrophes, traits d'union (daccord →
+     * d'accord) et lettre muette oubliée en fin de mot (salu → salut)
+     */
     accents: boolean;
     /** mots (en minuscules) à ne jamais toucher */
     whitelist: string[];
@@ -141,7 +144,33 @@ const SHORT_AFTER_APOS = new Set(["ai", "as", "a", "en", "es", "est", "il", "on"
 const WORD = /\p{L}[\p{L}'’-]*/gu;
 const NOT_WORD = /[\p{L}\d_]/u;
 
-function fixAccents(text: string, spans: [number, number][], speller: Speller, whitelist: Set<string>, curly: boolean, fixes: Fix[]) {
+// Lettre muette oubliée en fin de mot (salu → salut, pa → pas, avan → avant,
+// ouai → ouais). Les candidats sont vérifiés dans le dictionnaire : un
+// pseudo ou de l'argot ne devient pas un vrai mot en ajoutant un « t ».
+const SILENT_ENDINGS = ["t", "s", "x", "p", "d"];
+const VOWEL = /[aeiouyàâäéèêëîïôöûüù]/;
+// Un « s » ajouté ferait des pluriels d'abréviations (« dispo » → « dispos ») :
+// seulement pour ces mots, où on l'oublie vraiment.
+const S_WORDS = new Set("pas jamais toujours tous fais vais mais plus moins dans sans vers gros alors depuis parfois temps dessus dessous jours ans gens fois tes mes ses nos vos leurs suis sais peux veux dois crois vois".split(" "));
+// À égalité, le mot le plus courant gagne (« pa » → « pas », pas « pat »).
+const COMMON = new Set([...S_WORDS, ..."salut tout fait faut faux avant petit nuit part tard trop beaucoup deux peux veux mieux vieux prix choix doux nous vous quand grand long rond chaud froid nord sud bout mot debut".split(" ")]);
+
+/** Le mot avec une lettre muette en plus, s'il en existe un ; plusieurs : la phrase tranche. */
+function silentLetter(word: string, sentence: (candidate: string) => string, speller: Speller, parse: (text: string) => GrammarError[]) {
+    if (!VOWEL.test(word) || /['’-]/.test(word)) return null;
+    const low = word.toLowerCase();
+    const found = SILENT_ENDINGS
+        .filter(e => e !== "s" || S_WORDS.has(low + e))
+        .map(e => low + e)
+        .filter(c => speller.isValid(c));
+    if (found.length <= 1) return found[0] ?? null;
+    // « tu fai » → « fais », « il fai » → « fait » : celle qui laisse le moins d'erreurs.
+    const ranked = found.map((c, i) => ({ c, i, rare: COMMON.has(c) ? 0 : 1, errors: parse(sentence(c)).length }));
+    ranked.sort((a, b) => a.errors - b.errors || a.rare - b.rare || a.i - b.i);
+    return ranked[0].c;
+}
+
+function fixAccents(text: string, spans: [number, number][], speller: Speller, parse: (text: string) => GrammarError[], whitelist: Set<string>, curly: boolean, fixes: Fix[]) {
     let out = "";
     let last = 0;
     for (const m of text.matchAll(WORD)) {
@@ -162,13 +191,15 @@ function fixAccents(text: string, spans: [number, number][], speller: Speller, w
         const elided = /^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)’(.+)$/i.exec(probe);
         if (elided && speller.isValid(elided[1])) continue;
         const target = bare(word);
-        const pick = speller.suggest(probe).find(sugg => {
+        let pick = speller.suggest(probe).find(sugg => {
             if (bare(sugg) !== target) return false;
             // Pas de sigle ni de nom propre (« fai » ≠ « FAI ») : seule la 1ʳᵉ lettre peut changer de casse.
             if (sugg.slice(1) !== sugg.slice(1).toLowerCase() || (sugg[0] !== sugg[0].toLowerCase() && word[0] === word[0].toLowerCase())) return false;
             const apos = sugg.split(/['’]/);
             return apos.length === 1 || apos.slice(1).every(part => part.length >= 3 || SHORT_AFTER_APOS.has(part.toLowerCase()));
         });
+        const before = out + text.slice(last, at);
+        pick ??= silentLetter(word, c => before + c + text.slice(at + word.length), speller, parse) ?? undefined;
         if (!pick) continue;
         const to = keepCase(word, curly ? pick : pick.replace(/’/g, "'"));
         if (to === word) continue;
@@ -187,6 +218,17 @@ interface Candidate {
     score: number[];
     next: string;
     after: GrammarError[];
+}
+
+/** Distance d'édition (lettres ajoutées, retirées ou changées). */
+function distance(a: string, b: string) {
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        const row = [i];
+        for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = row;
+    }
+    return prev[b.length];
 }
 
 const lessThan = (a: number[], b: number[]) => {
@@ -209,7 +251,7 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
     // D'abord l'orthographe sûre : la grammaire travaille ensuite sur des mots connus.
     if (options.accents && speller) {
         const { spans } = protect(cur);
-        cur = fixAccents(cur, spans, speller, whitelist, curly, fixes);
+        cur = fixAccents(cur, spans, speller, parse, whitelist, curly, fixes);
     }
 
     if (options.custom) {
@@ -250,7 +292,8 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
                 if (group === "gn" && DETERMINERS.has(low)) continue;
                 const suggestions = error.aSuggestions
                     .map(s => curly ? s : s.replace(/’/g, "'"))
-                    .filter(s => s && s.toLowerCase() !== low);
+                    // Proche du mot tapé (« fais » ne devient pas « fission ») : au plus ~40 % de lettres changées.
+                    .filter(s => s && s.toLowerCase() !== low && distance(bare(s), bare(orig)) <= Math.max(2, Math.ceil(bare(orig).length * 0.4)));
                 if (!suggestions.length) continue;
                 const pool = suggestions.length === 1 || sameStem(suggestions)
                     ? [suggestions[0]]

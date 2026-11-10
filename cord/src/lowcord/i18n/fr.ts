@@ -700,8 +700,6 @@ export const fr = {
     "ac.wordsEmpty": "Aucun (l'argot comme tkt, slt, mdr passe déjà)",
     "ac.wordsPlaceholder": "Ajouter un mot puis Entrée",
     "ac.wordRemove": "Retirer {word}",
-    "ac.toast": "Montrer les corrections",
-    "ac.toastHint": "Petit message avec ce qui a été corrigé",
     "ac.engineReady": "Grammalecte {version} · prêt",
     "ac.engineSleeping": "Grammalecte {version} · installé",
     "ac.engineDownloading": "Téléchargement du moteur (7 Mo)…",
@@ -712,6 +710,4 @@ export const fr = {
     "ac.downloading": "Téléchargement du correcteur (7 Mo, une seule fois)…",
     "ac.installed": "Correcteur prêt : tes messages seront corrigés à l'envoi.",
     "ac.installFailed": "Impossible de télécharger le correcteur. Réessaie depuis ses réglages (clic droit sur son bouton).",
-    "ac.fixedToast": "Corrigé : {fixes}",
-    "ac.confirmToast": "Corrigé : {fixes} · Entrée pour envoyer",
 } as const;
