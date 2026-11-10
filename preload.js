@@ -1,4 +1,4 @@
-// Vencord 777c86d
+// Vencord e5a332a
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
