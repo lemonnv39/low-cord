@@ -66,7 +66,16 @@ waitFor("parseTopic", m => Parser = m);
 export let Alerts: t.Alerts;
 waitFor(["show", "close"], m => Alerts = m);
 
-export const showToast: t.showToast = findByCodeLazy(".currentToastMap.has(");
+// Discord a remplacé `.currentToastMap.has(` par `.get(` : on cible ce qui reste stable.
+const showToastRaw: t.showToast = findByCodeLazy("currentToastMap", "toastKey");
+/** Un toast qui échoue (Discord a changé) ne doit jamais interrompre l'action qui l'affiche. */
+export const showToast: t.showToast = data => {
+    try {
+        showToastRaw(data);
+    } catch (e) {
+        console.warn("[low-cord] toast impossible :", e);
+    }
+};
 
 export const UserUtils = {
     getUser: findByCodeLazy(".USER(")

@@ -107,11 +107,12 @@ export default {
 
     /** low-cord : mises à jour automatiques (voir src/main/lowcordUpdater.ts). */
     lowcordUpdate: {
-        check: () => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_CHECK),
-        /** Installe la version prête et redémarre Discord. */
-        restart: () => invoke<void>(IpcEvents.LOWCORD_UPDATE_RESTART),
-        /** Version installée + changements depuis `since` (version vue la dernière fois). */
-        changes: (since?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since),
+        /** `force` : ignorer l'état vérifié il y a moins d'une minute. */
+        check: (force?: boolean) => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_CHECK, force),
+        /** Installe la version prête et redémarre Discord (sauf si l'installation échoue). */
+        restart: () => invoke<{ ok: boolean; error?: string; }>(IpcEvents.LOWCORD_UPDATE_RESTART),
+        /** Changements de `since` à `to` (par défaut : la version installée). */
+        changes: (since?: string, to?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since, to),
     },
 
     /** low-sound : installation du moteur (voir src/main/lowSound.ts). */

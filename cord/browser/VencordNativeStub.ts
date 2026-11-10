@@ -152,7 +152,7 @@ window.VencordNative = {
     // Mises à jour automatiques : uniquement sur l'application de bureau.
     lowcordUpdate: {
         check: async () => ({ enabled: false, ready: false }),
-        restart: async () => { },
+        restart: async () => ({ ok: false }),
         changes: async () => ({ commits: [] }),
     },
     lowSound: {

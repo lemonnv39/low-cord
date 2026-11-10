@@ -5,27 +5,31 @@
  */
 
 // low-cord — mises à jour automatiques (côté Discord). Le processus principal
-// (src/main/lowcordUpdater.ts) vérifie et télécharge ; ici, dès qu'une
-// version est prête, une flèche verte apparaît dans la zone temporaire de la
-// barre du haut : un clic installe et redémarre Discord. Sans clic, la mise à
-// jour s'installe à la prochaine fermeture de Discord.
+// (src/main/lowcordUpdater.ts) vérifie dès le lancement et télécharge ; ici,
+// dès qu'une version est prête, une flèche verte apparaît dans la zone
+// temporaire de la barre du haut : clic = installer et redémarrer Discord,
+// clic droit = voir ce qui arrive. Sans clic, la mise à jour s'installe à la
+// prochaine fermeture de Discord.
 
 import * as DataStore from "@api/DataStore";
 import { HeaderBarIcon, hideTempHeaderButton, showTempHeaderButton } from "@lowcord/headerBar";
 import { t, useLang } from "@lowcord/i18n";
+import { checkForUpdates, installAndRestart, PREV_KEY, SEEN_KEY, useUpdateState } from "@lowcord/update";
 import { openWhatsNew } from "@lowcord/WhatsNew";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { showToast } from "@webpack/common";
 
 const logger = new Logger("LowCordUpdater");
-const FIRST_CHECK = 20_000;
-const EVERY = 30 * 60_000;
+/** Vérification régulière côté fenêtre (le processus principal en fait aussi). */
+const EVERY = 10 * 60_000;
+/** Retour sur Discord : nouvelle vérification si la dernière date d'au moins ça. */
+const ON_FOCUS = 3 * 60_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
-let firstTimer: ReturnType<typeof setTimeout> | null = null;
+let whatsNewTimer: ReturnType<typeof setTimeout> | null = null;
 let announced: string | null = null;
-let restarting = false;
+let lastCheck = 0;
 
 function DownloadIcon() {
     return (
@@ -37,60 +41,73 @@ function DownloadIcon() {
     );
 }
 
-function restart() {
-    if (restarting) return;
-    restarting = true;
-    showToast({ text: t("upd.restarting") });
-    VencordNative.lowcordUpdate.restart().catch(e => {
-        restarting = false;
-        logger.error("Redémarrage impossible", e);
-        showToast({ text: t("upd.failed"), variant: "critical" });
-    });
+function InstallingIcon() {
+    return (
+        <svg className="lc-upd-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--status-positive, #23a55a)" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+        </svg>
+    );
 }
 
 function UpdateButton() {
     useLang();
-    return <HeaderBarIcon icon={DownloadIcon} tooltip={t("upd.tooltip")} onClick={restart} />;
+    const { installing, status } = useUpdateState();
+    return (
+        <div
+            style={{ display: "contents" }}
+            onContextMenu={e => {
+                e.preventDefault();
+                if (status?.latest) openWhatsNew({ since: status.current, to: status.latest, mode: "upcoming" });
+            }}
+        >
+            <HeaderBarIcon
+                icon={installing ? InstallingIcon : DownloadIcon}
+                tooltip={t(installing ? "upd.installing" : "upd.tooltip")}
+                onClick={installAndRestart}
+            />
+        </div>
+    );
 }
 
 async function check() {
-    try {
-        const status = await VencordNative.lowcordUpdate.check();
-        if (!status.enabled) {
-            stop();
-            return;
-        }
-        if (status.error) logger.warn("Vérification :", status.error);
-        if (!status.ready) {
-            hideTempHeaderButton("LowCordUpdater");
-            return;
-        }
-        showTempHeaderButton("LowCordUpdater", UpdateButton, 0);
-        // Une seule notification par version.
-        if (status.latest && announced !== status.latest) {
-            announced = status.latest;
-            showToast({ text: t("upd.ready"), variant: "success" });
-        }
-    } catch (e) {
-        logger.error("Vérification impossible", e);
+    lastCheck = Date.now();
+    const status = await checkForUpdates();
+    if (!status) return;
+    if (!status.enabled) {
+        stop();
+        return;
     }
+    if (!status.ready) {
+        hideTempHeaderButton("LowCordUpdater");
+        return;
+    }
+    showTempHeaderButton("LowCordUpdater", UpdateButton, 0);
+    // Une seule notification par version.
+    if (status.latest && announced !== status.latest) {
+        announced = status.latest;
+        showToast({ text: t("upd.ready"), variant: "success" });
+    }
+}
+
+function onFocus() {
+    if (Date.now() - lastCheck > ON_FOCUS) check();
 }
 
 // ── Quoi de neuf ─────────────────────────────────────────────────────────────
 // Version vue la dernière fois : si celle installée est différente, c'est
 // qu'une mise à jour vient d'être installée → on montre ce qui a changé.
-const SEEN_KEY = "lowcord-last-seen-build";
-
 async function showWhatsNew() {
     try {
         const last = await DataStore.get<string>(SEEN_KEY);
-        const changes = await VencordNative.lowcordUpdate.changes(last);
-        if (!changes.current || changes.current === last) return;
-        // GitHub injoignable : on garde l'ancienne version vue, réessai au prochain démarrage.
-        if (changes.error) return;
+        const status = await checkForUpdates();
+        const current = status?.current;
+        if (!current || current === last) return;
         // Première fois (pas de version vue) : rien à comparer, on retient juste la version.
-        if (last) openWhatsNew(changes);
-        await DataStore.set(SEEN_KEY, changes.current);
+        if (!last) return void await DataStore.set(SEEN_KEY, current);
+        // GitHub injoignable : on garde l'ancienne version vue, réessai au prochain démarrage.
+        const opened = await openWhatsNew({ since: last, to: current, mode: "installed", onlyIfContent: true });
+        if (opened === "error") return;
+        await DataStore.setMany([[SEEN_KEY, current], [PREV_KEY, last]]);
     } catch (e) {
         logger.error("Quoi de neuf impossible", e);
     }
@@ -98,8 +115,9 @@ async function showWhatsNew() {
 
 function stop() {
     if (timer) clearInterval(timer);
-    if (firstTimer) clearTimeout(firstTimer);
-    timer = firstTimer = null;
+    if (whatsNewTimer) clearTimeout(whatsNewTimer);
+    timer = whatsNewTimer = null;
+    window.removeEventListener("focus", onFocus);
 }
 
 export default definePlugin({
@@ -110,10 +128,13 @@ export default definePlugin({
     hidden: true,
 
     start() {
-        // Laisse Discord finir de démarrer avant la première vérification.
-        firstTimer = setTimeout(check, FIRST_CHECK);
-        setTimeout(showWhatsNew, 5000);
+        // Tout de suite : le processus principal a déjà commencé à vérifier au
+        // lancement de Discord, la réponse arrive dès que la version est prête.
+        check();
         timer = setInterval(check, EVERY);
+        window.addEventListener("focus", onFocus);
+        // Laisse l'interface de Discord s'afficher avant la fenêtre.
+        whatsNewTimer = setTimeout(showWhatsNew, 3000);
     },
 
     stop() {

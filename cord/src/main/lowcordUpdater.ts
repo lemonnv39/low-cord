@@ -7,15 +7,17 @@
 // low-cord — mises à jour automatiques (processus principal).
 //
 // La CI publie chaque version sur la branche `builds` du repo. Ici :
-//  1. on demande à GitHub le dernier commit de `builds` ;
+//  1. dès le lancement de Discord (puis régulièrement), on demande à GitHub
+//     le dernier commit de `builds` ;
 //  2. s'il diffère de la version installée (.build-sha, écrit par
 //     l'injecteur), on télécharge les 4 fichiers à CE commit précis (jamais
 //     une adresse « dernière version » que le cache de GitHub peut servir en
 //     retard), on vérifie que c'est bien une build low-cord, et on la met de
 //     côté dans dist/.pending ;
-//  3. la nouvelle version remplace l'ancienne seulement quand Discord se
-//     ferme ou redémarre : jamais pendant qu'il tourne (une fenêtre
-//     rechargée mélangerait les deux versions).
+//  3. la nouvelle version remplace l'ancienne seulement quand Discord
+//     redémarre (flèche verte) ou se ferme : jamais pendant qu'il tourne
+//     (une fenêtre rechargée mélangerait les deux versions). Le remplacement
+//     est tout ou rien : en cas d'échec, l'ancienne version est remise.
 //
 // Actif seulement sur une installation faite par l'injecteur (présence de
 // .build-sha à côté de patcher.js) : une build de développement n'est pas
@@ -24,7 +26,7 @@
 import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
 import { app, ipcMain, net } from "electron";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 
 export interface UpdateStatus {
@@ -34,24 +36,34 @@ export interface UpdateStatus {
     /** une nouvelle version est téléchargée et prête */
     ready: boolean;
     error?: string;
+    /** date (ms) de la dernière vérification réussie */
+    checkedAt?: number;
 }
 
 const DIST = __dirname;
 const SHA_FILE = join(DIST, ".build-sha");
 const PENDING = join(DIST, ".pending");
+const BACKUP = join(DIST, ".backup");
 const FILES = ["patcher.js", "preload.js", "renderer.js", "renderer.css"];
 const SHA = /^[0-9a-f]{40}$/;
 const HEADERS = { "User-Agent": "low-cord", "Accept": "application/vnd.github+json" };
+/** Vérification de fond (en plus de celle du lancement et des demandes de la fenêtre). */
+const EVERY = 10 * 60_000;
 
 const enabled = () => existsSync(SHA_FILE);
 const readText = (file: string) => {
     try { return readFileSync(file, "utf8").trim(); } catch { return null; }
 };
 
-async function latestSha() {
-    const res = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}/commits/builds`, { headers: HEADERS });
+async function github(path: string) {
+    const res = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}${path}`, { headers: HEADERS });
+    if (res.status === 403 || res.status === 429) throw new Error("GitHub : trop de demandes, réessai plus tard");
     if (!res.ok) throw new Error(`GitHub : HTTP ${res.status}`);
-    const sha = (await res.json())?.sha;
+    return res.json();
+}
+
+async function latestSha() {
+    const sha = (await github("/commits/builds"))?.sha;
     if (typeof sha !== "string" || !SHA.test(sha)) throw new Error("GitHub : réponse inattendue");
     return sha;
 }
@@ -62,13 +74,14 @@ async function stage(sha: string) {
     rmSync(tmp, { recursive: true, force: true });
     mkdirSync(tmp, { recursive: true });
     try {
-        for (const file of FILES) {
+        // Les 4 fichiers en même temps : la mise à jour est prête plus vite.
+        await Promise.all(FILES.map(async file => {
             const res = await net.fetch(`https://raw.githubusercontent.com/${LOWCORD_REPO}/${sha}/${file}`, { headers: { "User-Agent": "low-cord" } });
             if (!res.ok) throw new Error(`${file} : HTTP ${res.status}`);
             const data = Buffer.from(await res.arrayBuffer());
             if (data.length < 100) throw new Error(`${file} : fichier vide`);
             writeFileSync(join(tmp, file), data);
-        }
+        }));
         // Même contrôle que la CI : c'est bien une build low-cord.
         if (!readFileSync(join(tmp, "renderer.js"), "utf8").includes("\"low-cord\"")) throw new Error("build invalide");
         writeFileSync(join(tmp, ".sha"), sha);
@@ -81,9 +94,10 @@ async function stage(sha: string) {
 }
 
 let running: Promise<UpdateStatus> | null = null;
+let last: UpdateStatus | null = null;
 
 export function checkForUpdate(): Promise<UpdateStatus> {
-    // Plusieurs fenêtres peuvent demander en même temps : une seule vérification.
+    // Plusieurs demandes en même temps (lancement, fenêtres) : une seule vérification.
     return running ??= (async (): Promise<UpdateStatus> => {
         if (!enabled()) return { enabled: false, ready: false };
         const current = readText(SHA_FILE) ?? undefined;
@@ -91,23 +105,45 @@ export function checkForUpdate(): Promise<UpdateStatus> {
             const latest = await latestSha();
             if (latest === current) {
                 rmSync(PENDING, { recursive: true, force: true });
-                return { enabled: true, current, latest, ready: false };
+                return { enabled: true, current, latest, ready: false, checkedAt: Date.now() };
             }
             if (readText(join(PENDING, ".sha")) !== latest) await stage(latest);
-            return { enabled: true, current, latest, ready: true };
+            return { enabled: true, current, latest, ready: true, checkedAt: Date.now() };
         } catch (e: any) {
-            return { enabled: true, current, ready: readText(join(PENDING, ".sha")) != null, error: String(e?.message ?? e) };
+            const pending = readText(join(PENDING, ".sha"));
+            return { enabled: true, current, latest: pending ?? undefined, ready: pending != null, error: String(e?.message ?? e), checkedAt: last?.checkedAt };
         }
-    })().finally(() => { running = null; });
+    })().then(s => (last = s)).finally(() => { running = null; });
 }
 
-/** Remplace la version installée par celle mise de côté (Discord fermé ou en train de redémarrer). */
+/**
+ * Remplace la version installée par celle mise de côté. Tout ou rien : les
+ * fichiers actuels sont copiés avant, et remis si un remplacement échoue
+ * (fichier bloqué par un antivirus…). Renvoie false s'il n'y a rien à installer.
+ */
 function applyPending() {
     const sha = readText(join(PENDING, ".sha"));
     if (!sha || !SHA.test(sha) || !FILES.every(f => existsSync(join(PENDING, f)))) return false;
-    // Renommer remplace le fichier d'un coup (même disque) : jamais de fichier à moitié écrit.
-    for (const file of FILES) renameSync(join(PENDING, file), join(DIST, file));
-    writeFileSync(SHA_FILE, sha);
+
+    rmSync(BACKUP, { recursive: true, force: true });
+    mkdirSync(BACKUP, { recursive: true });
+    for (const file of FILES) copyFileSync(join(DIST, file), join(BACKUP, file));
+    const backupSha = readText(SHA_FILE);
+
+    try {
+        // Renommer remplace le fichier d'un coup (même disque) : jamais de fichier à moitié écrit.
+        for (const file of FILES) renameSync(join(PENDING, file), join(DIST, file));
+        writeFileSync(SHA_FILE, sha);
+    } catch (e) {
+        for (const file of FILES) {
+            try { copyFileSync(join(BACKUP, file), join(DIST, file)); } catch { }
+        }
+        if (backupSha) writeFileSync(SHA_FILE, backupSha);
+        rmSync(PENDING, { recursive: true, force: true });
+        throw e;
+    } finally {
+        rmSync(BACKUP, { recursive: true, force: true });
+    }
     rmSync(PENDING, { recursive: true, force: true });
     return true;
 }
@@ -117,12 +153,16 @@ function applyPending() {
 // le commit de main dont elle est faite. Les changements entre deux versions
 // = les commits de main entre ces deux sha.
 export interface ChangeEntry { sha: string; message: string; date: string; }
-export interface Changes { current?: string; commits: ChangeEntry[]; /** GitHub injoignable : on réessaiera */ error?: boolean; }
-
-async function github(path: string) {
-    const res = await net.fetch(`https://api.github.com/repos/${LOWCORD_REPO}${path}`, { headers: HEADERS });
-    if (!res.ok) throw new Error(`GitHub : HTTP ${res.status}`);
-    return res.json();
+export interface Changes {
+    /** version installée */
+    current?: string;
+    /** version dont on montre les changements (installée, ou prête à l'être) */
+    to?: string;
+    commits: ChangeEntry[];
+    /** page GitHub des changements */
+    url?: string;
+    /** GitHub injoignable : on réessaiera */
+    error?: boolean;
 }
 
 async function sourceOf(buildSha: string) {
@@ -132,41 +172,77 @@ async function sourceOf(buildSha: string) {
     return sha;
 }
 
-async function changesSince(since: unknown): Promise<Changes> {
+const toEntry = (c: any): ChangeEntry => ({
+    sha: String(c.sha).slice(0, 7),
+    message: String(c.commit?.message ?? ""),
+    date: String(c.commit?.committer?.date ?? ""),
+});
+
+/**
+ * Changements de `since` à `to` (par défaut : la version installée). Sans
+ * `since` (rien à comparer), les derniers changements jusqu'à `to`.
+ */
+async function changesBetween(since: unknown, to: unknown): Promise<Changes> {
     const current = readText(SHA_FILE) ?? undefined;
-    if (!current || typeof since !== "string" || !SHA.test(since) || since === current) return { current, commits: [] };
-    const [from, to] = await Promise.all([sourceOf(since), sourceOf(current)]);
-    const compare = await github(`/compare/${from}...${to}`);
-    const commits: ChangeEntry[] = (compare?.commits ?? []).map((c: any) => ({
-        sha: String(c.sha).slice(0, 7),
-        message: String(c.commit?.message ?? ""),
-        date: String(c.commit?.committer?.date ?? ""),
-    }));
-    return { current, commits };
+    const target = typeof to === "string" && SHA.test(to) ? to : current;
+    if (!target) return { current, commits: [] };
+    if (typeof since === "string" && SHA.test(since)) {
+        if (since === target) return { current, to: target, commits: [] };
+        const [from, dest] = await Promise.all([sourceOf(since), sourceOf(target)]);
+        const compare = await github(`/compare/${from}...${dest}`);
+        return {
+            current,
+            to: target,
+            commits: (compare?.commits ?? []).map(toEntry),
+            url: `https://github.com/${LOWCORD_REPO}/compare/${from.slice(0, 12)}...${dest.slice(0, 12)}`,
+        };
+    }
+    const dest = await sourceOf(target);
+    const list = await github(`/commits?sha=${dest}&per_page=20`);
+    return {
+        current,
+        to: target,
+        // L'API donne le plus récent d'abord ; compare donne l'ordre inverse.
+        commits: (Array.isArray(list) ? list : []).map(toEntry).reverse(),
+        url: `https://github.com/${LOWCORD_REPO}/commits/${dest.slice(0, 12)}`,
+    };
 }
 
-ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHECK, () => checkForUpdate());
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHECK, (_, force?: unknown) => {
+    // Vérifiée il y a moins d'une minute : l'état connu suffit (GitHub limite
+    // les demandes). `force` : bouton « Vérifier » des réglages.
+    if (force !== true && !running && last?.checkedAt && Date.now() - last.checkedAt < 60_000) return last;
+    return checkForUpdate();
+});
 
-ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHANGES, async (_, since: unknown) => {
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_CHANGES, async (_, since: unknown, to: unknown) => {
     try {
-        return await changesSince(since);
+        return await changesBetween(since, to);
     } catch (e) {
         console.error("[low-cord] changements introuvables :", e);
         return { current: readText(SHA_FILE) ?? undefined, commits: [], error: true };
     }
 });
 
-ipcMain.handle(IpcEvents.LOWCORD_UPDATE_RESTART, () => {
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_RESTART, async () => {
+    // Une vérification en cours (téléchargement) : on l'attend, sinon la version
+    // à moitié téléchargée serait ignorée.
+    if (running) await running.catch(() => { });
     try {
         applyPending();
-    } catch (e) {
+    } catch (e: any) {
         console.error("[low-cord] mise à jour non appliquée :", e);
+        return { ok: false, error: String(e?.message ?? e) };
     }
-    app.relaunch();
-    app.exit(0);
+    // Laisse la réponse partir avant de quitter.
+    setTimeout(() => {
+        app.relaunch();
+        app.exit(0);
+    }, 150);
+    return { ok: true };
 });
 
-// Discord quitté sans redémarrer depuis l'icône : la mise à jour s'applique
+// Discord quitté sans redémarrer depuis la flèche : la mise à jour s'applique
 // quand même, pour le prochain lancement.
 app.on("will-quit", () => {
     try {
@@ -174,4 +250,13 @@ app.on("will-quit", () => {
     } catch (e) {
         console.error("[low-cord] mise à jour non appliquée :", e);
     }
+});
+
+// Première vérification dès le lancement de Discord (pas d'attente) : la
+// version est souvent prête avant même que la fenêtre ait fini de charger.
+// Puis en fond, régulièrement.
+app.whenReady().then(() => {
+    if (!enabled()) return;
+    checkForUpdate();
+    setInterval(checkForUpdate, EVERY).unref?.();
 });

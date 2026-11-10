@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// low-cord — onglet général des réglages (build, langue, actions rapides).
+// low-cord — onglet général des réglages (build, mises à jour, langue, actions rapides).
 
 import "./styles.css";
 
@@ -23,6 +23,7 @@ import { Banner } from "./Banner";
 import { LOWCORD_REPO_URL } from "./constants";
 import { LANGS, setLang, t, useLang } from "./i18n";
 import { OptimizeSection } from "./OptimizeSection";
+import { UpdatesSection } from "./UpdatesSection";
 
 const cl = classNameFactory("lc-");
 
@@ -54,6 +55,16 @@ function LowCordSettings() {
             <Banner hash={gitHash} />
 
             <Divider className={Margins.top16} />
+
+            {!IS_WEB && (
+                <>
+                    <div className={Margins.top16}>
+                        <UpdatesSection />
+                    </div>
+
+                    <Divider className={Margins.top16} />
+                </>
+            )}
 
             <section className={Margins.top16}>
                 <Forms.FormTitle tag="h5">{t("tab.language")}</Forms.FormTitle>
