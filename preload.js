@@ -1,4 +1,4 @@
-// Vencord 2937d4e
+// Vencord ff999f4
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
