@@ -52,6 +52,16 @@ const REGEX_RULES: Rule[] = [
     [new RegExp(`${B}(tu)\\s+ten${W}`, "giu"), m => `${m[1]} t'en`],
     [new RegExp(`${B}(il|elle|on)\\s+sen${W}`, "giu"), m => `${m[1]} s'en`],
     [new RegExp(`${B}sava${W}`, "giu"), m => caseLike(m[0], "ça va")],
+    // « quesque tu fais », « esque tu viens » → « qu'est-ce que », « est-ce que »
+    [new RegExp(`${B}(?:quesque|qu'esque|qu’esque|keske|qu'est ce que|qu’est ce que)${W}`, "giu"), m => caseLike(m[0], "qu'est-ce que")],
+    [new RegExp(`${START}(esque|est ce que)${W}`, "giu"), m => `${m[1]}${caseLike(m[2], "est-ce que")}`],
+    // « appel moi », « envoi moi » en début de phrase : le verbe à l'impératif, pas le nom
+    [new RegExp(`${START}(appel|rappel|envoi|renvoi)\\s+(moi|toi|le|la|les|nous|lui|leur)${W}`, "giu"), m => {
+        const verb: Record<string, string> = { appel: "appelle", rappel: "rappelle", envoi: "envoie", renvoi: "renvoie" };
+        return `${m[1]}${caseLike(m[2], verb[m[2].toLowerCase()])}-${m[3]}`;
+    }],
+    // « tu me soule » : « soule » est un sport pour le dictionnaire.
+    [new RegExp(`${B}(me|te|nous|vous|m'|t')(\\s*)soul(e|es|ent|er|é|ée)${W}`, "giu"), m => `${m[1]}${m[2]}soûl${m[3]}`],
     [new RegExp(`${B}biensur${W}`, "giu"), m => caseLike(m[0], "bien sûr")],
     [new RegExp(`${B}bien sur(?=\\s*(?:[?!.,…]|$))`, "giu"), m => caseLike(m[0], "bien sûr")],
     [new RegExp(`${B}parcontre${W}`, "giu"), m => caseLike(m[0], "par contre")],
@@ -68,7 +78,8 @@ const REGEX_RULES: Rule[] = [
 
 // Après « être », « la » en fin de phrase est l'adverbe : « je suis la » → « là ».
 const AFTER_SPELLING: Rule[] = [
-    [new RegExp(`${B}(${ETRE})\\s+la(?=\\s*(?:[?!.,…]|$))`, "giu"), m => `${m[1]} là`],
+    // Aussi après une apostrophe (« j'étais la ») et avec « pas », « plus »… (« je suis pas la »).
+    [new RegExp(`(?<![\\p{L}\\d_])(${ETRE})((?:\\s+(?:pas|plus|jamais|toujours|encore|déjà|deja|bien|vraiment|trop))?)\\s+la(?=\\s*(?:[?!.,…]|$))`, "giu"), m => `${m[1]}${m[2]} là`],
     [new RegExp(`${B}(${OU_AFTER})\\s+ou(?=\\s*(?:[?!.,…]|$))`, "giu"), m => `${m[1]} où`],
     [new RegExp(`(^|[.!?…]\\s+|\\n)(ou)(\\s+)(?=(?:est|sont|t'es|t’es|es|étais|était|tu es|tu vas|tu étais|vas-tu|on va|on est|il est|elle est)${W})`, "giu"), m => `${m[1]}${caseLike(m[2], "où")}${m[3]}`],
 ];
@@ -90,6 +101,35 @@ function morphRules(speller: ChatSpeller): Rule[] {
             if (m[1] && PRONOUNS.has(m[1].toLowerCase())) return null;
             if (!speller.getMorph(m[2].toLowerCase()).some(x => x.includes(":E:2s"))) return null;
             return `${m[1] ? m[0].slice(0, m[0].indexOf(m[2], m[1].length)) : ""}${m[2]}-${m[3]}`;
+        }],
+        // « elle ma dit », « tu ma fait peur » → « m'a », « m'as » (participe passé après « ma »)
+        [new RegExp(`${B}(il|elle|on|ça|ca|qui|tu|ils|elles)\\s+ma\\s+(\\p{L}+)`, "giu"), m => {
+            let verb = m[2];
+            const morph = speller.getMorph(verb.toLowerCase());
+            // « il ma appeler » : l'infinitif en -er devient le participe (« m'a appelé »).
+            if (!hasTag(morph, ":Q")) {
+                if (!hasTag(morph, ":Y") || !/er$/i.test(verb)) return null;
+                verb = verb.slice(0, -2) + "é";
+                if (!hasTag(speller.getMorph(verb.toLowerCase()), ":Q")) return null;
+            }
+            const subj = m[1].toLowerCase();
+            return `${m[1]} ${subj === "tu" ? "m'as" : subj === "ils" || subj === "elles" ? "m'ont" : "m'a"} ${verb}`;
+        }],
+        // « je les vu » → « je les ai vu » (participe passé sans auxiliaire)
+        [new RegExp(`${B}(je|j'|tu|il|elle|on|ils|elles)\\s+les\\s+((?:(?:déjà|deja|jamais|pas|plus|toujours|encore|bien|trop|tous)\\s+)?)(\\p{L}+)`, "giu"), m => {
+            const morph = speller.getMorph(m[3].toLowerCase());
+            // Seulement un participe qui n'est pas aussi un verbe conjugué (« je les vois » ne bouge pas).
+            if (!hasTag(morph, ":Q") || morph.some(x => /:(?:Ip|Iq|Is|If|K|Sp|Sq|E):/.test(x))) return null;
+            const subj = m[1].toLowerCase();
+            const aux = subj === "je" || subj === "j'" ? "ai" : subj === "tu" ? "as" : subj === "ils" || subj === "elles" ? "ont" : "a";
+            return `${m[1].toLowerCase() === "j'" ? "je" : m[1]} les ${aux} ${m[2]}${m[3]}`;
+        }],
+        // « mes potes son la », « ils son partis » → « sont » (après un pluriel, devant là / un participe…)
+        [new RegExp(`${B}(\\p{L}+)\\s+son\\s+(?=(?:là|la|pas|plus|partis|parties|venus|venues|allés|allées|arrivés|arrivées|chauds|chaudes|où|ou|ici|trop|tous|toutes|en|dans|chez|morts|nuls|forts|beaux|bons|grands|petits|là-bas|fous|ouf)${W})`, "giu"), m => {
+            const prev = m[1].toLowerCase();
+            const plural = ["ils", "elles", "qui", "eux", "ceux", "celles"].includes(prev) || speller.getMorph(prev).some(x => /:p(?:[:/]|$)/.test(x));
+            if (!plural) return null;
+            return `${m[1]} sont `;
         }],
         // « tu serrais venue » → « tu serais venue » (conditionnel de être, pas de serrer)
         [new RegExp(`${B}(serr)(ai|ais|ait|aient|ions|iez)(\\s+)(\\p{L}+)`, "giu"), m => {
@@ -130,4 +170,4 @@ export const chatBefore = (text: string, spansOf: Spans, fixes: ChatFix[]) =>
 
 /** Règles d'après l'orthographe : elles lisent des mots déjà corrigés (« etait » → « était »). */
 export const chatAfter = (text: string, spansOf: Spans, speller: ChatSpeller | undefined, fixes: ChatFix[]) =>
-    apply(text, [...AFTER_SPELLING, ...(speller ? morphRules(speller) : [])], spansOf, fixes);
+    apply(text, [...(speller ? morphRules(speller) : []), ...AFTER_SPELLING], spansOf, fixes);

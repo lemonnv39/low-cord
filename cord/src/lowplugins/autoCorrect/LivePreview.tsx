@@ -64,12 +64,11 @@ function pretty(text: string) {
         .replace(/<a?(:[\w~]+:)\d+>/g, "$1");
 }
 
-/** Trois points qui ondulent : discret pendant la frappe. */
-function Dots() {
+function Spinner() {
     return (
-        <span className="lc-ac-live-dots" aria-hidden="true">
-            <i /><i /><i />
-        </span>
+        <svg className="lc-ac-live-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="1.5 3.53" />
+        </svg>
     );
 }
 
@@ -142,13 +141,6 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
     useLang();
     const live = useLive();
     const { isEnabled, livePreview, previewWidth } = settings.use(["isEnabled", "livePreview", "previewWidth"]);
-    // Les points n'apparaissent que si l'analyse traîne : sinon la correction est déjà là.
-    const [slow, setSlow] = useState(false);
-    useEffect(() => {
-        if (!live.analyzing) return setSlow(false);
-        const id = setTimeout(() => setSlow(true), 250);
-        return () => clearTimeout(id);
-    }, [live.analyzing]);
     const [layout, setLayout] = useState<{ box: Box | null; marks: Box[]; }>({ box: null, marks: [] });
     const lastLayout = useRef("");
     const [, tick] = useState(0);
@@ -247,8 +239,8 @@ export function LivePreview({ anchor }: { anchor: HTMLElement | null; }) {
                         : <span key={p.key}>{pretty(p.text)}</span>)}
                 </div>
                 <div className="lc-ac-live-side">
-                    {live.analyzing && slow
-                        ? <Dots />
+                    {live.analyzing
+                        ? <Spinner />
                         : hasFixes
                             ? <span className="lc-ac-live-count">{t("ac.liveCount", { n: view.count })}</span>
                             : <span className="lc-ac-live-ok"><Check />{t("ac.liveClean")}</span>}

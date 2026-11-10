@@ -21,8 +21,8 @@ export interface Result {
     fixes: { from: string; to: string; group: string; }[];
 }
 
-// Court : la correction suit la frappe (une analyse prend quelques ms).
-const DELAY = 70;
+// Petite pause après la frappe avant d'analyser.
+const DELAY = 300;
 const CACHE_SIZE = 20;
 
 /** Options envoyées au moteur (les mêmes pour l'aperçu et l'envoi). */

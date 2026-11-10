@@ -88,7 +88,11 @@ export const SLANG = new Set((
     + "focus troll spam ghost clean carry rush push kill kills loot noob ping feed buff nerf clutch squad team teams live "
     + "stuff fake fail win nice cool sorry bro love crazy vibe vibes mood safe sus real bad good best sick insane hack cheat "
     + "server serv ticket mod modo admin role emote sticker pseudo vocal voc mute unmute stream streamer twitch insta snap "
-    + "tiktok tweet discord spoil spoiler scam scammer boost booster nitro skin skins rank ranked elo smurf toxic tilt tilted"
+    + "tiktok tweet discord spoil spoiler scam scammer boost booster nitro skin skins rank ranked elo smurf toxic tilt tilted "
+    // Jeux, applis et marques.
+    + "fortnite minecraft valorant valo roblox apex warzone gta fifa overwatch csgo cs2 lol league steam epic youtube "
+    + "netflix spotify xbox playstation ps4 ps5 nintendo pokemon zelda mario among amongus brawl clash fallguys genshin "
+    + "rage quit afk respawn headshot bh one tap clip clips edit setup stream"
 ).split(" "));
 
 // Fautes très courantes sur Discord que Grammalecte laisse passer
@@ -176,7 +180,27 @@ function fixSontSon(text: string, spans: [number, number][], speller: Speller, w
 
 const bare = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-'’]/g, "").toLowerCase();
 // Après une apostrophe ajoutée, il faut un vrai mot (« lag » ≠ « l'ag »).
-const SHORT_AFTER_APOS = new Set(["ai", "as", "a", "en", "es", "est", "il", "on", "y", "un", "une", "ils", "elle", "elles", "eux"]);
+// Petits mots très courants : la grammaire ne les change qu'en un autre mot courant.
+const FUNCTION_WORDS = new Set((
+    "je tu il elle on nous vous ils elles moi toi lui eux me te se le la les leur leurs un une des du de à au aux "
+    + "qui que quoi quand comme pour avec dans sur sous chez par sans mais ou où et donc car ni si ne pas plus "
+    + "ce cet cette ces mon ton son ma ta sa mes tes ses notre votre nos vos y en ça cela ceci tout tous toute toutes"
+).split(" "));
+
+// Mots accentués très courants : choisis d'abord quand plusieurs accents sont possibles.
+const FREQUENT = new Set((
+    "après très déjà là où ça même être été tôt bientôt plutôt voilà problème français française garçon génial sérieux "
+    + "sérieuse évidemment intéressant hôpital fenêtre désolé désolée fâché fâchée pâtes tête fête bête côté arrêt arrête "
+    + "arrêter prêt prête théâtre âge mère père frère sœur fièvre école élève étais était étaient étions écoute écouter "
+    + "réponds répondre décide décidé déçu déçue réveillé réveille réussi réussir préféré préfère"
+).split(" "));
+
+// Formes avec apostrophe que l'on tape souvent sans (« daccord », « jai », « cest »).
+const ELISIONS = new Set((
+    "d'accord c'est c'était c'etait j'ai j'avais j'étais j'aime j'en j'y j'arrive j'suis qu'il qu'ils qu'elle qu'elles qu'on qu'un qu'une "
+    + "qu'est s'est s'il s'ils s'en n'est n'a n'ai n'as n'y m'a m'as m'en m'ont t'as t'es t'en t'ai t'a l'a l'ai l'as l'ont l'est "
+    + "aujourd'hui quelqu'un quelqu'une jusqu'à jusqu'ici lorsqu'il puisqu'il presqu'île d'ailleurs d'abord d'habitude d'ici d'un d'une"
+).split(" "));
 const WORD = /\p{L}[\p{L}'’-]*/gu;
 const NOT_WORD = /[\p{L}\d_]/u;
 
@@ -256,15 +280,27 @@ function fixAccents(text: string, spans: [number, number][], speller: Speller, p
         if (elided && speller.isValid(elided[1])) continue;
         const target = bare(word);
         const suggestions = speller.suggest(probe);
-        let pick = suggestions.find(sugg => {
+        const accented = suggestions.filter(sugg => {
             if (bare(sugg) !== target) return false;
             // Pas de sigle ni de nom propre (« fai » ≠ « FAI ») : seule la 1ʳᵉ lettre peut changer de casse.
             if (sugg.slice(1) !== sugg.slice(1).toLowerCase() || (sugg[0] !== sugg[0].toLowerCase() && word[0] === word[0].toLowerCase())) return false;
-            const apos = sugg.split(/['’]/);
-            return apos.length === 1 || apos.slice(1).every(part => part.length >= 3 || SHORT_AFTER_APOS.has(part.toLowerCase()));
+            // Apostrophe ajoutée : seulement les formes du chat (d'accord, c'est, j'ai…), jamais « lache » → « l'ache ».
+            return !/['’]/.test(sugg) || /['’]/.test(word) || ELISIONS.has(sugg.toLowerCase().replace(/’/g, "'"));
         });
         const before = out + text.slice(last, at);
         const sentence = (c: string) => before + c + text.slice(at + word.length);
+        // Sans apostrophe ajoutée d'abord ; plusieurs (« desole » → désole / désolé) : la phrase tranche.
+        accented.sort((a, b) => Number(/['’]/.test(a)) - Number(/['’]/.test(b)));
+        let pick: string | undefined = accented[0];
+        if (accented.length > 1 && !/['’]/.test(accented[1])) {
+            // À égalité, l'adjectif ou le participe (« desole » → « désolé », pas « désole »).
+            // Mais un mot très courant passe avant (« apres » → « après », pas « âpres »).
+            const adjective = (c: string) => speller.getMorph(c).some(m => /:[AQ]/.test(m)) ? 0 : 1;
+            const ranked = accented.filter(a => !/['’]/.test(a)).slice(0, 4)
+                .map((c, i) => ({ c, i, errors: parse(sentence(c)).length, rare: FREQUENT.has(c.toLowerCase()) ? 0 : 1, adj: adjective(c) }));
+            ranked.sort((a, b) => a.errors - b.errors || a.rare - b.rare || a.adj - b.adj || a.i - b.i);
+            pick = ranked[0].c;
+        }
         pick ??= silentLetter(word, sentence, speller, parse) ?? typo(word, suggestions, sentence, parse) ?? undefined;
         if (!pick) continue;
         const to = keepCase(word, curly ? pick : pick.replace(/’/g, "'"));
@@ -352,6 +388,23 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
         }
     }
 
+    // Mot voisin inconnu du dictionnaire (ni argot, ni mot à toi) : sans doute un anglicisme.
+    const unknown = (w: string) => {
+        if (!speller || !w || !/\p{L}/u.test(w) || /\d/.test(w)) return false;
+        const low = w.toLowerCase();
+        if (SLANG.has(low) || whitelist.has(low) || ELISIONS.has(low.replace(/’/g, "'"))) return false;
+        const probe = w.replace(/'/g, "’");
+        if (speller.isValid(probe)) return false;
+        // Élision (« j'ai », « qu'il ») : le mot après l'apostrophe compte.
+        const elided = /^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu|quoiqu)’(.+)$/i.exec(probe);
+        return !(elided && speller.isValid(elided[1]));
+    };
+    const nextToUnknown = (s: string, start: number, end: number) => {
+        const prev = /([\p{L}'’]+)\s+$/u.exec(s.slice(0, start))?.[1] ?? "";
+        const next = /^\s+([\p{L}'’]+)/u.exec(s.slice(end))?.[1] ?? "";
+        return unknown(prev) || unknown(next);
+    };
+
     const errorsOf = (s: string, phase: Set<string>, second: boolean) => {
         const { masked, spans } = protect(s);
         return parse(masked).filter(e => {
@@ -371,6 +424,8 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
                 const orig = cur.slice(error.nStart, error.nEnd);
                 const low = orig.toLowerCase();
                 if (whitelist.has(low) || SLANG.has(low)) continue;
+                // À côté d'un mot inconnu (anglicisme : « il a rage quit ») : on ne devine pas.
+                if (nextToUnknown(cur, error.nStart, error.nEnd)) continue;
                 const group = groupOf(error);
                 // Un accord ne change jamais le déterminant (« sa fait » ≠ « son fait »).
                 if (group === "gn" && DETERMINERS.has(low)) continue;
@@ -379,10 +434,13 @@ export function correct(text: string, parse: (text: string) => GrammarError[], o
                     // Proche du mot tapé (« fais » ne devient pas « fission ») : au plus ~40 % de
                     // lettres changées, sauf entre petits mots courants (« est » → « ai »).
                     .filter(s => s && s.toLowerCase() !== low && (PREFERRED.includes(s.toLowerCase())
-                        || distance(bare(s), bare(orig)) <= Math.max(2, Math.ceil(bare(orig).length * 0.4))));
+                        || distance(bare(s), bare(orig)) <= Math.max(2, Math.ceil(bare(orig).length * 0.4))))
+                    // Un petit mot courant (lui, qui, moi…) ne devient qu'un autre mot courant (« lui » ≠ « luit »).
+                    .filter(s => !FUNCTION_WORDS.has(low) || PREFERRED.includes(s.toLowerCase()) || FUNCTION_WORDS.has(s.toLowerCase()));
                 if (!suggestions.length) continue;
+                // Même mot à l'accord près : la forme la plus courte (masculin singulier : « appelé »).
                 const pool = suggestions.length === 1 || sameStem(suggestions)
-                    ? [suggestions[0]]
+                    ? [[...suggestions].sort((a, b) => a.length - b.length)[0]]
                     : suggestions.filter(s => PREFERRED.includes(s.toLowerCase()));
                 for (const pick of pool.slice(0, 3)) {
                     const to = keepCase(orig, pick);
