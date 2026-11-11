@@ -172,6 +172,22 @@ export function eventFromSnapshot(type: LogEvent["type"], s: MessageSnapshot, ex
     };
 }
 
+// ── Copies en mémoire des messages reçus ─────────────────────────────────────
+// Tous les messages reçus (MP et serveurs), gardés en mémoire dès leur
+// arrivée : un message supprimé avant d'être affiché, ou supprimé si vite que
+// sa copie n'est pas encore écrite sur le disque, reste retrouvable.
+const RECENT_MAX = 6000;
+const recentSnaps = new Map<string, MessageSnapshot>();
+
+export function rememberSnapshot(s: MessageSnapshot | null) {
+    if (!s) return;
+    recentSnaps.delete(s.messageId);
+    recentSnaps.set(s.messageId, s);
+    if (recentSnaps.size > RECENT_MAX) recentSnaps.delete(recentSnaps.keys().next().value!);
+}
+
+export const recentSnapshot = (messageId: string) => recentSnaps.get(messageId);
+
 // ── Files d'envoi vers le disque ─────────────────────────────────────────────
 // Chaque élément garde le compte connecté AU MOMENT de la capture : chaque
 // compte a son propre journal (le dossier low-cord est commun à Discord,

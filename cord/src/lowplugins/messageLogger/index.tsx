@@ -36,7 +36,7 @@ import { Message, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findCssClassesLazy } from "@webpack";
 import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
-import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, snapshotOf } from "./capture";
+import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, recentSnapshot, rememberSnapshot, snapshotOf } from "./capture";
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
 import { openHistoryModal } from "./HistoryModal";
@@ -281,9 +281,10 @@ function logRemovedAttachments(msg: any, removed: any[]) {
     }
 }
 
-/** Message reçu ou chargé : copie des MP + archivage des médias. */
+/** Message reçu ou chargé : copie en mémoire (tous les salons), copie des MP sur disque, archivage des médias. */
 function capture(msg: any, guildIdHint?: string | null) {
     if (!msg?.id || !msg.channel_id) return;
+    if (settings.store.logDeletes && !isIgnoredSource(msg)) rememberSnapshot(snapshotOf(msg));
     if (settings.store.journal && isPrivate(msg.channel_id, guildIdHint)) pushSnapshot(snapshotOf(msg));
     if (archiveWanted(msg.channel_id, guildIdHint) && !isIgnoredSource(msg)) {
         const list = attachmentsOf(msg);
@@ -291,17 +292,37 @@ function capture(msg: any, guildIdHint?: string | null) {
     }
 }
 
-/** Suppression d'un message qui n'était pas affiché : on cherche sa copie. */
+/**
+ * Suppression d'un message qui n'était pas affiché : on cherche sa copie,
+ * d'abord en mémoire (tous les salons, même supprimé aussitôt reçu), puis sur
+ * le disque (MP du journal, reçus lors d'une session précédente).
+ */
 async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
     const missing = ids.filter(id => !handledDeletes.has(id));
-    const account = currentAccount();
-    if (!missing.length || !account || !settings.store.journal || !isPrivate(channelId) || !Native) return;
+    if (!missing.length || !settings.store.logDeletes) return;
     missing.forEach(id => remember(handledDeletes, id));
 
+    const toDisk = inJournal(channelId);
+    const left: string[] = [];
+    for (const id of missing) {
+        const snap = recentSnapshot(id);
+        if (!snap) { left.push(id); continue; }
+        if (shouldIgnore({ author: snap.author, channel_id: channelId })) continue;
+        const ev = eventFromSnapshot("delete", snap, bulk ? { bulk: true } : {});
+        // Réaffiché en rouge à l'ouverture du salon ; sur le disque si le journal le couvre.
+        rememberDelete(ev);
+        if (toDisk) {
+            pushEvent(ev);
+            if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
+        }
+    }
+
+    const account = currentAccount();
+    if (!left.length || !account || !settings.store.journal || !isPrivate(channelId) || !Native) return;
     try {
-        const found = await Native.getSnapshots(account, missing);
+        const found = await Native.getSnapshots(account, left);
         const byId = new Map(found.map(s => [s.messageId, s]));
-        for (const id of missing) {
+        for (const id of left) {
             const snap = byId.get(id);
             if (snap) {
                 if (shouldIgnore({ author: snap.author, channel_id: channelId })) continue;
@@ -476,14 +497,16 @@ async function restoreHistory(channelId: string | null | undefined) {
         for (const [id, rec] of sessionRecords.get(key) ?? []) {
             if (!dismissed.has(id)) records.set(id, rec);
         }
+        // Suppressions de la session (tous les salons), puis celles du journal sur disque.
+        let stored: Promise<LogEvent[]> | undefined;
         if (Native && inJournal(channelId)) {
-            let stored = journalDeletes.get(key);
+            stored = journalDeletes.get(key);
             if (!stored) journalDeletes.set(key, stored = readJournalDeletes(account, channelId));
-            for (const ev of [...(sessionDeletes.get(key) ?? []), ...await stored]) {
-                if (ev.partial || !ev.author || records.has(ev.messageId) || dismissed.has(ev.messageId)) continue;
-                const rec = recordFromEvent(ev);
-                if (rec) records.set(ev.messageId, rec);
-            }
+        }
+        for (const ev of [...(sessionDeletes.get(key) ?? []), ...(stored ? await stored : [])]) {
+            if (ev.partial || !ev.author || records.has(ev.messageId) || dismissed.has(ev.messageId)) continue;
+            const rec = recordFromEvent(ev);
+            if (rec) records.set(ev.messageId, rec);
         }
     }
     const edits = settings.store.logEdits ? [...sessionEdits.get(key) ?? []] : [];
@@ -654,7 +677,10 @@ export default definePlugin({
             void restoreHistory(channelId);
         },
         MESSAGE_UPDATE({ message }: { message: any; }) {
-            if (!message?.id || !message.channel_id || !isPrivate(message.channel_id, message.guild_id)) return;
+            if (!message?.id || !message.channel_id) return;
+            // Copie en mémoire à jour (serveurs compris) : un message modifié puis supprimé garde son dernier texte.
+            if (typeof message.content === "string" && recentSnapshot(message.id)) rememberSnapshot(snapshotOf({ ...recentSnapshot(message.id), ...message }));
+            if (!isPrivate(message.channel_id, message.guild_id)) return;
             // Après la capture principale (store) : seul ce qui lui a échappé est traité ici.
             setTimeout(async () => {
                 if (typeof message.content === "string" && message.edited_timestamp) await rescueEdit(message);
