@@ -108,6 +108,7 @@ function VencordChatBarButtons(props: ChatBarProps) {
                         <Button {...props} isMainChat={analyticsName === "normal"} isAnyChat={["normal", "sidebar"].includes(analyticsName)} />
                     </ErrorBoundary>
                 ))}
+            <div className="vc-chatbar-sep" aria-hidden="true" />
         </>
     );
 }

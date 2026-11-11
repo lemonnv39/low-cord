@@ -215,7 +215,7 @@ function ExportIcon({ width = 24, height = 24, className }: { width?: number | s
 
 function addItem(children: any[], channel: Channel | undefined, name: string) {
     if (!channel?.id) return;
-    addLowCordMenuItem(children, "actions", (
+    addLowCordMenuItem(children, "export", (
         <Menu.MenuItem
             id="lc-em-export"
             key="lc-em-export"

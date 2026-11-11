@@ -2,3 +2,20 @@
     display: flex;
     align-items: center;
 }
+
+/* Trait entre nos boutons et ceux de Discord (cadeau, GIF, emoji…), affiché
+   seulement si au moins un de nos boutons est rendu juste avant. */
+.vc-chatbar-sep {
+    display: none;
+    flex: none;
+    align-self: center;
+    width: 1px;
+    height: 20px;
+    margin: 0 6px;
+    border-radius: 1px;
+    background: var(--border-subtle, var(--background-modifier-accent, rgb(255 255 255 / 12%)));
+}
+
+.vc-chatbar-button ~ .vc-chatbar-sep {
+    display: block;
+}

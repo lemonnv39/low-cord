@@ -15,11 +15,12 @@ import type { ReactNode } from "react";
 /**
  * - view : consulter (journal, images, permissions, infos)
  * - actions : agir sans risque (suivre en vocal)
+ * - export : sortir des données (exporter la conversation)
  * - danger : effacer / supprimer
  */
-export type LowMenuSection = "view" | "actions" | "danger";
+export type LowMenuSection = "view" | "actions" | "export" | "danger";
 
-const SECTIONS: LowMenuSection[] = ["view", "actions", "danger"];
+const SECTIONS: LowMenuSection[] = ["view", "actions", "export", "danger"];
 const KEY = "lowcord-menu-";
 
 interface Entry {
