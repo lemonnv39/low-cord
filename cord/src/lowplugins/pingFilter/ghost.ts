@@ -7,13 +7,22 @@
 // PingFilter — détecteur de ghost pings : un message qui te mentionne (toi,
 // un de tes rôles, @everyone / @here) est retenu 15 minutes ; s'il est
 // supprimé, ou modifié pour retirer la mention, c'est un ghost ping.
+//
+// Deux façons de le voir :
+//  - l'événement de suppression / modification, quand Discord l'envoie ;
+//  - une vérification à 45 s, 4 min et 14 min : on redemande le message à
+//    Discord. Sur les gros serveurs, Discord n'envoie les suppressions que
+//    pour les salons ouverts à l'écran : sans ça, le ghost ping d'un salon
+//    que tu ne regardes pas passerait inaperçu.
 
-import { ChannelStore, FluxDispatcher, GuildMemberStore, GuildStore, UserStore } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, GuildMemberStore, GuildStore, RestAPI, UserStore } from "@webpack/common";
 
 import { addGhost, GhostLog } from "./logs";
 
 const KEEP = 15 * 60_000;
 const MAX = 800;
+/** Vérifications du message après la mention. */
+const CHECKS = [45_000, 4 * 60_000, 14 * 60_000];
 
 interface Seen {
     at: number;
@@ -26,6 +35,7 @@ interface Seen {
 }
 
 const recent = new Map<string, Seen>();
+const timers = new Map<string, ReturnType<typeof setTimeout>[]>();
 let onGhost: ((g: GhostLog) => void) | null = null;
 let enabled: () => boolean = () => false;
 
@@ -43,8 +53,38 @@ function mentionOf(msg: any, me: string, guildId?: string): GhostLog["target"] |
 
 function prune() {
     const now = Date.now();
-    for (const [id, s] of recent) if (now - s.at > KEEP) recent.delete(id);
-    while (recent.size > MAX) recent.delete(recent.keys().next().value!);
+    for (const [id, s] of recent) if (now - s.at > KEEP) forget(id);
+    while (recent.size > MAX) forget(recent.keys().next().value!);
+}
+
+function forget(id: string) {
+    recent.delete(id);
+    for (const tm of timers.get(id) ?? []) clearTimeout(tm);
+    timers.delete(id);
+}
+
+/** Redemande le message à Discord : disparu → supprimé ; sans la mention → modifié. */
+async function check(id: string) {
+    const seen = recent.get(id);
+    if (!seen || !enabled()) return;
+    let found: any;
+    try {
+        const res: any = await RestAPI.get({ url: `/channels/${seen.channelId}/messages`, query: { around: id, limit: 1 } });
+        found = (Array.isArray(res?.body) ? res.body : []).find((m: any) => m?.id === id);
+    } catch {
+        return; // salon plus accessible, réseau… : on ne conclut rien
+    }
+    if (!recent.has(id)) return; // déjà signalé entre-temps
+    if (!found) {
+        forget(id);
+        report(seen, "delete");
+        return;
+    }
+    const me = UserStore.getCurrentUser()?.id;
+    if (me && !mentionOf(found, me, seen.guildId)) {
+        forget(id);
+        report(seen, "edit");
+    }
 }
 
 function report(seen: Seen, kind: GhostLog["kind"]) {
@@ -80,13 +120,14 @@ function onCreate({ message, optimistic }: { message: any; optimistic?: boolean;
         guildId,
         content: String(message.content ?? ""),
     });
+    timers.set(message.id, CHECKS.map(ms => setTimeout(() => check(message.id), ms)));
     prune();
 }
 
 function onDelete({ id }: { id: string; }) {
     const seen = recent.get(id);
     if (!seen) return;
-    recent.delete(id);
+    forget(id);
     report(seen, "delete");
 }
 
@@ -100,7 +141,7 @@ function onUpdate({ message }: { message: any; }) {
     if (!seen || message.content == null) return;
     const me = UserStore.getCurrentUser()?.id;
     if (!me || mentionOf(message, me, seen.guildId)) return;
-    recent.delete(message.id);
+    forget(message.id);
     report(seen, "edit");
 }
 
@@ -119,6 +160,6 @@ export function stopGhostWatch() {
     FluxDispatcher.unsubscribe("MESSAGE_DELETE", onDelete);
     FluxDispatcher.unsubscribe("MESSAGE_DELETE_BULK", onDeleteBulk);
     FluxDispatcher.unsubscribe("MESSAGE_UPDATE", onUpdate);
-    recent.clear();
+    for (const id of [...recent.keys()]) forget(id);
     onGhost = null;
 }
