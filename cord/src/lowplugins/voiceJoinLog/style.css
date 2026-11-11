@@ -1,0 +1,129 @@
+.lc-vjl-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 50vh;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 18%)) transparent;
+    scrollbar-width: thin;
+}
+
+.lc-vjl-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 7px;
+    font-size: 13px;
+}
+
+.lc-vjl-row:hover {
+    background: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+}
+
+.lc-vjl-time {
+    flex: none;
+    color: var(--text-muted);
+    font-family: var(--font-code, monospace);
+    font-size: 11.5px;
+}
+
+.lc-vjl-avatar {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+}
+
+.lc-vjl-who {
+    display: flex;
+    flex: 1;
+    gap: 5px;
+    align-items: baseline;
+    min-width: 60px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.lc-vjl-name {
+    overflow: hidden;
+    color: var(--header-primary, var(--text-strong));
+    font-weight: 600;
+    text-overflow: ellipsis;
+}
+
+.lc-vjl-muted {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+}
+
+.lc-vjl-id {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 92px;
+    padding: 1px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 0;
+    border-radius: 5px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+    color: var(--text-muted);
+    font-family: var(--font-code, monospace);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.lc-vjl-id:hover {
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-vjl-action {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.lc-vjl-in {
+    background: rgb(35 165 90 / 15%);
+    color: var(--status-positive, #23a55a);
+}
+
+.lc-vjl-out {
+    background: rgb(242 63 67 / 14%);
+    color: var(--text-danger, #f23f43);
+}
+
+.lc-vjl-move {
+    background: rgb(240 178 50 / 14%);
+    color: #f0b232;
+}
+
+.lc-vjl-self {
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--text-normal, var(--text-default));
+}
+
+.lc-vjl-present {
+    flex-basis: 100%;
+    padding-left: 62px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.lc-vjl-empty {
+    padding: 18px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+    text-align: center;
+}

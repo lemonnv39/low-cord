@@ -58,6 +58,9 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        VoiceJoinLog: {
+            description: "Note qui arrive et qui part dans le salon vocal où tu es (seulement pendant que tu y es). Clic droit sur un salon vocal → « Voir les logs de joins » : heure, compte, ID et action (rejoint, parti, déplacé)",
+        },
         PingFilter: {
             description: "Règle les notifications (pings, mentions) de tous tes serveurs d'un coup : aucune, seulement quand on te mentionne, mentions + @everyone… Barre de progression, récapitulatif, annulation, et journal des ghost pings. Tout se règle ici, dans ses paramètres",
         },
