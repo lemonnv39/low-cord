@@ -29,6 +29,7 @@ const BY_PLUGIN: Record<string, Category> = {
     UserVoiceShow: "voice",
     WhosWatching: "voice",
     VoiceJoinLog: "voice",
+    RecIndicator: "voice",
     // Messages
     ExportMessages: "messages",
     MessageCleaner: "messages",

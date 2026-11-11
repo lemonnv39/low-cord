@@ -1,0 +1,16 @@
+.lc-rec-badge {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    height: 14px;
+    margin-left: 4px;
+    padding: 0 4px;
+    border: 1px solid var(--status-danger, #f23f43);
+    border-radius: 4px;
+    color: var(--status-danger, #f23f43);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: default;
+}

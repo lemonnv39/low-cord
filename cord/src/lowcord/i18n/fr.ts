@@ -667,6 +667,7 @@ export const fr = {
     "it.pinterestReady": "Image prête (dossier ouvert) : sur Pinterest, clique sur l'appareil photo et glisse-la dedans.",
     "it.pinterestReadyCopied": "Image copiée et enregistrée (dossier ouvert) : sur Pinterest, clique sur l'appareil photo puis colle-la (Ctrl+V) ou glisse-la.",
     "it.pinterestFailed": "Impossible de préparer l'image pour Pinterest.",
+    "rec.tooltip": "Clips Discord activés : peut enregistrer le vocal",
     "vjl.menu": "Voir les logs de joins",
     "vjl.menuCount": "Voir les logs de joins ({n})",
     "vjl.title": "Logs de joins · {channel}",

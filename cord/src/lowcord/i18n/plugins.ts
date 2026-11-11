@@ -58,6 +58,9 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
         ConcatenatedComponentExtractor: {
             description: "Extrait les composants regroupés par le bundler de Discord (usage interne)",
         },
+        RecIndicator: {
+            description: "Affiche un badge REC à côté des membres du vocal qui ont activé les clips Discord (ils peuvent enregistrer ta voix). Visible seulement dans le salon où tu es",
+        },
         VoiceJoinLog: {
             description: "Note qui arrive et qui part dans le salon vocal où tu es (seulement pendant que tu y es). Clic droit sur un salon vocal → « Voir les logs de joins » : heure, compte, ID et action (rejoint, parti, déplacé)",
         },

@@ -663,6 +663,7 @@ export const en = {
     "it.pinterestReady": "Image ready (folder opened): on Pinterest, click the camera and drop it in.",
     "it.pinterestReadyCopied": "Image copied and saved (folder opened): on Pinterest, click the camera, then paste it (Ctrl+V) or drop it in.",
     "it.pinterestFailed": "Could not prepare the image for Pinterest.",
+    "rec.tooltip": "Discord Clips enabled: can record the voice channel",
     "vjl.menu": "View join logs",
     "vjl.menuCount": "View join logs ({n})",
     "vjl.title": "Join logs · {channel}",
