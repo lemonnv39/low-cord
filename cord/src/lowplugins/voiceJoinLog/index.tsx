@@ -23,6 +23,16 @@ import { openLogWindow } from "./Window";
 // Salon vocal (2) ou de conférence (13).
 const VOICE_TYPES = new Set([2, 13]);
 
+// Haut-parleur + lignes de journal.
+function VoiceLogIcon({ height = 24, width = 24, className }: { height?: number | string; width?: number | string; className?: string; }) {
+    return (
+        <svg className={className} width={width} height={height} viewBox="0 0 24 24" fill="none">
+            <path d="M3 9.5v5h3.2L11 18.5v-13L6.2 9.5H3Z" fill="currentColor" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+            <path d="M15 8h6M15 12h6M15 16h4" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" />
+        </svg>
+    );
+}
+
 const channelMenu: NavContextMenuPatchCallback = (children, { channel }) => {
     if (!channel || !VOICE_TYPES.has(channel.type)) return;
     const n = countFor(channel.id);
@@ -30,6 +40,7 @@ const channelMenu: NavContextMenuPatchCallback = (children, { channel }) => {
         <Menu.MenuItem
             id="lc-voice-join-log"
             label={n ? t("vjl.menuCount", { n }) : t("vjl.menu")}
+            leadingAccessory={{ type: "icon", icon: VoiceLogIcon }}
             action={() => openLogWindow(channel)}
         />
     ), 30);
