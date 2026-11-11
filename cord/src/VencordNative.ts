@@ -10,7 +10,7 @@ import type { PluginIpcMappings } from "@main/ipcPlugins";
 import type { Changes, UpdateStatus } from "@main/lowcordUpdater";
 import type { SoundStatus } from "@main/lowSound";
 import type { UserThemeHeader } from "@main/themes";
-import type { UserPluginMeta } from "@main/userPlugins";
+import type { UserPluginBundle, UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { IpcRes } from "@utils/types";
 import { ipcRenderer } from "electron/renderer";
@@ -95,7 +95,7 @@ export default {
 
     /** low-cord : plugins perso (voir src/main/userPlugins.ts). */
     userPlugins: {
-        boot: (enabledFiles: string[]) => sendSync<{ safeMode: boolean; plugins: { file: string; code: string; }[]; }>(IpcEvents.USER_PLUGINS_BOOT, enabledFiles),
+        boot: (enabledFiles: string[]) => sendSync<{ safeMode: boolean; plugins: UserPluginBundle[]; }>(IpcEvents.USER_PLUGINS_BOOT, enabledFiles),
         bootOk: () => invoke<void>(IpcEvents.USER_PLUGINS_BOOT_OK),
         list: () => invoke<UserPluginMeta[]>(IpcEvents.USER_PLUGINS_LIST),
         import: (fileName: string, code: string) => invoke<UserPluginMeta>(IpcEvents.USER_PLUGINS_IMPORT, fileName, code),

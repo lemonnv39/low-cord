@@ -50,7 +50,7 @@ export function addUserPlugin(onDone: () => void) {
             onDone();
         } catch (e) {
             const code = String((e as Error)?.message ?? e);
-            const reason = ["missing-name", "bad-name", "too-big", "bad-file"].find(c => code.includes(c));
+            const reason = ["missing-name", "bad-name", "too-big", "bad-file", "no-index", "empty-zip"].find(c => code.includes(c));
             logger.error("Import du plugin perso impossible", e);
             showToast({ text: t(reason ? `userPlugins.err.${reason}` as I18nKey : "userPlugins.err.generic"), variant: "critical" });
         }
@@ -130,7 +130,7 @@ function Row({ meta, onRestartNeeded, onDeleted }: { meta: UserPluginMeta; onRes
                 </div>
                 {meta.description && <div className={cl("desc")}>{meta.description}</div>}
                 <div className={cl("file")}>
-                    {meta.file}
+                    {meta.folder ? `${meta.file}/` : meta.file}
                     {status && <span className={cl("status", (meta.error || failed) && "status-err")}>{status}</span>}
                 </div>
             </div>
