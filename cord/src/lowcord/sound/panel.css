@@ -2048,6 +2048,17 @@
     text-transform: none;
 }
 
+.lc-ls-apo-peak {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    text-transform: none;
+}
+
+.lc-ls-apo-peak-hot {
+    color: var(--ls-warn);
+}
+
 .lc-ls-apo-line {
     display: flex;
     flex: none;

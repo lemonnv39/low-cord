@@ -12,7 +12,7 @@
 import { copyToClipboard } from "@utils/clipboard";
 import { useEffect, useMemo, useRef, useState } from "@webpack/common";
 
-import { APO_EXAMPLE, APO_FREQS as FREQS, apoResponse, type ApoStage, parseApo, removeLine, toggleFilterLine } from "./apo";
+import { APO_EXAMPLE, APO_FREQS as FREQS, apoPeak, apoResponse, type ApoStage, fitPreamp, parseApo, removeLine, toggleFilterLine } from "./apo";
 import { cl, Dropdown, Toggle } from "./controls";
 import {
     deleteApoSet, deleteIr, getApoError, getApoVst, getIrResponse, getPrefs, getVstFiles, importIrs, loadApoSet, openVstEditor, openVstFolder,
@@ -144,6 +144,9 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
         setTimeout(() => setNote(n => (n === msg ? null : n)), 2500);
     };
     const warnings = parsed.lines.filter(l => l.warning).length;
+    // Point le plus fort du set : au-dessus de 0 dB, il pousse le son dans le limiteur.
+    const peak = useMemo(() => (parsed.stages.length ? apoPeak(parsed.stages, getIrResponse) : 0), [parsed]);
+    const peakOff = parsed.stages.length > 0 && Math.abs(peak + 0.1) > 0.25;
     const append = (line: string) => setApoText(`${p.apoText.replace(/\s*$/, "")}\n${line}\n`, p.apoName);
 
     return (
@@ -282,6 +285,22 @@ export function ApoDrawer({ act, onClose }: { act: Act; onClose(): void; }) {
                 <div className={cl("group-title")}>
                     Lignes lues <span className={cl("count")}>{parsed.lines.length}</span>
                     {warnings > 0 && <span className={cl("apo-warn-count")}>{warnings} ignorée{warnings > 1 ? "s" : ""}</span>}
+                    {parsed.stages.length > 0 && (
+                        <span
+                            className={cl("apo-peak", peak > 0.05 && "apo-peak-hot")}
+                            title={peak > 0.05
+                                ? "Le set monte certaines fréquences au-dessus de 0 dB : le son peut dépasser et le limiteur doit le rattraper."
+                                : "Point le plus fort du set. Sous 0 dB : aucun risque de dépassement."}
+                        >pic {peak > 0 ? "+" : ""}{peak.toFixed(1)} dB</span>
+                    )}
+                    {peakOff && (
+                        <button
+                            type="button"
+                            className={cl("link")}
+                            onClick={() => setApoText(fitPreamp(p.apoText, peak), p.apoName)}
+                            title="Règle le préampli pour que le point le plus fort du set arrive juste sous 0 dB : le plus fort possible sans dépasser."
+                        >Préampli auto</button>
+                    )}
                 </div>
                 {parsed.lines.map(line => (
                     <div key={line.line} className={cl("apo-line", line.off && "apo-line-off", line.warning && "apo-line-warn")} title={line.warning}>

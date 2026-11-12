@@ -460,6 +460,41 @@ export function apoResponse(stages: ApoStage[], freqs: number[], irResponse?: (f
     return out;
 }
 
+/**
+ * Plus fort gain du set (dB), toutes fréquences et les deux canaux confondus.
+ * Au-dessus de 0 dB, le set peut faire dépasser le son : le limiteur doit
+ * alors travailler pour rien.
+ */
+export function apoPeak(stages: ApoStage[], irResponse?: (file: string) => [number[], number[]] | undefined) {
+    const [l, r] = apoResponse(stages, APO_FREQS, irResponse);
+    return Math.max(...l, ...r);
+}
+
+/**
+ * Règle le préampli pour que le point le plus fort du set arrive juste sous
+ * 0 dB : corrige la première ligne « Preamp » commune aux deux canaux, ou en
+ * ajoute une en tête. `peakDb` : résultat de apoPeak pour ce texte.
+ */
+export function fitPreamp(text: string, peakDb: number) {
+    const rows = text.split(/\r?\n/);
+    // 0,1 dB de marge : la courbe est calculée sur une grille de fréquences.
+    const shift = -(peakDb + 0.1);
+    const fmt = (db: number) => `Preamp: ${(Math.round(db * 10) / 10).toFixed(1)} dB`;
+    for (const [i, row] of rows.entries()) {
+        // Après « Channel: », un préampli ne vaut que pour les canaux choisis.
+        if (/^\s*Channel\s*:/i.test(row)) break;
+        const m = /^\s*Preamp\s*:\s*([-+]?(?:\d+[.,]?\d*|[.,]\d+))\s*dB/i.exec(row);
+        if (!m) continue;
+        rows[i] = fmt(Number(m[1].replace(",", ".")) + shift);
+        return rows.join("\n");
+    }
+    // Pas de préampli : ajouté après les commentaires d'en-tête.
+    let at = 0;
+    while (at < rows.length && (!rows[at].trim() || rows[at].trim().startsWith("#"))) at++;
+    rows.splice(at, 0, fmt(shift));
+    return rows.join("\n");
+}
+
 /** Bascule ON ↔ OFF un filtre (numéro de ligne, 1 = première). */
 export function toggleFilterLine(text: string, line: number) {
     const rows = text.split(/\r?\n/);

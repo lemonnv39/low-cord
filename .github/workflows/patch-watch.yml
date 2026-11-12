@@ -1,0 +1,61 @@
+name: cord — veille des patches
+
+# Discord publie un nouveau build plusieurs fois par semaine. Un patch de
+# low-cord qui ne trouve plus son repère cesse de marcher sans prévenir (le
+# plugin reste « activé » mais ne fait plus rien), ou pire, casse un écran.
+#
+# Trois fois par jour, ce workflow télécharge le build web actuel de Discord
+# (texte seulement, rien n'est exécuté) et rejoue TOUS les patches dessus. S'il
+# échoue, GitHub envoie un e-mail au propriétaire du repo : on sait quel patch
+# réparer avant que quelqu'un ne tombe dessus.
+#
+# Il ne publie rien et n'a besoin d'aucun secret.
+
+on:
+  schedule:
+    - cron: "17 5,13,21 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "cord/src/lowplugins/**"
+      - "cord/src/plugins/_core/**"
+      - "cord/scripts/lowcord/**"
+      - ".github/workflows/patch-watch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: patch-watch
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cord
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: cord/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: cord/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Télécharger le build de Discord
+        run: node scripts/lowcord/fetch-discord-build.mjs "$RUNNER_TEMP/discord-build" stable
+
+      - name: Rejouer tous les patches
+        env:
+          LC_STRICT: "1"
+        run: LC_CODE_DIR="$RUNNER_TEMP/discord-build" node scripts/lowcord/verify-patches.mjs

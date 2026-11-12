@@ -10,6 +10,13 @@
  * Usage (depuis cord/) :
  *   node scripts/lowcord/verify-patches.mjs [Discord|DiscordCanary|DiscordPTB] [NomDuPlugin…]
  *
+ * Vérification complète (tous les modules, même ceux chargés à la demande) :
+ *   node scripts/lowcord/fetch-discord-build.mjs <dossier>
+ *   LC_CODE_DIR=<dossier> node scripts/lowcord/verify-patches.mjs
+ * Avec LC_CODE_DIR, le cache local n'est pas nécessaire. LC_STRICT=1 : le
+ * script échoue (code 1) si un patch est cassé ou introuvable — c'est ce que
+ * lance la veille automatique (.github/workflows/patch-watch.yml).
+ *
  * Outil de développement uniquement : n'est pas embarqué dans la dist.
  */
 
@@ -27,7 +34,9 @@ const acorn = require(require.resolve("acorn", { paths: [resolve("node_modules/.
 
 const [, , branchArg = "Discord", ...onlyPlugins] = process.argv;
 const cacheDir = join(process.env.APPDATA ?? "", branchArg.toLowerCase(), "Cache", "Cache_Data");
-if (!existsSync(cacheDir)) {
+// Build complet téléchargé à part (fetch-discord-build.mjs) : le cache local devient facultatif.
+const hasCache = existsSync(cacheDir);
+if (!hasCache && !process.env.LC_CODE_DIR) {
     console.error(`Cache introuvable : ${cacheDir}`);
     process.exit(1);
 }
@@ -130,7 +139,7 @@ const modules = new Map();
 // chargés à la demande, absents du cache), séparés par « ; ».
 const extraDirs = (process.env.LC_CODE_DIR ?? "").split(";").filter(Boolean);
 const sources = [
-    ...readdirSync(cacheDir).filter(f => f.startsWith("f_")).map(f => ({ path: join(cacheDir, f), cache: true })),
+    ...(hasCache ? readdirSync(cacheDir).filter(f => f.startsWith("f_")).map(f => ({ path: join(cacheDir, f), cache: true })) : []),
     ...extraDirs.flatMap(d => readdirSync(d).filter(f => f.endsWith(".js")).map(f => ({ path: join(d, f), cache: false }))),
 ];
 for (const { path, cache } of sources) {
@@ -250,4 +259,6 @@ for (const plugin of plugins) {
 }
 
 console.log(`Résultat : ${ok} OK · ${broken} cassé(s) · ${unknown} invérifiable(s)`);
+// Mode strict (veille automatique) : avec un build complet, « invérifiable » veut dire que le repère n'existe plus.
+if (process.env.LC_STRICT && (broken || unknown)) process.exitCode = 1;
 writeFileSync(join(work, "done"), "");
