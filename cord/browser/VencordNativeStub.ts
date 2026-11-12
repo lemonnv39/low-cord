@@ -154,6 +154,8 @@ window.VencordNative = {
         check: async () => ({ enabled: false, ready: false }),
         restart: async () => ({ ok: false }),
         changes: async () => ({ commits: [] }),
+        bootOk: async () => { },
+        retrySkipped: async () => ({ enabled: false, ready: false }),
     },
     lowSound: {
         status: async () => ({ installed: false, updateAvailable: false, busy: false, error: "Disponible seulement dans Discord sur PC" }),

@@ -975,7 +975,9 @@ export default definePlugin({
                     // Action low-cord : remet dans la conversation rechargée les
                     // messages supprimés et l'historique des modifications
                     match: /LOAD_MESSAGES_SUCCESS:function\((\i)\)\{(?=let\{channelId:\i.{0,300}?(\i\.\i)\.getOrCreate)/,
-                    replace: "LOWCORD_ML_INJECT:function($1){let c=$2.get($1.channelId),n=$self.injectHistory(c,$1);if(n===c)return!1;$2.commit(n)},$&"
+                    // Noms longs : une variable d'une lettre peut porter le même nom que le
+                    // module capturé en $2 (« let c=c.A.get(…) » plante avant d'exister).
+                    replace: "LOWCORD_ML_INJECT:function($1){let lcMlCache=$2.get($1.channelId),lcMlNext=$self.injectHistory(lcMlCache,$1);if(lcMlNext===lcMlCache)return!1;$2.commit(lcMlNext)},$&"
                 },
                 {
                     // MESSAGE_UPDATE : ancien texte ajouté à l'historique des modifications.
@@ -984,11 +986,11 @@ export default definePlugin({
                     match: /(MESSAGE_UPDATE:function\((\i)\).{0,200}?)\.update\((\i)/,
                     replace: `
                         $1
-                        .update($3, m =>
-                            (($2.message.flags & 64) === 64 || $self.shouldIgnore($2.message, true)) ? m :
-                            $2.message.edited_timestamp && typeof $2.message.content === "string" && $2.message.content !== m.content ?
-                                m.set('editHistory',[...(m.editHistory || []), $self.makeEdit($2.message, m)]) :
-                                m
+                        .update($3, lcMlMsg =>
+                            (($2.message.flags & 64) === 64 || $self.shouldIgnore($2.message, true)) ? lcMlMsg :
+                            $2.message.edited_timestamp && typeof $2.message.content === "string" && $2.message.content !== lcMlMsg.content ?
+                                lcMlMsg.set('editHistory',[...(lcMlMsg.editHistory || []), $self.makeEdit($2.message, lcMlMsg)]) :
+                                lcMlMsg
                         )
                         .update($3
                     `

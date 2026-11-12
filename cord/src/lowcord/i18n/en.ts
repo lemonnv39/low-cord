@@ -819,4 +819,7 @@ export const en = {
     "mc.backupShow": "Folder",
     "mc.backupFailed": "backup failed: nothing was deleted",
     "mc.confirmBackup": "Each DM or group is first saved in full (.html) in its MessageLogger log folder.",
+    "upd.rolledBack": "The last update kept Discord from starting: low-cord restored the previous version.",
+    "upd.skipped": "Version {version} set aside: Discord would not start with it. The next one will install normally.",
+    "upd.retrySkipped": "Try this version again",
 } satisfies Record<keyof typeof fr, string>;

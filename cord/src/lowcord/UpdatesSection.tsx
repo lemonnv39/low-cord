@@ -91,6 +91,12 @@ export function UpdatesSection() {
                     </div>
                 </div>
                 {state === "error" && status?.error && <div className={cl("error")}>{status.error}</div>}
+                {status?.skipped && (
+                    <div className={cl("error")}>
+                        {t("upd.skipped", { version: status.skipped.slice(0, 7) })}{" "}
+                        <button className={cl("link")} onClick={() => VencordNative.lowcordUpdate.retrySkipped().then(() => checkForUpdates(true))}>{t("upd.retrySkipped")}</button>
+                    </div>
+                )}
                 <div className={cl("foot")}>
                     <span>{t("upd.autoHint")}</span>
                     {status?.current && (

@@ -113,6 +113,10 @@ export default {
         restart: () => invoke<{ ok: boolean; error?: string; }>(IpcEvents.LOWCORD_UPDATE_RESTART),
         /** Changements de `since` à `to` (par défaut : la version installée). */
         changes: (since?: string, to?: string) => invoke<Changes>(IpcEvents.LOWCORD_UPDATE_CHANGES, since, to),
+        /** Discord a bien démarré : la mise à jour est validée (sinon retour arrière au 3e échec). */
+        bootOk: () => invoke<void>(IpcEvents.LOWCORD_UPDATE_BOOT_OK),
+        /** Autorise à nouveau la version mise de côté après un retour arrière. */
+        retrySkipped: () => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_RETRY_SKIPPED),
     },
 
     /** low-sound : installation du moteur (voir src/main/lowSound.ts). */

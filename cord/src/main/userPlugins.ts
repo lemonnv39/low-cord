@@ -157,8 +157,16 @@ function metaOf(name: string): UserPluginMeta {
 function extractZip(zipName: string): string {
     const zipPath = join(USER_PLUGINS_DIR, zipName);
     if (statSync(zipPath).size > MAX_SIZE * 4) throw new Error("too-big");
+    // Taille une fois décompressé contrôlée AVANT de décompresser : une archive
+    // de quelques Ko peut en annoncer des Go (« zip bomb »).
+    let announced = 0, count = 0;
     const raw = unzipSync(readFileSync(zipPath), {
-        filter: f => !f.name.endsWith("/") && !f.name.startsWith("__MACOSX/") && KEEP_EXT.has(extname(f.name).toLowerCase()),
+        filter: f => {
+            if (f.name.endsWith("/") || f.name.startsWith("__MACOSX/") || !KEEP_EXT.has(extname(f.name).toLowerCase())) return false;
+            announced += f.originalSize;
+            if (announced > MAX_SIZE || ++count > MAX_FILES) throw new Error("too-big");
+            return true;
+        },
     });
 
     // Chemins propres uniquement (pas de « .. », pas de chemin absolu).

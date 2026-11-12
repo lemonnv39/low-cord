@@ -823,4 +823,7 @@ export const fr = {
     "mc.backupShow": "Dossier",
     "mc.backupFailed": "sauvegarde impossible : rien n'a été supprimé",
     "mc.confirmBackup": "Chaque MP ou groupe est d'abord sauvegardé en entier (.html) dans son dossier du journal MessageLogger.",
+    "upd.rolledBack": "La dernière mise à jour empêchait Discord de démarrer : low-cord a remis la version précédente.",
+    "upd.skipped": "Version {version} mise de côté : Discord ne démarrait plus avec elle. La suivante s'installera normalement.",
+    "upd.retrySkipped": "Réessayer cette version",
 } as const;

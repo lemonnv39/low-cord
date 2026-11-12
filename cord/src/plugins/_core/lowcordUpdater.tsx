@@ -77,6 +77,10 @@ async function check() {
         stop();
         return;
     }
+    if (status.skipped && announced !== status.skipped) {
+        announced = status.skipped;
+        showToast({ text: t("upd.rolledBack"), variant: "critical", duration: 8000 });
+    }
     if (!status.ready) {
         hideTempHeaderButton("LowCordUpdater");
         return;
@@ -135,6 +139,9 @@ export default definePlugin({
         window.addEventListener("focus", onFocus);
         // Laisse l'interface de Discord s'afficher avant la fenêtre.
         whatsNewTimer = setTimeout(showWhatsNew, 3000);
+        // Discord tourne : la dernière mise à jour est validée (voir le retour
+        // arrière automatique dans src/main/lowcordUpdater.ts).
+        setTimeout(() => VencordNative.lowcordUpdate.bootOk().catch(() => null), 10_000);
     },
 
     stop() {

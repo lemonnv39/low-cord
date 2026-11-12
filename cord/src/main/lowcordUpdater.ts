@@ -19,12 +19,21 @@
 //     (une fenêtre rechargée mélangerait les deux versions). Le remplacement
 //     est tout ou rien : en cas d'échec, l'ancienne version est remise.
 //
+// Deux protections :
+//  - intégrité : chaque fichier téléchargé doit avoir exactement l'empreinte
+//    que Git a enregistrée pour ce commit (un fichier tronqué, abîmé ou
+//    différent de celui publié est refusé) ;
+//  - retour arrière : l'ancienne version est gardée. Si Discord n'arrive pas
+//    à démarrer 3 fois de suite après une mise à jour, elle est remise toute
+//    seule et la version fautive est mise de côté jusqu'à la suivante.
+//
 // Actif seulement sur une installation faite par l'injecteur (présence de
 // .build-sha à côté de patcher.js) : une build de développement n'est pas
 // touchée.
 
 import { LOWCORD_REPO } from "@lowcord/constants";
 import { IpcEvents } from "@shared/IpcEvents";
+import { createHash } from "crypto";
 import { app, ipcMain, net } from "electron";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -38,12 +47,21 @@ export interface UpdateStatus {
     error?: string;
     /** date (ms) de la dernière vérification réussie */
     checkedAt?: number;
+    /** version mise de côté : Discord ne démarrait plus avec elle, l'ancienne a été remise */
+    skipped?: string;
 }
 
 const DIST = __dirname;
 const SHA_FILE = join(DIST, ".build-sha");
 const PENDING = join(DIST, ".pending");
 const BACKUP = join(DIST, ".backup");
+/** version d'avant la dernière mise à jour (pour le retour arrière) */
+const PREVIOUS = join(DIST, ".previous");
+/** posé à chaque mise à jour, retiré quand Discord a bien démarré */
+const BOOT_CHECK = join(DIST, ".update-check");
+/** version qui empêchait Discord de démarrer : pas réinstallée */
+const SKIP_FILE = join(DIST, ".skip-sha");
+const MAX_FAILED_BOOTS = 3;
 const FILES = ["patcher.js", "preload.js", "renderer.js", "renderer.css"];
 const SHA = /^[0-9a-f]{40}$/;
 const HEADERS = { "User-Agent": "low-cord", "Accept": "application/vnd.github+json" };
@@ -82,6 +100,7 @@ async function stage(sha: string) {
             if (data.length < 100) throw new Error(`${file} : fichier vide`);
             writeFileSync(join(tmp, file), data);
         }));
+        await verifyIntegrity(sha, tmp);
         // Même contrôle que la CI : c'est bien une build low-cord.
         if (!readFileSync(join(tmp, "renderer.js"), "utf8").includes("\"low-cord\"")) throw new Error("build invalide");
         writeFileSync(join(tmp, ".sha"), sha);
@@ -90,6 +109,19 @@ async function stage(sha: string) {
     } catch (e) {
         rmSync(tmp, { recursive: true, force: true });
         throw e;
+    }
+}
+
+/** Empreinte Git d'un fichier (sha1 de « blob <taille>\0 » + contenu). */
+const gitBlobSha = (data: Buffer) => createHash("sha1").update(`blob ${data.length}\0`).update(data).digest("hex");
+
+/** Les fichiers téléchargés sont exactement ceux du commit publié. */
+async function verifyIntegrity(sha: string, dir: string) {
+    const tree: { path: string; sha: string; }[] = (await github(`/git/trees/${sha}`))?.tree ?? [];
+    for (const file of FILES) {
+        const expected = tree.find(e => e.path === file)?.sha;
+        if (!expected) throw new Error(`${file} : absent de la version publiée`);
+        if (gitBlobSha(readFileSync(join(dir, file))) !== expected) throw new Error(`${file} : fichier différent de la version publiée (refusé)`);
     }
 }
 
@@ -107,6 +139,13 @@ export function checkForUpdate(): Promise<UpdateStatus> {
                 rmSync(PENDING, { recursive: true, force: true });
                 return { enabled: true, current, latest, ready: false, checkedAt: Date.now() };
             }
+            // Version qui empêchait Discord de démarrer : on attend la suivante.
+            const skipped = readText(SKIP_FILE);
+            if (skipped === latest) {
+                rmSync(PENDING, { recursive: true, force: true });
+                return { enabled: true, current, latest, ready: false, checkedAt: Date.now(), skipped };
+            }
+            if (skipped) rmSync(SKIP_FILE, { force: true });
             if (readText(join(PENDING, ".sha")) !== latest) await stage(latest);
             return { enabled: true, current, latest, ready: true, checkedAt: Date.now() };
         } catch (e: any) {
@@ -141,12 +180,65 @@ function applyPending() {
         if (backupSha) writeFileSync(SHA_FILE, backupSha);
         rmSync(PENDING, { recursive: true, force: true });
         throw e;
-    } finally {
+    }
+    // L'ancienne version reste de côté tant que la nouvelle n'a pas fait ses preuves.
+    try {
+        rmSync(PREVIOUS, { recursive: true, force: true });
+        renameSync(BACKUP, PREVIOUS);
+        if (backupSha) {
+            writeFileSync(join(PREVIOUS, ".sha"), backupSha);
+            writeFileSync(BOOT_CHECK, JSON.stringify({ from: backupSha, to: sha, boots: 0 }));
+        }
+    } catch (e) {
+        console.error("[low-cord] ancienne version non gardée :", e);
         rmSync(BACKUP, { recursive: true, force: true });
     }
     rmSync(PENDING, { recursive: true, force: true });
     return true;
 }
+
+// ── Retour arrière automatique ───────────────────────────────────────────────
+// Après une mise à jour, chaque lancement compte tant que la fenêtre de
+// Discord n'a pas confirmé qu'elle a bien démarré (LOWCORD_UPDATE_BOOT_OK).
+// Au 3e lancement sans confirmation, l'ancienne version est remise.
+function bootGuard() {
+    if (!existsSync(BOOT_CHECK)) return;
+    try {
+        const check = JSON.parse(readFileSync(BOOT_CHECK, "utf8"));
+        const boots = (Number(check?.boots) || 0) + 1;
+        if (boots < MAX_FAILED_BOOTS) {
+            writeFileSync(BOOT_CHECK, JSON.stringify({ ...check, boots }));
+            return;
+        }
+        const previous = readText(join(PREVIOUS, ".sha"));
+        rmSync(BOOT_CHECK, { force: true });
+        if (!previous || !SHA.test(previous) || !FILES.every(f => existsSync(join(PREVIOUS, f)))) return;
+        console.error(`[low-cord] Discord n'a pas démarré ${boots - 1} fois avec la version ${String(check?.to).slice(0, 7)} : retour à ${previous.slice(0, 7)}`);
+        for (const file of FILES) copyFileSync(join(PREVIOUS, file), join(DIST, file));
+        writeFileSync(SHA_FILE, previous);
+        if (typeof check?.to === "string" && SHA.test(check.to)) writeFileSync(SKIP_FILE, check.to);
+        rmSync(PENDING, { recursive: true, force: true });
+        // Ce lancement tourne encore avec la version fautive : on repart sur l'ancienne.
+        app.whenReady().then(() => {
+            app.relaunch();
+            app.exit(0);
+        });
+    } catch (e) {
+        console.error("[low-cord] vérification du démarrage impossible :", e);
+        rmSync(BOOT_CHECK, { force: true });
+    }
+}
+if (enabled()) bootGuard();
+
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_BOOT_OK, () => {
+    rmSync(BOOT_CHECK, { force: true });
+});
+
+/** « Réessayer » dans les réglages : la version mise de côté peut être réinstallée. */
+ipcMain.handle(IpcEvents.LOWCORD_UPDATE_RETRY_SKIPPED, () => {
+    rmSync(SKIP_FILE, { force: true });
+    return checkForUpdate();
+});
 
 // ── Quoi de neuf ─────────────────────────────────────────────────────────────
 // Chaque version publiée (branche builds) s'appelle « dist: low-cord@<sha> »,
