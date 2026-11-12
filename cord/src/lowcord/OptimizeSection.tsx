@@ -10,10 +10,10 @@
 
 import { Forms } from "@lowcord/compat";
 import { classNameFactory } from "@utils/css";
-import { useEffect, useState } from "@webpack/common";
+import { showToast, useEffect, useState } from "@webpack/common";
 
 import { I18nKey, t } from "./i18n";
-import { MODE_KEYS, OptimizeKey, setMode, setOptimize, useOptimize } from "./optimize";
+import { MODE_KEYS, OptimizeKey, RESTART_KEYS, setMode, setOptimize, trimMemory, trimMessageCache, useOptimize } from "./optimize";
 
 const cl = classNameFactory("lc-opt-");
 
@@ -32,8 +32,12 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): vo
 }
 
 const ITEMS: { key: OptimizeKey; gain: I18nKey; }[] = [
+    { key: "background", gain: "opt.gain.cpuGpu" },
     { key: "animations", gain: "opt.gain.gpu" },
     { key: "gameMode", gain: "opt.gain.game" },
+    { key: "cacheTrim", gain: "opt.gain.ram" },
+    { key: "lightProcess", gain: "opt.gain.ram" },
+    { key: "quietLogs", gain: "opt.gain.disk" },
     { key: "reducedMotion", gain: "opt.gain.cpu" },
 ];
 
@@ -56,10 +60,24 @@ function LiveUsage() {
 
     const mb = Math.round(usage.memoryKB / 1024);
     const cpu = usage.cpuPercent < 10 ? usage.cpuPercent.toFixed(1) : Math.round(usage.cpuPercent);
+
+    // Libération à la demande : même ménage que celui fait en arrière-plan.
+    function trimNow() {
+        const before = usage!.memoryKB;
+        trimMessageCache();
+        trimMemory();
+        setTimeout(() => VencordNative.native.getAppMetrics().then(u => {
+            setUsage(u);
+            const freed = Math.round((before - u.memoryKB) / 1024);
+            showToast({ text: freed > 0 ? t("opt.trimDone", { mb: freed }) : t("opt.trimNothing"), variant: "success" });
+        }).catch(() => null), 1500);
+    }
+
     return (
         <div className={cl("usage")}>
             <span className={cl("dot")} />
             {t("opt.usage", { mb, cpu })}
+            <button className={cl("trim")} onClick={trimNow}>{t("opt.trimNow")}</button>
         </div>
     );
 }
@@ -89,6 +107,7 @@ export function OptimizeSection() {
                                 {t(`opt.${key}` as I18nKey)}
                                 <span className={cl("gain")}>{t(gain)}</span>
                                 {!MODE_KEYS.includes(key) && <span className={cl("extra")}>{t("opt.extra")}</span>}
+                                {RESTART_KEYS.includes(key) && <span className={cl("extra")}>{t("opt.restart")}</span>}
                             </div>
                             <div className={cl("desc")}>{t(`opt.${key}.desc` as I18nKey)}</div>
                         </div>

@@ -13,7 +13,7 @@ import type { UserThemeHeader } from "@main/themes";
 import type { UserPluginBundle, UserPluginMeta } from "@main/userPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { IpcRes } from "@utils/types";
-import { ipcRenderer } from "electron/renderer";
+import { ipcRenderer, webFrame } from "electron/renderer";
 
 export function invoke<T = any>(event: IpcEvents, ...args: any[]) {
     return ipcRenderer.invoke(event, ...args) as Promise<T>;
@@ -85,6 +85,8 @@ export default {
         openExternal: (url: string) => invoke<void>(IpcEvents.OPEN_EXTERNAL, url),
         /** low-cord : mémoire (Ko) et processeur (% de la machine) utilisés par Discord. */
         getAppMetrics: () => invoke<{ memoryKB: number; cpuPercent: number; }>(IpcEvents.GET_APP_METRICS),
+        /** low-cord : libère la mémoire que Chromium garde pour rien (images décodées, polices…). */
+        clearCache: () => webFrame.clearCache(),
         getRendererCss: () => invoke<string>(IpcEvents.GET_RENDERER_CSS),
         onRendererCssUpdate: (cb: (newCss: string) => void) => {
             if (!IS_DEV) return;

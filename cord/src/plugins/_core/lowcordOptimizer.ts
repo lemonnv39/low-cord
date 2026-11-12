@@ -8,7 +8,7 @@
 // Toujours chargé, invisible dans la liste des plugins : il ne fait rien tant
 // qu'aucune optimisation n'est activée. Voir src/lowcord/optimize.ts.
 
-import { applyAll, isOn } from "@lowcord/optimize";
+import { applyAll, isOn, touchChannel } from "@lowcord/optimize";
 import definePlugin from "@utils/types";
 
 export default definePlugin({
@@ -19,6 +19,16 @@ export default definePlugin({
     hidden: true,
 
     patches: [
+        // Journal interne de Discord : chaque ligne passe par cette fonction
+        // (nom du module, niveau, message) avant d'aller dans la console, que
+        // Discord recopie ensuite dans un fichier.
+        {
+            find: '"file-only"!==',
+            replacement: {
+                match: /(?<="file-only"!==\i&&)(?=console)/,
+                replace: "$self.shouldLog(arguments[0],arguments[1])&&"
+            }
+        },
         // Mode jeu : Discord ne l'ouvre qu'aux comptes d'un test. Si
         // l'utilisateur l'active dans low-cord, on répond « activé ».
         {
@@ -33,9 +43,15 @@ export default definePlugin({
 
     gameModeOn: () => isOn("gameMode"),
 
+    // Journal interne de Discord : seuls « warn » et « error » passent.
+    shouldLog: (_name: string, level: string) => !isOn("quietLogs") || level === "warn" || level === "error",
+
     flux: {
         // Discord peut vider ses surcouches de réglages à la connexion.
         POST_CONNECTION_OPEN: applyAll,
+        // Dernière utilisation de chaque conversation (pour « Mémoire des conversations »).
+        CHANNEL_SELECT: ({ channelId }: { channelId?: string; }) => touchChannel(channelId),
+        LOAD_MESSAGES_SUCCESS: ({ channelId }: { channelId?: string; }) => touchChannel(channelId),
     },
 
     start() {

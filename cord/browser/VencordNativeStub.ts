@@ -60,6 +60,7 @@ window.VencordNative = {
         supportsWindowsMaterial: () => false,
         openExternal: async (url) => void open(url, "_blank"),
         getAppMetrics: async () => Promise.reject("native:getAppMetrics is not supported on web"),
+        clearCache: () => { },
         getRendererCss: async () => {
             if (IS_USERSCRIPT)
                 // need to wait for next tick for _vcUserScriptRendererCss to be set
