@@ -22,6 +22,7 @@ mod audio;
 mod dsp;
 mod engine;
 mod proto;
+mod resample;
 mod sound;
 mod space;
 mod vst;

@@ -44,6 +44,8 @@ export interface SoundState {
     /** une source a été lancée depuis ce panneau depuis le démarrage du moteur */
     sourceOn?: boolean;
     captureError?: string | null;
+    /** fréquence d'échantillonnage de la source captée (Hz) */
+    captureRate?: number;
     /** raison du dernier arrêt du moteur */
     exitReason?: string;
     /** les comptes suivent ton compte (bouton « Rejoindre ma vocale ») */
@@ -99,6 +101,14 @@ export interface SoundPrefs {
     eqCustom?: number[];
     /** coupe-bas en Hz (0 = off) */
     highpass: number;
+    /** pente du coupe-bas, en dB par octave */
+    highpassSlope: 12 | 24 | 48;
+    /** coupe-haut en Hz (0 = off) */
+    lowpass: number;
+    /** Puissance (maximiseur) [0..1], 0 = off : niveau perçu visé de −17 à −6 LUFS */
+    maximize: number;
+    /** version des réglages enregistrés (2 : la latence est une réserve visée, plus un maximum) */
+    v?: number;
     /** largeur stéréo (1 = normale, 0 = mono, 2 = très large) */
     width: number;
     /** saturation [0..1] */
@@ -173,15 +183,16 @@ export const LOOPBACK = "loopback:";
 /** Nom affiché d'une source. */
 export const sourceLabel = (name: string) => name.startsWith(LOOPBACK) ? `Sortie · ${name.slice(LOOPBACK.length)}` : name;
 /** Plus ancienne version du moteur compatible avec ce panneau. */
-export const MIN_ENGINE = "0.15.0";
+export const MIN_ENGINE = "0.16.0";
 
 export const PREF_DEFAULTS: SoundPrefs = {
-    gain: 0, volume: 1, bitrate: 128, latency: 200,
+    gain: 0, volume: 1, bitrate: 128, latency: 60, v: 2,
     selection: [], delay: 500,
     spaceMode: 0, motion: 0, speed: 0.15, posX: 0, posY: 0.5, radius: 0.6, spread: 0.3,
     reverb: false, room: 0.5, mix: 0.5,
     eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eqPreset: "Flat",
-    highpass: 0, width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true, protect: true,
+    highpass: 0, highpassSlope: 12, lowpass: 0, maximize: 0,
+    width: 1, saturation: 0, compressor: false, compAmount: 0.5, limiter: true, protect: true,
     compMode: 0, gate: false, gateThreshold: -60, agc: false, agcTarget: -16, stereoMode: 0, balance: 0,
     bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, clipper: 0, multiband: false, mbAmount: 0.5,
     profile: "Naturel", autoBitrate: true,
@@ -193,13 +204,16 @@ export const PREF_DEFAULTS: SoundPrefs = {
 type ProcessingKey =
     "highpass" | "width" | "saturation" | "compressor" | "compMode" | "compAmount" | "limiter" | "protect" | "gate" | "gateThreshold"
     | "agc" | "agcTarget" | "stereoMode" | "balance" | "bassMono" | "bassPlus" | "clarity" | "deesser" | "clipper"
-    | "multiband" | "mbAmount" | "bass" | "mid" | "treble";
+    | "multiband" | "mbAmount" | "bass" | "mid" | "treble" | "highpassSlope" | "lowpass" | "maximize";
 export type ProcessingPrefs = Pick<SoundPrefs, ProcessingKey>;
 const PROCESSING_KEYS: ProcessingKey[] = [
     "highpass", "width", "saturation", "compressor", "compMode", "compAmount", "limiter", "protect", "gate", "gateThreshold",
     "agc", "agcTarget", "stereoMode", "balance", "bassMono", "bassPlus", "clarity", "deesser", "clipper",
-    "multiband", "mbAmount", "bass", "mid", "treble",
+    "multiband", "mbAmount", "bass", "mid", "treble", "highpassSlope", "lowpass", "maximize",
 ];
+
+/** Niveau perçu visé (LUFS) pour un réglage de Puissance, comme dans le moteur. */
+export const maximizeTarget = (amount: number) => -17 + 11 * Math.min(1, Math.max(0, amount));
 
 /** Préréglages rapides des molettes Graves / Médiums / Aigus. */
 export const TONE_PRESETS: Record<string, [number, number, number]> = {
@@ -220,19 +234,19 @@ export const PROFILE_CUSTOM = "Perso";
 export const PROFILES: Record<string, { desc: string; set: Partial<ProcessingPrefs>; }> = {
     "Naturel": {
         desc: "Le son tel quel, juste protégé",
-        set: { agc: false, multiband: false, compressor: true, compMode: 0, compAmount: 0.3, bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, saturation: 0, clipper: 0, limiter: true },
+        set: { agc: false, multiband: false, compressor: true, compMode: 0, compAmount: 0.3, bassMono: 0, bassPlus: 0, clarity: 0, deesser: 0, saturation: 0, clipper: 0, limiter: true, maximize: 0 },
     },
     "Radio": {
         desc: "Niveau constant, clair, voix en avant",
-        set: { agc: true, agcTarget: -16, multiband: true, mbAmount: 0.6, compressor: true, compMode: 1, compAmount: 0.5, bassMono: 120, bassPlus: 0.2, clarity: 0.3, deesser: 0.4, saturation: 0, clipper: 0.3, limiter: true },
+        set: { agc: true, agcTarget: -16, multiband: true, mbAmount: 0.6, compressor: true, compMode: 1, compAmount: 0.5, bassMono: 120, bassPlus: 0.2, clarity: 0.3, deesser: 0.4, saturation: 0, clipper: 0.3, limiter: true, maximize: 0.35 },
     },
     "Club": {
         desc: "Basses puissantes, punch",
-        set: { agc: true, agcTarget: -14, multiband: true, mbAmount: 0.5, compressor: true, compMode: 2, compAmount: 0.6, bassMono: 120, bassPlus: 0.6, clarity: 0.2, deesser: 0.3, saturation: 0.1, clipper: 0.4, limiter: true },
+        set: { agc: true, agcTarget: -14, multiband: true, mbAmount: 0.5, compressor: true, compMode: 2, compAmount: 0.6, bassMono: 120, bassPlus: 0.6, clarity: 0.2, deesser: 0.3, saturation: 0.1, clipper: 0.4, limiter: true, maximize: 0.55 },
     },
     "Ultra fort": {
         desc: "Le plus fort possible, toujours propre",
-        set: { agc: true, agcTarget: -12, multiband: true, mbAmount: 1, compressor: true, compMode: 1, compAmount: 1, bassMono: 120, bassPlus: 0.5, clarity: 0.4, deesser: 0.6, saturation: 0.15, clipper: 0.8, limiter: true },
+        set: { agc: true, agcTarget: -12, multiband: true, mbAmount: 1, compressor: true, compMode: 1, compAmount: 1, bassMono: 120, bassPlus: 0.5, clarity: 0.4, deesser: 0.6, saturation: 0.15, clipper: 0.6, limiter: true, maximize: 0.9 },
     },
 };
 
@@ -316,6 +330,8 @@ export interface Meter {
     /** réduction de gain (dB) du compresseur et du limiteur */
     comp: number;
     limit: number;
+    /** niveau perçu du son diffusé (LUFS, ~3 s) ; absent avec un ancien moteur */
+    lufs: number | null;
     /** position de la source dans l'espace (absente quand l'espace est coupé) */
     pos: [number, number] | null;
     at: number;
@@ -351,6 +367,7 @@ function wire() {
             meter = {
                 level: Number(msg.level) || 0, peak: Number(msg.peak) || 0, bands: msg.bands,
                 comp: Number(msg.comp) || 0, limit: Number(msg.limit) || 0,
+                lufs: typeof msg.lufs === "number" ? msg.lufs : null,
                 pos: Array.isArray(msg.pos) && msg.pos.length === 2 ? [Number(msg.pos[0]) || 0, Number(msg.pos[1]) || 0] : null,
                 at: performance.now(),
             };
@@ -378,6 +395,14 @@ function wire() {
     loadSavedPrefs().then(saved => {
         if (saved && typeof saved === "object") {
             prefs = { ...PREF_DEFAULTS, ...saved };
+            // Avant le moteur 0.16, « latence » était la taille MAXIMALE du tampon
+            // (200 ms par défaut, atteinte en pratique). C'est maintenant la réserve
+            // visée : on repart de la nouvelle valeur par défaut.
+            if (saved && (saved as Partial<SoundPrefs>).v !== 2) {
+                prefs.latency = PREF_DEFAULTS.latency;
+                prefs.v = 2;
+            }
+            if (![12, 24, 48].includes(prefs.highpassSlope)) prefs.highpassSlope = 12;
             if (!Array.isArray(prefs.eq) || prefs.eq.length !== 10) prefs.eq = [...PREF_DEFAULTS.eq];
             if (!Array.isArray(prefs.selection)) prefs.selection = [];
             if (!Array.isArray(prefs.userPresets)) prefs.userPresets = [];

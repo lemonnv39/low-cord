@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde_json::{json, Map, Value};
 
-use crate::dsp::{self, Biquad, Chain, Params, StereoWidth};
+use crate::dsp::{self, butterworth_q, Biquad, Chain, Params, StereoWidth};
 use crate::lock;
+use crate::resample::{Follower, Sinc, READ_FRAMES};
 use crate::space::{self, Space};
 
 pub const OUT_RATE: u32 = 48000;
@@ -42,9 +43,11 @@ macro_rules! global {
 global!(gain: AtomicU32 = f32_atomic(1.0));
 // Volume général de sortie (1.0 = 100 %), juste avant le limiteur.
 global!(volume: AtomicU32 = f32_atomic(1.0));
-// Latence cible (ms) = taille max du tampon. Plus bas = plus réactif, mais
-// risque de micro-coupures.
-global!(latency_ms: AtomicU32 = AtomicU32::new(200));
+// Tampon cible (ms) de chaque compte : la réserve de son gardée entre la
+// capture et l'envoi à Discord. Plus bas = plus réactif ; trop bas = risque de
+// micro-coupures si le PC est chargé. La vitesse de lecture s'ajuste toute
+// seule (± 0,5 %) pour rester à ce niveau.
+global!(latency_ms: AtomicU32 = AtomicU32::new(60));
 // Gains des 10 bandes de l'égaliseur, en dB [-12..12].
 global!(eq_gains: Mutex<[f32; 10]> = Mutex::new([0.0; 10]));
 // Périphérique choisi (None = entrée par défaut).
@@ -93,7 +96,7 @@ pub fn set_volume(v: f32) {
 }
 
 pub fn set_latency(ms: u32) {
-    latency_ms().store(ms.clamp(40, 2000), Ordering::Relaxed);
+    latency_ms().store(ms.clamp(20, 1000), Ordering::Relaxed);
 }
 
 pub fn set_eq(bands: Vec<f32>) {
@@ -143,8 +146,12 @@ impl Eq {
 struct Dsp {
     eq: Eq,
     space: Space,
-    highpass: [Biquad; 2],
-    highpass_hz: f32,
+    /// Coupe-bas : jusqu'à 4 cellules d'ordre 2 par voie (12 / 24 / 48 dB par octave).
+    highpass: [[Biquad; 4]; 2],
+    highpass_at: (f32, u8),
+    /// Coupe-haut : 2 cellules par voie (24 dB par octave).
+    lowpass: [[Biquad; 2]; 2],
+    lowpass_hz: f32,
     width: StereoWidth,
     apo: crate::apo::Apo,
     chain: Chain,
@@ -155,8 +162,10 @@ impl Dsp {
         Dsp {
             eq: Eq::new(),
             space: Space::new(),
-            highpass: [Biquad::default(); 2],
-            highpass_hz: 0.0,
+            highpass: [[Biquad::default(); 4]; 2],
+            highpass_at: (0.0, 0),
+            lowpass: [[Biquad::default(); 2]; 2],
+            lowpass_hz: 0.0,
             width: StereoWidth::new(),
             apo: crate::apo::Apo::new(),
             chain: Chain::new(),
@@ -172,10 +181,23 @@ impl Dsp {
         if eq_active {
             self.eq.update(&gains);
         }
-        if p.highpass != self.highpass_hz {
-            self.highpass_hz = p.highpass;
-            for b in self.highpass.iter_mut() {
-                b.set_highpass(p.highpass.max(20.0), OUT_RATE as f32);
+        let sections = usize::from(p.highpass_slope.clamp(1, 4));
+        if (p.highpass, p.highpass_slope) != self.highpass_at {
+            self.highpass_at = (p.highpass, p.highpass_slope);
+            let qs = butterworth_q(sections);
+            for ch in self.highpass.iter_mut() {
+                for (b, q) in ch.iter_mut().zip(qs) {
+                    b.set_highpass_q(p.highpass.max(20.0), OUT_RATE as f32, *q);
+                }
+            }
+        }
+        if p.lowpass != self.lowpass_hz {
+            self.lowpass_hz = p.lowpass;
+            let qs = butterworth_q(2);
+            for ch in self.lowpass.iter_mut() {
+                for (b, q) in ch.iter_mut().zip(qs) {
+                    b.set_lowpass(p.lowpass.max(1000.0), OUT_RATE as f32, *q);
+                }
             }
         }
         let vol = load_f32(volume());
@@ -184,8 +206,16 @@ impl Dsp {
         for frame in buf.as_chunks_mut::<2>().0 {
             let (mut l, mut r) = (frame[0] * g, frame[1] * g);
             if p.highpass > 0.0 {
-                l = self.highpass[0].process(l);
-                r = self.highpass[1].process(r);
+                for i in 0..sections {
+                    l = self.highpass[0][i].process(l);
+                    r = self.highpass[1][i].process(r);
+                }
+            }
+            if p.lowpass > 0.0 {
+                for i in 0..2 {
+                    l = self.lowpass[0][i].process(l);
+                    r = self.lowpass[1][i].process(r);
+                }
             }
             frame[0] = l;
             frame[1] = r;
@@ -401,6 +431,8 @@ fn send_meter(r: &Reading) {
         "bands": r.bands.iter().map(|&b| round(b)).collect::<Vec<_>>(),
         "comp": round(comp),
         "limit": round(limit),
+        // Niveau perçu du son diffusé (LUFS, ~3 s).
+        "lufs": (f64::from(dsp::loudness_lufs()) * 10.0).round() / 10.0,
         "pos": space::position().map(|(x, y)| [round(x), round(y)]),
     }));
 }
@@ -412,15 +444,15 @@ fn send_meter(r: &Reading) {
 global!(consumers: Mutex<Vec<Weak<Mutex<VecDeque<f32>>>>> = Mutex::new(Vec::new()));
 
 fn distribute(block: &[f32]) {
-    let ms = latency_ms().load(Ordering::Relaxed) as usize;
-    let cap = (OUT_RATE as usize * 2 * ms / 1000).max(1920);
+    // Garde-fou seulement (compte dont la lecture est bloquée) : le niveau
+    // normal du tampon est tenu par la lecture elle-même (voir LiveSource).
+    let cap = OUT_RATE as usize * 2 * 2;
     lock(consumers()).retain(|weak| {
         let Some(ring) = weak.upgrade() else {
             return false;
         };
         let mut q = lock(&ring);
         q.extend(block.iter().copied());
-        // Plafond = latence cible : borne le retard capture → émission.
         let excess = q.len().saturating_sub(cap);
         q.drain(..excess);
         true
@@ -436,11 +468,21 @@ fn clear_consumers() {
 }
 
 // ── Source lue par songbird (une par compte en vocal) ──────────────────────
-// Renvoie du silence quand le tampon est vide, pour que la piste ne s'arrête
-// jamais.
+// Le son capté et le son envoyé à Discord n'avancent pas à la même horloge
+// (carte son d'un côté, minuterie de l'envoi de l'autre) : sans correction, le
+// tampon finit soit vide (micro-coupures), soit plein (retard qui grandit
+// jusqu'à sa limite). Avant, cette limite servait de réglage de latence et le
+// lecteur de songbird prenait jusqu'à 85 ms d'avance d'un coup : le retard
+// réel tournait autour de 200 ms.
+//
+// Ici, chaque lecture ne donne que 20 ms au plus (rien ne dort ailleurs) et
+// le tampon vise un niveau fixe : la vitesse de lecture est ajustée de ±0,5 %
+// au maximum (inaudible) pour y rester. S'il se vide quand même, la lecture
+// attend qu'il soit revenu à sa cible au lieu de hacher le son.
 
 pub struct LiveSource {
     ring: Ring,
+    follow: Follower,
 }
 
 impl LiveSource {
@@ -448,25 +490,35 @@ impl LiveSource {
         let ring: Ring = Arc::new(Mutex::new(VecDeque::new()));
         lock(consumers()).push(Arc::downgrade(&ring));
         wake_pump();
-        LiveSource { ring }
+        LiveSource {
+            ring,
+            follow: Follower::new(),
+        }
     }
 }
 
 impl Read for LiveSource {
     fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
-        let n = out.len() / 4; // échantillons f32 entrelacés L,R
-        let mut q = lock(&self.ring);
-        let mut i = 0;
-        while i + 1 < n {
-            let l = q.pop_front().unwrap_or(0.0);
-            let r = q.pop_front().unwrap_or(0.0);
-            out[i * 4..i * 4 + 4].copy_from_slice(&l.to_le_bytes());
-            out[(i + 1) * 4..(i + 1) * 4 + 4].copy_from_slice(&r.to_le_bytes());
-            i += 2;
+        // Flux f32 entrelacé L, R : 8 octets par trame.
+        if out.len() < 8 {
+            out.fill(0);
+            return Ok(out.len());
         }
-        drop(q);
-        out[i * 4..].fill(0);
-        Ok(out.len())
+        let mut buf = [0.0f32; READ_FRAMES * 2];
+        let want = (out.len() / 8).min(READ_FRAMES);
+        let target = OUT_RATE as usize * latency_ms().load(Ordering::Relaxed) as usize / 1000;
+        let frames = self
+            .follow
+            .pull(&mut lock(&self.ring), target, &mut buf[..want * 2]);
+        for (chunk, v) in out
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(&buf[..frames * 2])
+        {
+            *chunk = v.to_le_bytes();
+        }
+        Ok(frames * 8)
     }
 }
 
@@ -564,15 +616,18 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
             Err(e) => return capture_error(format!("Périphérique inutilisable : {e}")),
         };
         let in_ch = cfg.channels() as usize;
-        let ratio = OUT_RATE as f32 / cfg.sample_rate().0 as f32;
+        let rate = cfg.sample_rate().0;
         let stream = match cfg.sample_format() {
-            cpal::SampleFormat::F32 => build_stream::<f32>(&device, &cfg, in_ch, ratio, |x| x),
+            cpal::SampleFormat::F32 => build_stream::<f32>(&device, &cfg, in_ch, rate, |x| x),
             cpal::SampleFormat::I16 => {
-                build_stream::<i16>(&device, &cfg, in_ch, ratio, |x| x as f32 / 32768.0)
+                build_stream::<i16>(&device, &cfg, in_ch, rate, |x| x as f32 / 32768.0)
             }
-            cpal::SampleFormat::U16 => build_stream::<u16>(&device, &cfg, in_ch, ratio, |x| {
+            cpal::SampleFormat::U16 => build_stream::<u16>(&device, &cfg, in_ch, rate, |x| {
                 (x as f32 - 32768.0) / 32768.0
             }),
+            cpal::SampleFormat::I32 => {
+                build_stream::<i32>(&device, &cfg, in_ch, rate, |x| x as f32 / 2_147_483_648.0)
+            }
             f => return capture_error(format!("Format audio non pris en charge : {f:?}")),
         };
         let stream = match stream {
@@ -582,7 +637,8 @@ fn start_capture(input_name: Option<String>, running: Arc<AtomicBool>) {
         if let Err(e) = stream.play() {
             return capture_error(format!("Capture impossible : {e}"));
         }
-        crate::engine::emit_global(json!({ "captureError": Value::Null }));
+        // Fréquence réelle du périphérique : le panneau prévient si elle est convertie.
+        crate::engine::emit_global(json!({ "captureError": Value::Null, "captureRate": rate }));
         active_captures().fetch_add(1, Ordering::Relaxed);
         while running.load(Ordering::Relaxed) {
             std::thread::sleep(std::time::Duration::from_millis(200));
@@ -599,7 +655,7 @@ fn build_stream<T>(
     device: &cpal::Device,
     cfg: &cpal::SupportedStreamConfig,
     in_ch: usize,
-    ratio: f32,
+    rate: u32,
     conv: impl Fn(T) -> f32 + Send + 'static,
 ) -> Result<cpal::Stream, cpal::BuildStreamError>
 where
@@ -608,9 +664,8 @@ where
     let scfg: cpal::StreamConfig = cfg.clone().into();
     let mut pipeline = Pipeline::new(true);
     let mut block: Vec<f32> = Vec::new();
-    let mut pos = 0.0f32;
-    let mut last_l = 0.0f32;
-    let mut last_r = 0.0f32;
+    // Périphérique déjà à 48 kHz : le son passe tel quel, sans conversion.
+    let mut resampler = (rate != OUT_RATE).then(|| Sinc::new(rate, OUT_RATE));
     device.build_input_stream(
         &scfg,
         move |data: &[T], _: &cpal::InputCallbackInfo| {
@@ -618,15 +673,13 @@ where
             for frame in data.chunks_exact(in_ch.max(1)) {
                 let l = conv(frame[0]);
                 let r = if in_ch == 1 { l } else { conv(frame[1]) };
-                pos += ratio;
-                while pos >= 1.0 {
-                    pos -= 1.0;
-                    let frac = 1.0 - pos;
-                    block.push(last_l + (l - last_l) * frac);
-                    block.push(last_r + (r - last_r) * frac);
+                match resampler.as_mut() {
+                    Some(rs) => rs.push(l, r, &mut block),
+                    None => {
+                        block.push(l);
+                        block.push(r);
+                    }
                 }
-                last_l = l;
-                last_r = r;
             }
             pipeline.run(&mut block);
         },

@@ -39,9 +39,11 @@ export const Group = ({ title, children }: { title: string; children: ReactNode;
 );
 
 /** Curseur horizontal : la partie remplie suit la valeur. Double-clic = valeur par défaut. */
-export function Slider({ label, value, display, min, max, step, reset, onChange, center }: {
+export function Slider({ label, value, display, min, max, step, reset, onChange, center, title }: {
     label: string; value: number; display: string; min: number; max: number; step: number; reset: number;
     onChange(v: number): void;
+    /** explication au survol du nom du réglage */
+    title?: string;
     /** remplissage depuis le centre (valeurs ±) au lieu de la gauche */
     center?: boolean;
 }) {
@@ -51,7 +53,7 @@ export function Slider({ label, value, display, min, max, step, reset, onChange,
     return (
         <label className={cl("slider")}>
             <span className={cl("slider-head")}>
-                <span>{label}</span>
+                <span title={title}>{label}</span>
                 <span className={cl("value", value !== reset && "value-on")}>{display}</span>
             </span>
             <input

@@ -18,7 +18,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import { Card, Chip, cl, Dropdown, Group, Knob, Segmented, Slider, ToggleRow } from "./controls";
 import {
-    applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive,
+    applyEqPreset, applyProfile, DEFAULT_INPUT, devices, EQ_CUSTOM, EQ_LABELS, EQ_PRESETS, getMeter, getPrefs, isActive, maximizeTarget,
     PREF_DEFAULTS, PROFILES, resetSound, saveEqCustom, savePrefs, setBitrate, setEq, setGain, setInput, setLatency,
     setProcessing, setSpace, setTone, sourceLabel, TONE_PRESETS, useLowSound,
 } from "./engine";
@@ -100,6 +100,33 @@ function ReductionMeter({ limiter, protect }: { limiter: boolean; protect: boole
     );
 }
 
+const HP_SLOPES: { value: 12 | 24 | 48; label: string; }[] = [
+    { value: 12, label: "12 dB/oct" },
+    { value: 24, label: "24 dB/oct" },
+    { value: 48, label: "48 dB/oct" },
+];
+
+/** Niveau perçu du son diffusé, en direct (LUFS, comme les plateformes de musique). */
+function LoudnessReadout() {
+    const ref = useRef<HTMLSpanElement>(null);
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const m = getMeter();
+            const fresh = m && performance.now() - m.at < 400;
+            if (!ref.current) return;
+            ref.current.textContent = fresh && m!.lufs != null && m!.lufs > -60 ? `${m!.lufs.toFixed(1)} LUFS` : "—";
+        }, 250);
+        return () => clearInterval(timer);
+    }, []);
+    return (
+        <div className={cl("gr-row")} title="Niveau perçu du son envoyé à Discord, mesuré sur 3 secondes. −14 LUFS = un titre sur Spotify ; −8 = très fort.">
+            <span>Niveau perçu</span>
+            <span className={cl("gr-track")} style={{ visibility: "hidden" }} />
+            <span ref={ref} className={cl("gr-value")}>—</span>
+        </div>
+    );
+}
+
 /** Lien « Reset all » : un premier clic demande confirmation, le second remet tout à zéro. */
 function ResetAll() {
     const [ask, setAsk] = useState(false);
@@ -152,6 +179,11 @@ export function SignalCard({ act }: { act: Act; }) {
                     onChange={v => act(() => setInput(v))}
                 />
                 {music.captureError && <p className={cl("error-line")}>{music.captureError}</p>}
+                {!music.captureError && !!music.captureRate && music.captureRate !== 48000 && (
+                    <p className={cl("hint-line")} title="Discord diffuse en 48 000 Hz. low-sound convertit proprement, mais régler le périphérique sur 48 000 Hz dans Windows (Son → Propriétés → Avancé) évite toute conversion.">
+                        Source en {(music.captureRate / 1000).toLocaleString("fr-FR")} kHz, convertie en 48 kHz
+                    </p>
+                )}
                 <Slider label="Gain" value={p.gain} display={signed(p.gain, "dB")} min={-64} max={128} step={1} reset={PREF_DEFAULTS.gain} onChange={setGain} center />
             </Group>
 
@@ -188,7 +220,14 @@ export function SignalCard({ act }: { act: Act; }) {
                 {p.multiband && <Slider label="Multibande" value={p.mbAmount} display={pct(p.mbAmount)} min={0} max={1} step={0.05} reset={PREF_DEFAULTS.mbAmount} onChange={v => setProcessing({ mbAmount: v })} />}
                 {p.agc && <Slider label="Niveau visé" value={p.agcTarget} display={`${p.agcTarget} dB`} min={-30} max={-8} step={1} reset={PREF_DEFAULTS.agcTarget} onChange={v => setProcessing({ agcTarget: v })} />}
                 <Slider label="Écrêteur doux" value={p.clipper} display={off(p.clipper, pct(p.clipper))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ clipper: v })} />
-                <ReductionMeter limiter={p.limiter} protect={p.protect} />
+                <Slider
+                    label="Puissance" value={p.maximize}
+                    display={off(p.maximize, `${pct(p.maximize)} · ${maximizeTarget(p.maximize).toFixed(0)} LUFS`)}
+                    min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ maximize: v })}
+                    title="Le plus fort possible sans saturer : amène le niveau perçu vers la cible (−17 à −6 LUFS), arrondit les pointes, et le limiteur tient le plafond. −14 LUFS = un titre sur Spotify ; −8 = très fort."
+                />
+                <ReductionMeter limiter={p.limiter || p.maximize > 0} protect={p.protect} />
+                <LoudnessReadout />
             </Group>
 
             <Group title="Couleur">
@@ -211,6 +250,8 @@ export function SignalCard({ act }: { act: Act; }) {
                 {p.gate && <Slider label="Seuil anti-souffle" value={p.gateThreshold} display={`${p.gateThreshold} dB`} min={-90} max={-20} step={1} reset={PREF_DEFAULTS.gateThreshold} onChange={v => setProcessing({ gateThreshold: v })} />}
                 <Slider label="Dé-esseur" value={p.deesser} display={off(p.deesser, pct(p.deesser))} min={0} max={1} step={0.05} reset={0} onChange={v => setProcessing({ deesser: v })} />
                 <Slider label="Coupe-bas" value={p.highpass} display={p.highpass < 20 ? "off" : `${p.highpass} Hz`} min={0} max={300} step={10} reset={0} onChange={v => setProcessing({ highpass: v < 20 ? 0 : v })} />
+                {p.highpass >= 20 && <Segmented label="Pente du coupe-bas" value={p.highpassSlope} options={HP_SLOPES} onChange={s => setProcessing({ highpassSlope: s })} />}
+                <Slider label="Coupe-haut" value={p.lowpass === 0 ? 20500 : p.lowpass} display={p.lowpass === 0 ? "off" : `${(p.lowpass / 1000).toFixed(1)} kHz`} min={4000} max={20500} step={500} reset={20500} onChange={v => setProcessing({ lowpass: v > 20000 ? 0 : v })} />
             </Group>
 
             <Group title="Diffusion">
@@ -218,7 +259,10 @@ export function SignalCard({ act }: { act: Act; }) {
                 <div className={cl("chips")}>
                     <Chip on={p.autoBitrate} onClick={() => savePrefs({ autoBitrate: !p.autoBitrate })} title="Règle le débit au maximum que permet ta vocale">Débit auto (salon)</Chip>
                 </div>
-                <Slider label="Latence" value={p.latency} display={`${p.latency} ms`} min={40} max={1000} step={10} reset={PREF_DEFAULTS.latency} onChange={setLatency} />
+                <Slider
+                    label="Réserve (latence)" value={p.latency} display={`${p.latency} ms`} min={20} max={400} step={10} reset={PREF_DEFAULTS.latency} onChange={setLatency}
+                    title="Son gardé d'avance entre la capture et Discord. Plus bas = moins de retard ; monte-la si tu entends des micro-coupures. La vitesse de lecture s'ajuste toute seule pour rester à ce niveau."
+                />
             </Group>
         </Card>
     );

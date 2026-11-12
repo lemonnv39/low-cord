@@ -3,8 +3,9 @@
 //! [8D, largeur + graves en mono, réverbe, égaliseur : dans audio.rs] →
 //! Basses+ → Clarté → dé-esseur → compression multibande → compresseur (avec
 //! compensation automatique du volume) → saturation → écrêteur doux
-//! suréchantillonné → volume général → limiteur à anticipation (crêtes
-//! inter-échantillons comprises).
+//! suréchantillonné → Puissance (maximiseur : niveau perçu amené à une cible
+//! LUFS) → volume général → limiteur à anticipation (crêtes inter-échantillons
+//! comprises, relâchement à deux vitesses).
 //!
 //! Tout est réglé par un seul jeu de paramètres (`Params`), relu à chaque bloc.
 
@@ -148,10 +149,6 @@ impl Biquad {
             (a + 1.0) - (a - 1.0) * cw - sa,
         );
     }
-    /// Passe-haut d'ordre 2, Q = 0,707 (Butterworth).
-    pub fn set_highpass(&mut self, f0: f32, fs: f32) {
-        self.set_highpass_q(f0, fs, std::f32::consts::FRAC_1_SQRT_2);
-    }
     pub fn process(&mut self, x: f32) -> f32 {
         // Forme directe II transposée (stable).
         let y = self.b0 * x + self.z1;
@@ -199,12 +196,28 @@ impl Lr4 {
     }
 }
 
+/// Facteurs Q des cellules d'ordre 2 d'un filtre de Butterworth (réponse la
+/// plus plate possible avant la coupure) à 1, 2 ou 4 cellules.
+pub fn butterworth_q(sections: usize) -> &'static [f32] {
+    match sections {
+        1 => &[std::f32::consts::FRAC_1_SQRT_2],
+        2 => &[0.541_196_1, 1.306_563],
+        _ => &[0.509_795_6, 0.601_344_9, 0.899_976_2, 2.562_915_4],
+    }
+}
+
 // ── Réglages ────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Params {
     /// Coupe-bas (Hz, 0 = off).
     pub highpass: f32,
+    /// Pente du coupe-bas, en cellules d'ordre 2 : 1 = 12 dB/oct, 2 = 24, 4 = 48.
+    pub highpass_slope: u8,
+    /// Coupe-haut (Hz, 0 = off), 24 dB/oct.
+    pub lowpass: f32,
+    /// Puissance (maximiseur) [0..1] (0 = off) : niveau perçu visé de −17 à −6 LUFS.
+    pub maximize: f32,
     /// Largeur stéréo (1 = normale, 0 = mono, 2 = très large).
     pub width: f32,
     /// Saturation douce [0..1].
@@ -250,6 +263,9 @@ impl Default for Params {
     fn default() -> Self {
         Params {
             highpass: 0.0,
+            highpass_slope: 1,
+            lowpass: 0.0,
+            maximize: 0.0,
             width: 1.0,
             saturation: 0.0,
             compressor: false,
@@ -292,6 +308,20 @@ impl Params {
         let hz = |x: f32, max: f32| if x < 20.0 { 0.0 } else { x.min(max) };
         Params {
             highpass: hz(n("highpass", d.highpass), 400.0),
+            highpass_slope: match n("highpassSlope", 12.0) as u32 {
+                0..=17 => 1,
+                18..=35 => 2,
+                _ => 4,
+            },
+            lowpass: {
+                let x = n("lowpass", d.lowpass);
+                if x < 1000.0 {
+                    0.0
+                } else {
+                    x.min(20000.0)
+                }
+            },
+            maximize: n("maximize", d.maximize).clamp(0.0, 1.0),
             width: n("width", d.width).clamp(0.0, 2.0),
             saturation: n("saturation", d.saturation).clamp(0.0, 1.0),
             compressor: b("compressor", d.compressor),
@@ -320,7 +350,9 @@ impl Params {
 
     pub fn to_json(self) -> Value {
         json!({
-            "highpass": self.highpass, "width": self.width, "saturation": self.saturation,
+            "highpass": self.highpass, "highpassSlope": u32::from(self.highpass_slope) * 12, "lowpass": self.lowpass,
+            "maximize": self.maximize,
+            "width": self.width, "saturation": self.saturation,
             "compressor": self.compressor, "compMode": self.comp_mode, "compAmount": self.comp_amount,
             "limiter": self.limiter, "protect": self.protect, "gate": self.gate, "gateThreshold": self.gate_threshold,
             "agc": self.agc, "agcTarget": self.agc_target, "stereoMode": self.stereo_mode,
@@ -368,6 +400,79 @@ pub fn take_reduction() -> (f32, f32) {
         f32::from_bits(comp_gr().swap(0, Ordering::Relaxed)),
         f32::from_bits(limit_gr().swap(0, Ordering::Relaxed)),
     )
+}
+
+// ── Niveau perçu (LUFS) ─────────────────────────────────────────────────────
+// Mesure normalisée (UIT-R BS.1770) : le son passe par la pondération « K »
+// (l'oreille entend mieux les médiums-aigus que les graves), puis on prend sa
+// puissance moyenne. C'est l'unité des plateformes de musique : −14 LUFS =
+// niveau d'un titre sur Spotify, −8 = très fort.
+
+/// Pondération K à 48 kHz : étagère haute (+4 dB) puis coupe-bas (38 Hz).
+fn k_weighting() -> [Biquad; 2] {
+    [
+        Biquad {
+            b0: 1.535_124_9,
+            b1: -2.691_696_2,
+            b2: 1.198_392_8,
+            a1: -1.690_659_3,
+            a2: 0.732_480_8,
+            z1: 0.0,
+            z2: 0.0,
+        },
+        Biquad {
+            b0: 1.0,
+            b1: -2.0,
+            b2: 1.0,
+            a1: -1.990_047_5,
+            a2: 0.990_072_25,
+            z1: 0.0,
+            z2: 0.0,
+        },
+    ]
+}
+
+fn power_to_lufs(p: f32) -> f32 {
+    -0.691 + 10.0 * p.max(1e-12).log10()
+}
+
+/// Puissance pondérée K d'un signal stéréo, lissée (fenêtre réglable).
+struct KMeter {
+    k: [[Biquad; 2]; 2],
+    power: f32,
+    rate: f32,
+}
+
+impl KMeter {
+    fn new(window_ms: f32) -> Self {
+        KMeter {
+            k: [k_weighting(), k_weighting()],
+            power: 0.0,
+            rate: 1.0 - coef(window_ms),
+        }
+    }
+    fn feed(&mut self, l: f32, r: f32) -> f32 {
+        let mut a = self.k[0][0].process(l);
+        a = self.k[0][1].process(a);
+        let mut b = self.k[1][0].process(r);
+        b = self.k[1][1].process(b);
+        let ms = a * a + b * b;
+        self.power += (ms - self.power) * self.rate;
+        ms
+    }
+    fn lufs(&self) -> f32 {
+        power_to_lufs(self.power)
+    }
+}
+
+fn out_lufs() -> &'static AtomicU32 {
+    static L: OnceLock<AtomicU32> = OnceLock::new();
+    L.get_or_init(|| AtomicU32::new((-70.0f32).to_bits()))
+}
+
+/// Niveau perçu du son diffusé (LUFS court terme, ~3 s).
+pub fn loudness_lufs() -> f32 {
+    f32::from_bits(out_lufs().load(Ordering::Relaxed))
 }
 
 // ── Suréchantillonnage ×4 ───────────────────────────────────────────────────
@@ -935,6 +1040,89 @@ impl Clipper {
     }
 }
 
+// ── Puissance (maximiseur) ──────────────────────────────────────────────────
+// Un seul réglage pour « le plus fort possible sans saturer » :
+//  1. le niveau perçu de la source est mesuré (LUFS, ~3 s) et un gain la
+//     rapproche de la cible choisie (−17 LUFS à 1 %, −6 LUFS à 100 %). Le gain
+//     ne fait que monter (jusqu'à +24 dB), se fige pendant les silences (pas
+//     de souffle remonté) et bouge lentement (pas d'effet de pompe) ;
+//  2. les pointes les plus courtes sont arrondies par un écrêteur doux
+//     suréchantillonné, réglé juste au-dessus du plafond : c'est inaudible sur
+//     une pointe de quelques millisecondes, et le limiteur a moins à baisser ;
+//  3. le limiteur (toujours actif avec la Puissance) tient le plafond −1 dB.
+
+/// Courbe d'écrêtage : linéaire jusqu'à `knee`, puis arrondie vers `ceil`.
+fn clip_to(x: f32, knee: f32, ceil: f32) -> f32 {
+    let a = x.abs();
+    if a <= knee {
+        x
+    } else {
+        (knee + (ceil - knee) * ((a - knee) / (ceil - knee)).tanh()).copysign(x)
+    }
+}
+
+const MAX_GAIN_DB: f32 = 24.0;
+/// Sous ce niveau (LUFS, 400 ms), la source est considérée comme silencieuse.
+const MAX_GATE_LUFS: f32 = -50.0;
+
+/// Cible de niveau perçu pour un réglage de Puissance [0..1].
+pub fn maximize_target(amount: f32) -> f32 {
+    -17.0 + 11.0 * amount.clamp(0.0, 1.0)
+}
+
+struct Maximizer {
+    short: KMeter,
+    moment: KMeter,
+    gain: f32,
+    target: f32,
+    clip: [Oversampler; 2],
+    up: f32,
+    down: f32,
+}
+
+impl Maximizer {
+    fn new() -> Self {
+        Maximizer {
+            short: KMeter::new(3000.0),
+            moment: KMeter::new(400.0),
+            gain: 1.0,
+            target: 1.0,
+            clip: [Oversampler::new(), Oversampler::new()],
+            up: 1.0 - coef(1200.0),
+            down: 1.0 - coef(150.0),
+        }
+    }
+    /// Une fois par bloc : gain visé d'après le niveau perçu de la source.
+    fn update(&mut self, amount: f32) {
+        if amount <= 0.0 {
+            self.target = 1.0;
+        } else if self.moment.lufs() > MAX_GATE_LUFS {
+            self.target =
+                db_to_lin((maximize_target(amount) - self.short.lufs()).clamp(0.0, MAX_GAIN_DB));
+        }
+    }
+    fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        self.short.feed(l, r);
+        self.moment.feed(l, r);
+        let k = if self.target < self.gain {
+            self.down
+        } else {
+            self.up
+        };
+        self.gain += (self.target - self.gain) * k;
+        // Pointes courtes arrondies juste au-dessus du plafond du limiteur.
+        const KNEE: f32 = CEILING * 0.85;
+        const TOP: f32 = CEILING * 1.33;
+        let g = self.gain;
+        let a = self.clip[0].upsample(l * g);
+        let b = self.clip[1].upsample(r * g);
+        (
+            self.clip[0].downsample(a.map(|v| clip_to(v, KNEE, TOP))),
+            self.clip[1].downsample(b.map(|v| clip_to(v, KNEE, TOP))),
+        )
+    }
+}
+
 // ── Limiteur à anticipation ─────────────────────────────────────────────────
 // Le son est retardé de 4 ms : le gain commence à baisser AVANT la crête, en
 // douceur. Les crêtes sont cherchées sur le signal suréchantillonné ×4 (y
@@ -956,8 +1144,12 @@ struct Limiter {
     avg: VecDeque<f32>,
     avg_sum: f32,
     held: f32,
+    /// Enveloppe lente : suit une réduction qui dure, se relâche en 700 ms.
+    slow: f32,
     n: u64,
     release: f32,
+    slow_attack: f32,
+    slow_release: f32,
 }
 
 impl Limiter {
@@ -970,8 +1162,11 @@ impl Limiter {
             avg: VecDeque::from(vec![1.0; LOOK]),
             avg_sum: LOOK as f32,
             held: 1.0,
+            slow: 1.0,
             n: 0,
             release: 1.0 - coef(80.0),
+            slow_attack: 1.0 - coef(300.0),
+            slow_release: 1.0 - coef(700.0),
         }
     }
     fn process(&mut self, l: f32, r: f32) -> (f32, f32, f32) {
@@ -1001,15 +1196,27 @@ impl Limiter {
         }
         let min = self.mins.front().map_or(1.0, |&(_, g)| g);
 
-        // Baisse immédiate, remontée douce (80 ms), puis moyenne sur la
-        // fenêtre : la baisse est étalée sur les 4 ms qui précèdent la crête.
+        // Baisse immédiate, remontée douce (80 ms). Relâchement à deux
+        // vitesses : une crête isolée est rendue vite, mais quand le son est
+        // poussé fort en continu, une enveloppe lente prend le relais. Le
+        // gain reste alors presque fixe au lieu de monter et descendre à
+        // chaque coup de basse (plus de « pompage » ni de grave qui grésille).
         self.held = if min < self.held {
             min
         } else {
             self.held + (min - self.held) * self.release
         };
-        self.avg_sum += self.held - self.avg.pop_front().unwrap_or(1.0);
-        self.avg.push_back(self.held);
+        let k = if self.held < self.slow {
+            self.slow_attack
+        } else {
+            self.slow_release
+        };
+        self.slow += (self.held - self.slow) * k;
+        let both = self.held.min(self.slow);
+        // Puis moyenne sur la fenêtre : la baisse est étalée sur les 4 ms qui
+        // précèdent la crête.
+        self.avg_sum += both - self.avg.pop_front().unwrap_or(1.0);
+        self.avg.push_back(both);
         let g = (self.avg_sum / LOOK as f32).min(1.0);
 
         self.delay.push_back((l, r));
@@ -1068,10 +1275,13 @@ pub struct Chain {
     comp: Compressor,
     loudness: Loudness,
     clipper: Clipper,
+    maximizer: Maximizer,
     limiter: Limiter,
     safety: Limiter,
     tone: Tone,
     mb_amount: f32,
+    /// Niveau perçu de la sortie (pour l'affichage).
+    out_meter: KMeter,
 }
 
 impl Chain {
@@ -1086,6 +1296,8 @@ impl Chain {
             comp: Compressor::new(),
             loudness: Loudness::new(),
             clipper: Clipper::new(),
+            maximizer: Maximizer::new(),
+            out_meter: KMeter::new(3000.0),
             limiter: Limiter::new(CEILING),
             safety: Limiter::new(SAFETY),
             tone: Tone::new(),
@@ -1120,6 +1332,8 @@ impl Chain {
         }
         self.loudness.update();
         self.tone.update(p);
+        self.maximizer.update(p.maximize);
+        out_lufs().store(self.out_meter.lufs().to_bits(), Ordering::Relaxed);
     }
 
     /// Fin de chaîne, échantillon par échantillon. `extra` = soundboard,
@@ -1180,20 +1394,30 @@ impl Chain {
             r = self.clipper.channel(r, 1, p.clipper);
         }
 
+        // Puissance : niveau perçu amené à la cible, pointes arrondies.
+        if p.maximize > 0.0 || self.maximizer.gain > 1.001 {
+            (l, r) = self.maximizer.process(l, r);
+        }
+
         l = (l + extra.0) * volume;
         r = (r + extra.1) * volume;
-        // Limiteur à −1 dB, ou à défaut la protection à 0 dB : jamais de
-        // saturation. Les deux coupés : le son passe tel quel.
-        let lim = if p.limiter {
-            &mut self.limiter
+        // Limiteur à −1 dB (toujours avec la Puissance), ou à défaut la
+        // protection à 0 dB : jamais de saturation. Tout coupé : le son passe
+        // tel quel.
+        let lim = if p.limiter || p.maximize > 0.0 || self.maximizer.gain > 1.001 {
+            Some(&mut self.limiter)
         } else if p.protect {
-            &mut self.safety
+            Some(&mut self.safety)
         } else {
-            return (l, r);
+            None
         };
-        let (a, b, red) = lim.process(l, r);
-        note_gr(limit_gr(), red);
-        (a, b)
+        if let Some(lim) = lim {
+            let (a, b, red) = lim.process(l, r);
+            note_gr(limit_gr(), red);
+            (l, r) = (a, b);
+        }
+        self.out_meter.feed(l, r);
+        (l, r)
     }
 }
 
@@ -1590,5 +1814,205 @@ mod tests {
         assert_eq!(p.bass_mono, 250.0);
         assert_eq!(p.comp_mode, 2);
         assert_eq!(Params::from_json(&p.to_json()), p);
+    }
+
+    /// Part du signal qui n'est pas une sinusoïde pure à `hz` (distorsion et
+    /// bruit ajoutés), par moindres carrés.
+    fn impurity(body: &[f32], hz: f32) -> f32 {
+        let (mut ss, mut cc, mut sc, mut vs, mut vc) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        let at =
+            |i: usize| (std::f64::consts::TAU * f64::from(hz) * i as f64 / f64::from(FS)).sin_cos();
+        for (i, &v) in body.iter().enumerate() {
+            let (s, c) = at(i);
+            ss += s * s;
+            cc += c * c;
+            sc += s * c;
+            vs += f64::from(v) * s;
+            vc += f64::from(v) * c;
+        }
+        let det = ss * cc - sc * sc;
+        let (a, b) = ((vs * cc - vc * sc) / det, (vc * ss - vs * sc) / det);
+        let resid: f64 = body
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| {
+                let (s, c) = at(i);
+                (f64::from(v) - a * s - b * c).powi(2)
+            })
+            .sum();
+        (resid / body.len() as f64).sqrt() as f32 / rms(body)
+    }
+
+    /// Niveau perçu (LUFS) d'un signal mono joué sur les deux voies.
+    fn lufs(x: &[f32]) -> f32 {
+        let mut m = KMeter::new(400.0);
+        let mut sum = 0.0f64;
+        for &v in x {
+            sum += f64::from(m.feed(v, v));
+        }
+        power_to_lufs((sum / x.len() as f64) as f32)
+    }
+
+    #[test]
+    fn mesure_lufs_conforme() {
+        // Référence de la norme : sinusoïde 997 Hz pleine échelle sur les deux
+        // voies = −3,01 dBFS efficace par voie → +3 dB (deux voies) → ≈ −0,7 LUFS… soit
+        // −3,01 LUFS pour une seule voie. Sur deux voies : ≈ 0 LUFS.
+        let full = lufs(&sine(997.0, 1.0, 2.0)[48000..]);
+        assert!((full - 0.0).abs() < 0.3, "{full}");
+        // 20 dB plus bas → 20 LUFS plus bas.
+        let low = lufs(&sine(997.0, 0.1, 2.0)[48000..]);
+        assert!((full - low - 20.0).abs() < 0.1, "{}", full - low);
+        // Les graves pèsent moins que les médiums à niveau égal (pondération K).
+        assert!(
+            lufs(&sine(60.0, 0.5, 2.0)[48000..]) < lufs(&sine(2000.0, 0.5, 2.0)[48000..]) - 2.0
+        );
+    }
+
+    #[test]
+    fn puissance_amène_le_son_à_sa_cible() {
+        // Source faible (−27 LUFS) : la Puissance la monte jusqu'à la cible
+        // choisie, sans jamais dépasser le plafond.
+        for amount in [0.25f32, 0.6, 1.0] {
+            let p = Params {
+                maximize: amount,
+                ..Params::default()
+            };
+            let out = run_back(&p, &sine(1000.0, 0.05, 12.0));
+            assert!(
+                peak(&out) <= CEILING + 1e-6,
+                "{amount} : crête {}",
+                peak(&out)
+            );
+            let got = lufs(&out[out.len() - 96000..]);
+            let want = maximize_target(amount);
+            assert!(
+                (got - want).abs() < 1.0,
+                "Puissance {amount} : {got} LUFS au lieu de {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn puissance_ne_remonte_pas_le_silence() {
+        // Souffle à −70 dB : considéré comme du silence, pas amplifié.
+        let p = Params {
+            maximize: 1.0,
+            ..Params::default()
+        };
+        let input = sine(1000.0, 0.0003, 6.0);
+        let out = run_back(&p, &input);
+        let gain = rms(tail(&out)) / rms(tail(&input));
+        assert!(gain < 1.05, "silence amplifié ×{gain}");
+    }
+
+    #[test]
+    fn puissance_au_maximum_sans_saturer() {
+        // Source déjà forte, basse + voix, Puissance à fond : plus fort, mais
+        // jamais au-dessus du plafond (crêtes entre échantillons comprises).
+        let p = Params {
+            maximize: 1.0,
+            ..Params::default()
+        };
+        let a = sine(55.0, 0.6, 8.0);
+        let b = sine(1300.0, 0.35, 8.0);
+        let input: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
+        let out = run_back(&p, &input);
+        assert!(peak(&out) <= CEILING + 1e-6);
+        let mut os = Oversampler::new();
+        let true_peak = tail(&out).iter().fold(0.0f32, |m, &x| {
+            os.upsample(x).iter().fold(m, |m, v| m.max(v.abs()))
+        });
+        assert!(true_peak < 1.0, "vraie crête {true_peak}");
+        // Cette source est déjà au plafond : la Puissance ne peut presque rien
+        // ajouter, mais elle ne doit pas non plus la baisser.
+        assert!(lufs(tail(&out)) > lufs(tail(&input)) - 1.5);
+    }
+
+    #[test]
+    fn puissance_gagne_sur_une_source_dynamique() {
+        // Son calme avec des pointes courtes (batterie, voix) : c'est là que la
+        // Puissance sert. Le fond monte nettement, les pointes sont tenues.
+        let mut input = sine(1000.0, 0.08, 10.0);
+        for start in (0..input.len()).step_by(12000) {
+            for x in input[start..(start + 240).min(480_000)].iter_mut() {
+                *x *= 10.0;
+            }
+        }
+        let p = Params {
+            maximize: 0.8,
+            ..Params::default()
+        };
+        let out = run_back(&p, &input);
+        assert!(peak(&out) <= CEILING + 1e-6);
+        let gain = lufs(tail(&out)) - lufs(tail(&input));
+        assert!(gain > 5.0, "seulement {gain} dB de mieux");
+    }
+
+    #[test]
+    fn limiteur_ne_pompe_pas_sur_les_basses() {
+        // Basse à 50 Hz poussée 6 dB au-dessus du plafond : le gain du limiteur
+        // doit rester presque fixe. S'il remontait entre deux crêtes (toutes
+        // les 10 ms), la basse serait déformée.
+        let p = Params {
+            limiter: true,
+            ..Params::default()
+        };
+        let out = run_back(&p, &sine(50.0, 1.8, 4.0));
+        assert!(peak(&out) <= CEILING + 1e-6);
+        let d = impurity(&out[out.len() - 96000..], 50.0);
+        assert!(d < 0.03, "distorsion {d}");
+    }
+
+    #[test]
+    fn limiteur_rend_vite_une_crête_isolée() {
+        // Un seul coup très fort au milieu d'un son calme : 300 ms plus tard,
+        // le son calme a retrouvé son niveau (pas de « trou » après le coup).
+        let mut input = sine(1000.0, 0.3, 2.0);
+        for x in input[48000..48000 + 240].iter_mut() {
+            *x *= 8.0;
+        }
+        let p = Params {
+            limiter: true,
+            ..Params::default()
+        };
+        let out = run_back(&p, &input);
+        let after = rms(&out[48000 + 14400..48000 + 19200]);
+        let before = rms(&out[24000..28800]);
+        assert!(
+            after > before * 0.9,
+            "niveau après la crête : {}",
+            after / before
+        );
+    }
+
+    #[test]
+    fn coupe_bas_pentes_12_24_48() {
+        // À la fréquence de coupure : −3 dB quelle que soit la pente. Une
+        // octave plus bas : −12, −24 ou −48 dB.
+        for (sections, slope) in [(1usize, 12.0f32), (2, 24.0), (4, 48.0)] {
+            let gain_at = |hz: f32| {
+                let mut cells = [Biquad::default(); 4];
+                for (b, q) in cells.iter_mut().zip(butterworth_q(sections)) {
+                    b.set_highpass_q(200.0, FS, *q);
+                }
+                let out: Vec<f32> = sine(hz, 0.5, 1.0)
+                    .iter()
+                    .map(|&x| cells.iter_mut().take(sections).fold(x, |y, b| b.process(y)))
+                    .collect();
+                lin_to_db(rms(tail(&out)) / (0.5 / std::f32::consts::SQRT_2))
+            };
+            assert!(
+                (gain_at(200.0) + 3.0).abs() < 0.3,
+                "{slope} dB/oct : {} dB à la coupure",
+                gain_at(200.0)
+            );
+            assert!(
+                (gain_at(100.0) + slope).abs() < 1.5,
+                "{slope} dB/oct : {} dB une octave plus bas",
+                gain_at(100.0)
+            );
+            assert!(gain_at(2000.0).abs() < 0.1);
+        }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "low-sound-engine"
-version = "0.15.0"
+version = "0.16.0"
 description = "Moteur audio de low-sound : diffuse de l'audio dans un salon vocal Discord"
 edition = "2021"
 publish = false
