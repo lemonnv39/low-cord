@@ -461,6 +461,16 @@
     border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
 }
 
+.vc-mlj-backups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+    font-size: 12px;
+}
+
 /* Panneau dans les réglages */
 .vc-mlj-panel {
     display: flex;

@@ -18,16 +18,25 @@
 //   dm-snapshots.jsonl      copie des messages privés reçus, pour retrouver le
 //                           contenu d'un message supprimé même s'il n'était pas
 //                           affiché. Expire après N jours (réglage).
-//   media\<salon>\<id>-<nom> médias archivés dès réception.
+//   conversations\<pseudo> [<id du salon>]\
+//     medias\<auteur> - <id> - <nom>   médias archivés dès réception
+//     sauvegardes\<date> <nom>.html    sauvegardes complètes (Message Cleaner)
+//                           Un dossier par conversation, nommé d'après la
+//                           personne (ou le groupe / salon) pour s'y retrouver
+//                           dans l'explorateur ; l'id entre crochets le rend
+//                           retrouvable même si le pseudo change.
+//
+// L'ancien rangement (media\<id du salon>\<id>-<nom>) est converti tout seul.
 //
 // Les données d'avant la séparation (directement dans messagelogger\) sont
 // réparties automatiquement : chaque conversation va au compte qui y a accès
 // (voir legacyChannels / claimLegacy).
 
 import { DATA_DIR } from "@main/utils/constants";
+import { randomUUID } from "crypto";
 import { IpcMainInvokeEvent, shell } from "electron";
-import { appendFileSync, cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "fs";
-import { join, resolve, sep } from "path";
+import { appendFileSync, closeSync, cpSync, createWriteStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, writeSync } from "fs";
+import { basename, join, resolve, sep } from "path";
 import { Readable, Transform } from "stream";
 import { pipeline } from "stream/promises";
 
@@ -70,9 +79,16 @@ function readJsonl<T>(path: string): T[] {
 
 // ── Un espace de stockage (un compte, ou les anciennes données) ─────────────
 interface Store {
+    /** id du compte (absent pour les anciennes données communes) */
+    account?: string;
     root: string;
     journalDir: string;
+    /** ancien rangement des médias (media\<salon>\…), converti à la première lecture */
     mediaDir: string;
+    /** un dossier par conversation */
+    convRoot: string;
+    /** id du salon -> nom de son dossier dans convRoot */
+    dirs: Map<string, string> | null;
     snapFile: string;
     journal: LogEvent[] | null;
     keys: Set<string>;
@@ -81,11 +97,14 @@ interface Store {
     index: Map<string, { rel: string; size: number; }> | null;
 }
 
-function makeStore(root: string): Store {
+function makeStore(root: string, account?: string): Store {
     return {
+        account,
         root,
         journalDir: join(root, "journal"),
         mediaDir: join(root, "media"),
+        convRoot: join(root, "conversations"),
+        dirs: null,
         snapFile: join(root, "dm-snapshots.jsonl"),
         journal: null,
         keys: new Set(),
@@ -103,7 +122,7 @@ function storeOf(account: unknown): Store {
     if (typeof account !== "string" || !ID.test(account)) throw new Error("bad-account");
     let st = stores.get(account);
     if (!st) {
-        st = makeStore(join(BASE, "comptes", account));
+        st = makeStore(join(BASE, "comptes", account), account);
         stores.set(account, st);
     }
     return st;
@@ -155,7 +174,7 @@ function rewriteJournal(st: Store, kept: LogEvent[]) {
 
 function isValidEvent(ev: any): ev is LogEvent {
     return ev && typeof ev === "object"
-        && typeof ev.key === "string" && ev.key.length < 200
+        && typeof ev.key === "string" && ev.key.length < 600
         && TYPES.has(ev.type)
         && typeof ev.at === "number"
         && ID.test(ev.channelId) && ID.test(ev.messageId)
@@ -310,29 +329,143 @@ export function getSnapshots(_: IpcMainInvokeEvent, account: unknown, ids: unkno
     return ids.map(id => map.get(String(id))).filter(Boolean) as MessageSnapshot[];
 }
 
+// ── Dossiers des conversations ───────────────────────────────────────────────
+const CONV_DIR = /^(?:(.*) )?\[(\d{1,25})\]$/;
+const MEDIA_SUB = "medias";
+const BACKUP_SUB = "sauvegardes";
+
+function safeName(name: string, max = 120) {
+    // Pas de point ni d'espace en fin de nom : Windows les refuse.
+    const clean = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/\s+/g, " ").trim().slice(0, max).replace(/[. ]+$/, "");
+    return clean || "fichier";
+}
+
+const dirNameFor = (channelId: string, label?: string) => {
+    const clean = typeof label === "string" ? safeName(label, 60) : "";
+    return clean && clean !== "fichier" && clean !== channelId ? `${clean} [${channelId}]` : `[${channelId}]`;
+};
+
+/** Id d'une pièce jointe d'après son nom de fichier (nouveau format « auteur - id - nom », ancien « id-nom »). */
+const attachmentIdOf = (file: string) => /^(?:.*? - )?(\d{10,25}) - /.exec(file)?.[1] ?? /^(\d{10,25})-/.exec(file)?.[1];
+
+const mediaFileName = (id: string, filename: string, author?: string) => {
+    const who = typeof author === "string" && author.trim() ? `${safeName(author, 40)} - ` : "";
+    return `${who}${id} - ${safeName(filename)}`;
+};
+
+/** Ce que le journal et les copies savent déjà : nom des conversations, auteur de chaque pièce jointe. */
+function knownNames(st: Store) {
+    const labels = new Map<string, string>();
+    const authors = new Map<string, string>();
+    const note = (list: { id: string; }[] | undefined, author?: { username?: string; name?: string; }) => {
+        const who = author?.username || author?.name;
+        if (who) for (const a of list ?? []) authors.set(a.id, who);
+    };
+    for (const s of loadSnapshots(st).values()) note(s.attachments, s.author);
+    for (const ev of loadJournal(st)) {
+        note(ev.attachments, ev.author);
+        if (ev.channelKind === "guild") labels.set(ev.channelId, `${ev.guildName ?? ""} ${ev.channelName}`.trim());
+        else if (ev.channelKind === "group") labels.set(ev.channelId, ev.channelName);
+        // MP : le pseudo de l'autre personne.
+        else if (ev.author && ev.author.id !== st.account) labels.set(ev.channelId, ev.author.username || ev.author.name);
+        else if (!labels.has(ev.channelId) && ev.channelName && ev.channelName !== ev.channelId) labels.set(ev.channelId, ev.channelName);
+    }
+    return { labels, authors };
+}
+
+/** Ancien rangement media\<salon>\<id>-<nom> → conversations\<pseudo> [<salon>]\medias\<auteur> - <id> - <nom>. */
+function migrateMedia(st: Store) {
+    if (!existsSync(st.mediaDir)) return;
+    try {
+        const { labels, authors } = knownNames(st);
+        ensure(st.convRoot);
+        const existing = new Map<string, string>();
+        for (const d of readdirSync(st.convRoot)) {
+            const m = CONV_DIR.exec(d);
+            if (m) existing.set(m[2], d);
+        }
+        for (const channel of readdirSync(st.mediaDir)) {
+            const from = join(st.mediaDir, channel);
+            if (!ID.test(channel) || !statSync(from).isDirectory()) continue;
+            const to = join(st.convRoot, existing.get(channel) ?? dirNameFor(channel, labels.get(channel)), MEDIA_SUB);
+            ensure(to);
+            for (const file of readdirSync(from)) {
+                if (file.endsWith(".part")) { unlinkSync(join(from, file)); continue; }
+                const id = attachmentIdOf(file);
+                const name = id && file.startsWith(`${id}-`) ? mediaFileName(id, file.slice(id.length + 1), authors.get(id)) : file;
+                const dest = join(to, name);
+                if (existsSync(dest)) unlinkSync(join(from, file));
+                else renameSync(join(from, file), dest);
+            }
+            rmSync(from, { recursive: true, force: true });
+        }
+        if (!readdirSync(st.mediaDir).length) rmSync(st.mediaDir, { recursive: true, force: true });
+        log("médias rangés par conversation :", st.convRoot);
+    } catch (e) {
+        log("rangement des anciens médias impossible :", String(e));
+    }
+}
+
+function convDirs(st: Store) {
+    if (st.dirs) return st.dirs;
+    const dirs = st.dirs = new Map<string, string>();
+    migrateMedia(st);
+    if (existsSync(st.convRoot)) {
+        for (const d of readdirSync(st.convRoot)) {
+            const m = CONV_DIR.exec(d);
+            if (m) dirs.set(m[2], d);
+        }
+    }
+    return dirs;
+}
+
+/** Dossier d'une conversation ; renommé si le nom affiché a changé. */
+function convDir(st: Store, channelId: string, label?: string) {
+    const dirs = convDirs(st);
+    let name = dirs.get(channelId);
+    const wanted = dirNameFor(channelId, label);
+    if (name && label && wanted !== name && wanted !== `[${channelId}]`) {
+        try {
+            if (existsSync(join(st.convRoot, name))) renameSync(join(st.convRoot, name), join(st.convRoot, wanted));
+            name = wanted;
+            st.index = null;
+        } catch {
+            // Fichier en cours d'écriture dans le dossier : on renommera plus tard.
+        }
+    }
+    name ??= wanted;
+    dirs.set(channelId, name);
+    return join(st.convRoot, name);
+}
+
+/** Noms à jour des conversations (pseudo changé, groupe renommé) : seuls les dossiers existants sont renommés. */
+export function setLabels(_: IpcMainInvokeEvent, account: unknown, labels: unknown) {
+    if (!labels || typeof labels !== "object") return;
+    const st = storeOf(account);
+    const dirs = convDirs(st);
+    for (const [channelId, label] of Object.entries(labels as Record<string, unknown>)) {
+        if (ID.test(channelId) && typeof label === "string" && dirs.has(channelId)) convDir(st, channelId, label);
+    }
+}
+
 // ── Médias ───────────────────────────────────────────────────────────────────
 function mediaIndex(st: Store) {
     if (st.index) return st.index;
     const index = new Map<string, { rel: string; size: number; }>();
-    st.index = index;
-    if (!existsSync(st.mediaDir)) return index;
-    for (const channel of readdirSync(st.mediaDir)) {
-        if (!ID.test(channel)) continue;
-        for (const file of readdirSync(join(st.mediaDir, channel))) {
+    for (const dir of convDirs(st).values()) {
+        const folder = join(st.convRoot, dir, MEDIA_SUB);
+        if (!existsSync(folder)) continue;
+        for (const file of readdirSync(folder)) {
             if (file.endsWith(".part")) continue;
-            const id = file.split("-")[0];
-            if (!ID.test(id)) continue;
+            const id = attachmentIdOf(file);
+            if (!id) continue;
             try {
-                index.set(id, { rel: `${channel}/${file}`, size: statSync(join(st.mediaDir, channel, file)).size });
+                index.set(id, { rel: `${dir}/${MEDIA_SUB}/${file}`, size: statSync(join(folder, file)).size });
             } catch { /* fichier supprimé entre-temps */ }
         }
     }
+    st.index = index;
     return index;
-}
-
-function safeName(name: string) {
-    const clean = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/\s+/g, " ").trim().slice(0, 120);
-    return clean || "fichier";
 }
 
 interface QueuedJob extends MediaJob {
@@ -350,8 +483,9 @@ async function download(job: QueuedJob, attempt = 0): Promise<void> {
     const url = new URL(a.url);
     if (url.protocol !== "https:" || !MEDIA_HOSTS.has(url.hostname)) return;
 
-    const dir = join(st.mediaDir, channelId);
-    const final = join(dir, `${a.id}-${safeName(a.filename)}`);
+    const dir = join(convDir(st, channelId, job.channelName), MEDIA_SUB);
+    const fileName = mediaFileName(a.id, a.filename, job.authorName);
+    const final = join(dir, fileName);
     const part = `${final}.part`;
 
     try {
@@ -372,7 +506,7 @@ async function download(job: QueuedJob, attempt = 0): Promise<void> {
         ensure(dir);
         await pipeline(Readable.fromWeb(res.body as any), limit, createWriteStream(part));
         renameSync(part, final);
-        mediaIndex(st).set(a.id, { rel: `${channelId}/${a.id}-${safeName(a.filename)}`, size: bytes });
+        mediaIndex(st).set(a.id, { rel: `${basename(resolve(dir, ".."))}/${MEDIA_SUB}/${fileName}`, size: bytes });
     } catch (e) {
         try { if (existsSync(part)) unlinkSync(part); } catch { /* rien */ }
         // 404 / 403 : le fichier n'existe plus ; trop gros : inutile d'insister.
@@ -414,10 +548,10 @@ export function archiveMedia(_: IpcMainInvokeEvent, account: unknown, jobs: unkn
     pump();
 }
 
-/** Chemin absolu d'un média, seulement s'il est bien dans le dossier des médias du compte. */
+/** Chemin absolu d'un média, seulement s'il est bien dans le dossier des conversations du compte. */
 function mediaPath(account: unknown, rel: unknown) {
     if (typeof rel !== "string") return null;
-    const dir = storeOf(account).mediaDir;
+    const dir = storeOf(account).convRoot;
     const full = resolve(dir, rel);
     return full.startsWith(resolve(dir) + sep) && existsSync(full) ? full : null;
 }
@@ -428,9 +562,16 @@ export function readMedia(_: IpcMainInvokeEvent, account: unknown, rel: unknown)
     return readFileSync(path);
 }
 
+// « Ouvrir » lance le fichier avec le programme par défaut de Windows : pour
+// un .exe, .bat, .lnk… reçu en pièce jointe, ce serait l'exécuter. Seuls les
+// vrais médias et documents s'ouvrent ; le reste est montré dans son dossier.
+const OPENABLE = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|heic|mp4|webm|mov|mkv|avi|m4v|mp3|ogg|oga|opus|wav|flac|m4a|aac|pdf|txt|log|md|json|csv)$/i;
+
 export function openMedia(_: IpcMainInvokeEvent, account: unknown, rel: unknown) {
     const path = mediaPath(account, rel);
-    if (path) shell.openPath(path);
+    if (!path) return;
+    if (OPENABLE.test(path)) shell.openPath(path);
+    else shell.showItemInFolder(path);
 }
 
 export function showMedia(_: IpcMainInvokeEvent, account: unknown, rel: unknown) {
@@ -438,8 +579,90 @@ export function showMedia(_: IpcMainInvokeEvent, account: unknown, rel: unknown)
     if (path) shell.showItemInFolder(path);
 }
 
-export function openFolder(_: IpcMainInvokeEvent, account: unknown) {
-    const { root } = storeOf(account);
+// ── Sauvegardes de conversation (.html) ──────────────────────────────────────
+// Écrites par morceaux : un export avec ses médias peut peser des centaines de Mo.
+const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
+const backupsOpen = new Map<string, { fd: number; part: string; final: string; bytes: number; }>();
+
+const backupDir = (st: Store, channelId: string, label?: string) => join(convDir(st, channelId, label), BACKUP_SUB);
+
+export function backupBegin(_: IpcMainInvokeEvent, account: unknown, channelId: unknown, label: unknown, fileName: unknown) {
+    if (typeof channelId !== "string" || !ID.test(channelId) || typeof fileName !== "string") throw new Error("bad-backup");
+    const st = storeOf(account);
+    const dir = backupDir(st, channelId, typeof label === "string" ? label : undefined);
+    ensure(dir);
+    const base = safeName(fileName.replace(/\.html?$/i, ""), 100);
+    let final = join(dir, `${base}.html`);
+    for (let n = 2; existsSync(final); n++) final = join(dir, `${base} (${n}).html`);
+    const part = `${final}.part`;
+    const token = randomUUID();
+    backupsOpen.set(token, { fd: openSync(part, "w"), part, final, bytes: 0 });
+    return token;
+}
+
+export function backupChunk(_: IpcMainInvokeEvent, token: unknown, data: unknown) {
+    const b = backupsOpen.get(String(token));
+    if (!b || !(data instanceof Uint8Array)) throw new Error("bad-backup");
+    b.bytes += data.length;
+    if (b.bytes > MAX_BACKUP_BYTES) throw new Error("too-big");
+    writeSync(b.fd, data);
+}
+
+/** Termine (ou abandonne) une sauvegarde ; renvoie le nom du fichier. */
+export function backupEnd(_: IpcMainInvokeEvent, token: unknown, keep: unknown) {
+    const b = backupsOpen.get(String(token));
+    if (!b) return null;
+    backupsOpen.delete(String(token));
+    closeSync(b.fd);
+    if (keep !== true) {
+        try { unlinkSync(b.part); } catch { /* rien */ }
+        return null;
+    }
+    renameSync(b.part, b.final);
+    return basename(b.final);
+}
+
+export function listBackups(_: IpcMainInvokeEvent, account: unknown, channelId: unknown) {
+    if (typeof channelId !== "string" || !ID.test(channelId)) return [];
+    const st = storeOf(account);
+    if (!convDirs(st).has(channelId)) return [];
+    const dir = backupDir(st, channelId);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+        .filter(f => f.endsWith(".html"))
+        .map(name => {
+            const s = statSync(join(dir, name));
+            return { name, size: s.size, at: s.mtimeMs };
+        })
+        .sort((a, b) => b.at - a.at);
+}
+
+function backupPath(account: unknown, channelId: unknown, name: unknown) {
+    if (typeof channelId !== "string" || !ID.test(channelId) || typeof name !== "string" || name !== basename(name) || !name.endsWith(".html")) return null;
+    const st = storeOf(account);
+    if (!convDirs(st).has(channelId)) return null;
+    const full = join(backupDir(st, channelId), name);
+    return existsSync(full) ? full : null;
+}
+
+export function openBackup(_: IpcMainInvokeEvent, account: unknown, channelId: unknown, name: unknown) {
+    const path = backupPath(account, channelId, name);
+    if (path) shell.openPath(path);
+}
+
+export function showBackup(_: IpcMainInvokeEvent, account: unknown, channelId: unknown, name: unknown) {
+    const path = backupPath(account, channelId, name);
+    if (path) shell.showItemInFolder(path);
+}
+
+/** Dossier du compte, ou celui d'une conversation s'il existe. */
+export function openFolder(_: IpcMainInvokeEvent, account: unknown, channelId?: unknown) {
+    const st = storeOf(account);
+    const { root } = st;
+    if (typeof channelId === "string" && ID.test(channelId) && convDirs(st).has(channelId)) {
+        const dir = convDir(st, channelId);
+        if (existsSync(dir)) return void shell.openPath(dir);
+    }
     ensure(root);
     shell.openPath(root);
 }
@@ -494,7 +717,9 @@ export function claimLegacy(_: IpcMainInvokeEvent, account: unknown, channelIds:
             }
             movedMedia++;
         }
+        // Repris à l'ancien format : rangés par conversation à la prochaine lecture.
         st.index = null;
+        st.dirs = null;
         legacy.index = null;
     }
 
@@ -543,8 +768,15 @@ export function clearConversation(_: IpcMainInvokeEvent, account: unknown, chann
     for (const [id, s] of map) if (s.channelId === channelId) { map.delete(id); removed = true; }
     if (removed) compactSnapshots(st);
 
-    const dir = join(st.mediaDir, channelId);
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    // Médias effacés ; les sauvegardes .html de la conversation sont gardées.
+    if (convDirs(st).has(channelId)) {
+        const dir = convDir(st, channelId);
+        rmSync(join(dir, MEDIA_SUB), { recursive: true, force: true });
+        if (existsSync(dir) && !readdirSync(dir).length) {
+            rmSync(dir, { recursive: true, force: true });
+            st.dirs?.delete(channelId);
+        }
+    }
     st.index = null;
 }
 

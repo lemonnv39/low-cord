@@ -243,9 +243,32 @@ export function pushSnapshot(s: MessageSnapshot | null) {
     schedule(snaps.length >= 100);
 }
 
-export function pushMedia(channelId: string, messageId: string, attachments: LogAttachment[]) {
+/**
+ * Nom du dossier d'une conversation sur le disque : le pseudo de la personne
+ * (MP), le nom du groupe, ou « serveur #salon ». Undefined si Discord ne
+ * connaît pas (encore) la conversation : le dossier garde alors son nom.
+ */
+export function folderLabel(channelId: string): string | undefined {
+    const channel = ChannelStore.getChannel(channelId);
+    if (!channel) return undefined;
+    if (channel.guild_id) return `${GuildStore.getGuild(channel.guild_id)?.name ?? ""} #${channel.name ?? channelId}`.trim();
+    if (channel.isDM?.()) {
+        const recipient = channel.getRecipientId?.();
+        const user = recipient ? UserStore.getUser(recipient) : undefined;
+        return user?.username || user?.globalName || undefined;
+    }
+    return channel.name || (channel.recipients ?? []).map(id => UserStore.getUser(id)?.username).filter(Boolean).join(", ") || undefined;
+}
+
+/** Pseudo d'un auteur pour les noms de fichier (le @pseudo, stable et lisible). */
+const fileAuthor = (author?: { id?: string; username?: string; name?: string; }) =>
+    (author?.id && UserStore.getUser(author.id)?.username) || author?.username || author?.name || undefined;
+
+export function pushMedia(channelId: string, messageId: string, attachments: LogAttachment[], author?: { id?: string; username?: string; name?: string; }) {
     const account = currentAccount();
-    if (!account) return;
-    for (const attachment of attachments) media.push({ account, item: { channelId, messageId, attachment } });
-    if (attachments.length) schedule();
+    if (!account || !attachments.length) return;
+    const channelName = folderLabel(channelId);
+    const authorName = fileAuthor(author);
+    for (const attachment of attachments) media.push({ account, item: { channelId, messageId, attachment, channelName, authorName } });
+    schedule();
 }

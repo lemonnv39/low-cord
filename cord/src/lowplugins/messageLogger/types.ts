@@ -82,6 +82,16 @@ export interface MediaJob {
     channelId: string;
     messageId: string;
     attachment: LogAttachment;
+    /** nom lisible de la conversation (pseudo, groupe, serveur #salon) : nom du dossier */
+    channelName?: string;
+    /** pseudo de l'auteur : début du nom du fichier */
+    authorName?: string;
+}
+
+export interface BackupFile {
+    name: string;
+    size: number;
+    at: number;
 }
 
 export interface LogQuery {

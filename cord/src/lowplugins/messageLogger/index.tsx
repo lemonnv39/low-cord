@@ -34,13 +34,14 @@ import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findCssClassesLazy } from "@webpack";
-import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
+import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, PrivateChannelSortStore, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
-import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, logger, Native, pushEvent, pushMedia, pushSnapshot, recentSnapshot, rememberSnapshot, snapshotOf } from "./capture";
+import { attachmentsOf, currentAccount, eventFromMessage, eventFromSnapshot, flush, folderLabel, logger, Native, pushEvent, pushMedia, pushSnapshot, recentSnapshot, rememberSnapshot, snapshotOf } from "./capture";
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
 import { openHistoryModal } from "./HistoryModal";
 import { JournalPanel, openJournal } from "./JournalModal";
+import { noteDelete, preloadUnread, setShieldHooks } from "./shield";
 import type { LogEvent } from "./types";
 
 interface MLMessage extends Message {
@@ -127,6 +128,21 @@ const settings = definePluginSettings({
         default: 30,
         onChange: () => configureNative(),
     },
+    shield: {
+        type: OptionType.BOOLEAN,
+        description: "Anti-clear: when someone starts deleting their messages in a row in a DM or group, immediately copy the rest of the conversation before it disappears",
+        default: true,
+    },
+    shieldMax: {
+        type: OptionType.NUMBER,
+        description: "Anti-clear: maximum number of messages copied per conversation",
+        default: 20000,
+    },
+    preloadUnread: {
+        type: OptionType.BOOLEAN,
+        description: "On startup, copy the latest messages of unread DMs (keeps a message sent while Discord was closed, even if it is deleted before you open the conversation)",
+        default: true,
+    },
     ignoreBots: {
         type: OptionType.BOOLEAN,
         description: "Whether to ignore messages by bots",
@@ -181,6 +197,22 @@ async function claimLegacyLogs() {
         if (mine.length) await Native.claimLegacy(account, mine);
     } catch (e) {
         logger.error("Répartition des anciens logs impossible", e);
+    }
+}
+
+/** Dossiers du journal renommés d'après le pseudo actuel de chaque conversation privée. */
+function syncFolderNames() {
+    const account = currentAccount();
+    if (!account || !Native) return;
+    try {
+        const labels: Record<string, string> = {};
+        for (const id of PrivateChannelSortStore.getPrivateChannelIds?.() ?? []) {
+            const label = folderLabel(id);
+            if (label) labels[id] = label;
+        }
+        Native.setLabels(account, labels).catch(() => null);
+    } catch (e) {
+        logger.error("Noms des dossiers non mis à jour", e);
     }
 }
 
@@ -253,7 +285,7 @@ function logDeleted(msg: any, bulk: boolean) {
         pushEvent(ev);
         rememberDelete(ev);
         // Sauvetage : on tente aussitôt de télécharger ses pièces jointes.
-        if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
+        if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments, ev.author);
     } catch (e) {
         logger.error("Suppression non enregistrée", e);
     }
@@ -275,20 +307,20 @@ function logRemovedAttachments(msg: any, removed: any[]) {
     try {
         const ev = eventFromMessage("attachments", msg, { attachments: attachmentsOf({ attachments: removed }) });
         pushEvent(ev);
-        if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
+        if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments, ev.author);
     } catch (e) {
         logger.error("Pièces jointes retirées non enregistrées", e);
     }
 }
 
 /** Message reçu ou chargé : copie en mémoire (tous les salons), copie des MP sur disque, archivage des médias. */
-function capture(msg: any, guildIdHint?: string | null) {
+function capture(msg: any, guildIdHint?: string | null, media = true) {
     if (!msg?.id || !msg.channel_id) return;
     if (settings.store.logDeletes && !isIgnoredSource(msg)) rememberSnapshot(snapshotOf(msg));
     if (settings.store.journal && isPrivate(msg.channel_id, guildIdHint)) pushSnapshot(snapshotOf(msg));
     if (archiveWanted(msg.channel_id, guildIdHint) && !isIgnoredSource(msg)) {
         const list = attachmentsOf(msg);
-        if (list.length) pushMedia(msg.channel_id, msg.id, list);
+        if (media && list.length) pushMedia(msg.channel_id, msg.id, list, msg.author);
     }
 }
 
@@ -313,7 +345,7 @@ async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
         rememberDelete(ev);
         if (toDisk) {
             pushEvent(ev);
-            if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
+            if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments, ev.author);
         }
     }
 
@@ -329,7 +361,7 @@ async function rescueDeletes(channelId: string, ids: string[], bulk: boolean) {
                 const ev = eventFromSnapshot("delete", snap, bulk ? { bulk: true } : {});
                 pushEvent(ev);
                 rememberDelete(ev);
-                if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments);
+                if (settings.store.archiveMedia !== "off") pushMedia(ev.channelId, ev.messageId, ev.attachments, ev.author);
             } else {
                 // Jamais vu par low-cord (reçu avant son installation, ou expiré).
                 pushEvent(eventFromMessage("delete", { id, channel_id: channelId, content: "" }, { partial: true, bulk: bulk || undefined }));
@@ -643,7 +675,17 @@ export default definePlugin({
     start() {
         addDeleteStyle();
         configureNative();
+        setShieldHooks({
+            active: () => isPluginEnabled("MessageLogger"),
+            shield: () => settings.store.shield && settings.store.logDeletes,
+            preload: () => settings.store.preloadUnread && settings.store.logDeletes,
+            maxMessages: () => Number(settings.store.shieldMax) || 20000,
+            isPrivate: channelId => isPrivate(channelId),
+            capture: (msg, media) => capture(msg, msg?.guild_id, media),
+        });
         void claimLegacyLogs();
+        syncFolderNames();
+        void preloadUnread();
         void restoreHistory(SelectedChannelStore.getChannelId());
         // Fermeture de Discord : on écrit ce qui attend encore (au plus 1 s).
         window.addEventListener("beforeunload", flush);
@@ -652,6 +694,7 @@ export default definePlugin({
     stop() {
         disableStyle(textStyle);
         disableStyle(overlayStyle);
+        setShieldHooks(null);
         window.removeEventListener("beforeunload", flush);
         flush();
     },
@@ -663,6 +706,8 @@ export default definePlugin({
             flush();
             journalDeletes.clear();
             void claimLegacyLogs();
+            syncFolderNames();
+            void preloadUnread();
         },
         MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic?: boolean; }) {
             if (optimistic) return;
@@ -690,6 +735,8 @@ export default definePlugin({
         MESSAGE_DELETE({ id, channelId, mlDeleted, local }: { id: string; channelId: string; mlDeleted?: boolean; local?: boolean; }) {
             // local : retrait par Discord d'un message jamais envoyé
             if (mlDeleted || local || !id || !channelId) return;
+            // Série de suppressions dans un MP : le bouclier copie le reste de la conversation.
+            noteDelete(channelId, recentSnapshot(id)?.author.id ?? MessageStore.getMessage(channelId, id)?.author?.id);
             setTimeout(() => rescueDeletes(channelId, [id], false), 50);
         },
         MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {

@@ -493,3 +493,16 @@
 .lc-mc-list::-webkit-scrollbar-button {
     display: none;
 }
+
+.lc-mc-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-link);
+    font: inherit;
+    cursor: pointer;
+}
+
+.lc-mc-link:hover {
+    text-decoration: underline;
+}

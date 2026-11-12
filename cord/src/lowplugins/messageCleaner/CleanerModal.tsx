@@ -15,7 +15,8 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { Alerts, ChannelStore, GuildStore, Modal, openModal, RelationshipStore, useEffect, useMemo, UserStore, useState } from "@webpack/common";
 
-import { clearHistory, enqueue, exportHistory, RunRecord, state, stop, subscribe, Target, TargetKind } from "./engine";
+import { openBackup, showBackup } from "./backup";
+import { clearHistory, enqueue, exportHistory, isBackupWanted, RunRecord, state, stop, subscribe, Target, TargetKind } from "./engine";
 
 const cl = classNameFactory("lc-mc-");
 
@@ -88,6 +89,7 @@ export function confirmClean(targets: Target[], onDone?: () => void) {
             <div className={cl("confirm")}>
                 <p>{t("mc.confirmBody", { names })}</p>
                 <p className={cl("muted")}>{t("mc.confirmNote")}</p>
+                {isBackupWanted() && targets.some(x => x.kind === "dm" || x.kind === "group" || x.kind === "user") && <p className={cl("muted")}>{t("mc.confirmBackup")}</p>}
             </div>
         ),
         confirmText: t("mc.confirmGo"),
@@ -123,9 +125,13 @@ function Progress() {
     const run = s.current;
     if (!s.running && !run) return null;
 
+    const backing = run?.phase === "backup";
+    const bp = run?.backupProgress;
     const done = run ? run.deleted + run.gone : 0;
     const total = run?.total && run.total > 0 ? Math.max(run.total, done) : undefined;
-    const pct = total ? Math.min(100, (done / total) * 100) : undefined;
+    const pct = backing
+        ? (bp?.phase === "media" && bp.mediaTotal ? Math.min(100, (bp.mediaDone / bp.mediaTotal) * 100) : undefined)
+        : total ? Math.min(100, (done / total) * 100) : undefined;
     const elapsed = run ? Date.now() - run.startedAt : 0;
     const eta = run && total && done > 3 ? (elapsed / done) * (total - done) : undefined;
 
@@ -134,14 +140,23 @@ function Progress() {
             <div className={cl("progress-head")}>
                 <div className={cl("progress-title")}>
                     <span className={cl("pulse")} />
-                    {run ? t("mc.cleaning", { name: run.target.name }) : t("mc.preparing")}
+                    {run ? t(backing ? "mc.backingUp" : "mc.cleaning", { name: run.target.name }) : t("mc.preparing")}
                 </div>
                 <button className={cl("btn", "btn-stop")} onClick={stop}>{t("mc.stop")}</button>
             </div>
             <div className={cl("bar")}>
                 <div className={cl("bar-fill", pct == null && "bar-indeterminate")} style={pct != null ? { width: `${pct}%` } : undefined} />
             </div>
-            {run && (
+            {run && backing && (
+                <div className={cl("stats")}>
+                    <span><b>{(bp?.messages ?? 0).toLocaleString()}</b> {t("mc.backupMessages")}</span>
+                    {!!bp?.mediaTotal && <span><b>{bp.mediaDone}/{bp.mediaTotal}</b> {t("mc.backupMedia")}</span>}
+                    <span className={cl("spacer")} />
+                    <span className={cl("muted")}>{t("mc.backupHint")}</span>
+                </div>
+            )}
+            {run && !backing && run.backupFile && <div className={cl("muted", "queue")}>{t("mc.backupSaved", { count: run.backupCount ?? 0 })}</div>}
+            {run && !backing && (
                 <div className={cl("stats")}>
                     <span><b>{run.deleted}</b>{total ? ` / ~${total}` : ""} {t("mc.deleted")}</span>
                     {run.gone > 0 && <span>{run.gone} {t("mc.gone")}</span>}
@@ -293,6 +308,13 @@ function History() {
                                 {r.failed ? ` · ${r.failed} ${t("mc.failed")}` : ""}
                                 {r.error ? ` · ${r.error}` : ""}
                             </span>
+                            {r.backupFile && r.channelId && (
+                                <span className={cl("row-sub")}>
+                                    {t("mc.backupSaved", { count: r.backupCount ?? 0 })}
+                                    {" · "}<button className={cl("link")} onClick={() => openBackup(r.channelId!, r.backupFile!)}>{t("mc.backupOpen")}</button>
+                                    {" · "}<button className={cl("link")} onClick={() => showBackup(r.channelId!, r.backupFile!)}>{t("mc.backupShow")}</button>
+                                </span>
+                            )}
                         </div>
                     </div>
                 ))}

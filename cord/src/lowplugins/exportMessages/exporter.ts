@@ -74,13 +74,14 @@ async function api(url: string, query: Record<string, any> | undefined, cancel: 
     }
 }
 
-async function fetchAllMessages(channelId: string, cancel: { canceled: boolean; }, onPage: (count: number) => void) {
+async function fetchAllMessages(channelId: string, cancel: { canceled: boolean; }, onPage: (count: number) => void, onMessages?: (page: any[]) => void) {
     const all: any[] = [];
     let before: string | undefined;
     for (; ;) {
         const page = await api(`/channels/${channelId}/messages`, { limit: 100, ...(before ? { before } : {}) }, cancel);
         if (!Array.isArray(page) || !page.length) break;
         all.push(...page);
+        try { onMessages?.(page); } catch { /* l'export continue */ }
         before = page[page.length - 1].id;
         onPage(all.length);
         if (page.length < 100) break;
@@ -297,6 +298,8 @@ export async function exportConversation(
     opts: ExportOptions,
     cancel: { canceled: boolean; },
     onProgress: (p: ExportProgress) => void,
+    /** reçoit chaque page de messages bruts dès sa lecture (sauvegarde avant nettoyage) */
+    onMessages?: (page: any[]) => void,
 ): Promise<{ filename: string; data: Uint8Array; skipped: number; count: number; }> {
     const progress: ExportProgress = { phase: "messages", messages: 0, mediaDone: 0, mediaTotal: 0, bytes: 0, skipped: 0 };
     const emit = () => onProgress({ ...progress });
@@ -307,7 +310,7 @@ export async function exportConversation(
     if (!channel || !me) throw new Error("channel");
 
     // 1. Tout l'historique
-    const raw = await fetchAllMessages(channelId, cancel, n => { progress.messages = n; emit(); });
+    const raw = await fetchAllMessages(channelId, cancel, n => { progress.messages = n; emit(); }, onMessages);
 
     // 2. Participants (auteurs, destinataires, mentionnés)
     const users = new Map<string, ExportUser>();

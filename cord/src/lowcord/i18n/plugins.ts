@@ -180,12 +180,16 @@ export const PLUGIN_STRINGS: Record<Lang, Record<string, PluginStrings>> = {
                 ignoreUsers: { name: "Utilisateurs ignorés", description: "ID séparés par des virgules" },
                 ignoreChannels: { name: "Salons ignorés", description: "ID séparés par des virgules" },
                 ignoreGuilds: { name: "Serveurs ignorés", description: "ID séparés par des virgules" },
+                shield: { name: "Anti-clear", description: "Quand quelqu'un se met à supprimer ses messages à la chaîne dans un MP ou un groupe, low-cord copie aussitôt le reste de la conversation avant qu'il ne disparaisse" },
+                shieldMax: { name: "Anti-clear : messages max", description: "Nombre maximum de messages copiés par conversation quand l'anti-clear se déclenche" },
+                preloadUnread: { name: "MP non lus au démarrage", description: "Au démarrage, copie les derniers messages des MP non lus : un message envoyé pendant que Discord était fermé reste dans le journal même s'il est supprimé avant que tu n'ouvres la conversation" },
             },
         },
         MessageCleaner: {
             description: "Supprime tes propres messages en masse : MP, groupes, serveurs, salons. Bouton dans la barre du haut et clic droit",
             settings: {
                 delayMs: { name: "Pause entre deux suppressions (ms)", description: "Plus bas = plus rapide. Si c'est trop rapide, Discord ralentit et low-cord s'adapte tout seul" },
+                backupBeforeClean: { name: "Sauvegarde avant nettoyage", description: "Avant de vider un MP ou un groupe, enregistre toute la conversation en .html dans son dossier du journal MessageLogger (réglages des médias : ceux d'ExportMessages)" },
             },
         },
         ClearFriends: {

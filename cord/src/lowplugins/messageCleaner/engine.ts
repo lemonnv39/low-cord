@@ -12,8 +12,13 @@
 // invisibles restaient dans la conversation.
 
 import * as DataStore from "@api/DataStore";
+import { t } from "@lowcord/i18n";
+import { CanceledError, ExportProgress } from "@lowplugins/exportMessages/exporter";
+import { markOwnCleaning, protectMessages } from "@lowplugins/messageLogger/shield";
 import { Logger } from "@utils/Logger";
 import { RestAPI, UserStore } from "@webpack/common";
+
+import { backupConversation, canBackup } from "./backup";
 
 export const logger = new Logger("MessageCleaner");
 
@@ -42,6 +47,15 @@ export interface RunRecord {
     failed: number;
     status: "running" | "done" | "stopped" | "error";
     error?: string;
+    /** salon réellement nettoyé (MP, groupe, salon) */
+    channelId?: string;
+    /** étape en cours : sauvegarde de la conversation, puis suppression */
+    phase?: "backup" | "clean";
+    /** avancement de la sauvegarde (pas enregistré) */
+    backupProgress?: ExportProgress;
+    /** fichier .html écrit avant le nettoyage, dans le dossier de la conversation du journal */
+    backupFile?: string;
+    backupCount?: number;
 }
 
 // ── Réglage de vitesse (mis à jour depuis les réglages du plugin) ────────────
@@ -49,6 +63,13 @@ let baseDelay = 700;
 export function setBaseDelay(ms: number) {
     baseDelay = Math.min(5000, Math.max(250, Math.round(ms) || 700));
 }
+
+/** Sauvegarde .html d'un MP / groupe avant de le vider. */
+let backupWanted = true;
+export function setBackupWanted(on: boolean) {
+    backupWanted = on;
+}
+export const isBackupWanted = () => backupWanted;
 
 // ── État partagé avec l'interface ────────────────────────────────────────────
 export const state = {
@@ -91,7 +112,8 @@ export async function loadHistory() {
 
 function saveHistory() {
     if (!historyAccount) return;
-    DataStore.set(historyKey(historyAccount), state.history.slice(0, MAX_HISTORY)).catch(e => logger.error(e));
+    const list = state.history.slice(0, MAX_HISTORY).map(({ backupProgress, ...r }) => r);
+    DataStore.set(historyKey(historyAccount), list).catch(e => logger.error(e));
 }
 
 export function clearHistory() {
@@ -104,6 +126,8 @@ export function clearHistory() {
 // ── Arrêt et attente interruptible ───────────────────────────────────────────
 let stopRequested = false;
 let wake: (() => void) | null = null;
+/** annulation de la sauvegarde en cours */
+let backupCancel: { canceled: boolean; } | null = null;
 
 function sleep(ms: number) {
     return new Promise<void>(resolve => {
@@ -119,6 +143,7 @@ function sleep(ms: number) {
 
 export function stop() {
     stopRequested = true;
+    if (backupCancel) backupCancel.canceled = true;
     state.queue = [];
     wake?.();
     emit();
@@ -220,6 +245,8 @@ async function cleanChannel(channelId: string, run: RunRecord, me: string) {
         const res: any = await request(() => RestAPI.get({ url }), "Lecture de l'historique");
         const page: any[] = Array.isArray(res?.body) ? res.body : [];
         if (!page.length) return;
+        // Le journal (MessageLogger) garde une copie de la page AVANT toute suppression.
+        protectMessages(channelId, page, me);
 
         for (const msg of page) {
             if (stopRequested) throw new StopError();
@@ -263,6 +290,7 @@ async function cleanServer(guildId: string, run: RunRecord, me: string) {
             continue;
         }
         emptyPages = 0;
+        for (const msg of hits) protectMessages(msg.channel_id, [msg], me);
 
         for (const msg of hits) {
             if (stopRequested) throw new StopError();
@@ -300,6 +328,34 @@ async function runTarget(target: Target) {
     try {
         if (!me) throw new Error("not-logged-in");
         const channelId = target.kind === "server" ? null : target.kind === "user" ? await openDm(target.id) : target.id;
+        run.channelId = channelId ?? undefined;
+        if (channelId) markOwnCleaning(channelId, true);
+
+        // MP ou groupe : sauvegarde complète avant de supprimer quoi que ce soit.
+        if (backupWanted && channelId && canBackup(channelId)) {
+            run.phase = "backup";
+            emit();
+            backupCancel = { canceled: false };
+            try {
+                const saved = await backupConversation(channelId, backupCancel, p => { run.backupProgress = p; emit(); });
+                if (saved) {
+                    run.backupFile = saved.file;
+                    run.backupCount = saved.count;
+                }
+            } catch (e) {
+                if (e instanceof CanceledError || backupCancel.canceled || stopRequested) throw new StopError();
+                // Pas de sauvegarde = pas de suppression : rien n'est perdu.
+                logger.error("Sauvegarde avant nettoyage impossible", e);
+                throw new Error(t("mc.backupFailed"));
+            } finally {
+                backupCancel = null;
+                run.backupProgress = undefined;
+            }
+        }
+        run.phase = "clean";
+        run.startedAt = Date.now();
+        emit();
+
         run.total = await estimate(target, channelId, me);
         emit();
 
@@ -313,6 +369,8 @@ async function runTarget(target: Target) {
             run.error = e?.body?.message ?? e?.message ?? String(e?.status ?? e);
         }
     } finally {
+        if (run.channelId) markOwnCleaning(run.channelId, false);
+        run.phase = undefined;
         run.endedAt = Date.now();
         state.current = null;
         saveHistory();

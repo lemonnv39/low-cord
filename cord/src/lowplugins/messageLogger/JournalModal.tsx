@@ -20,7 +20,7 @@ import { RenderModalProps } from "@vencord/discord-types";
 import { Alerts, Modal, openModal, Parser, showToast, useEffect, useMemo, useRef, UserStore, useState } from "@webpack/common";
 
 import { currentAccount, Native } from "./capture";
-import type { ConversationSummary, LogAttachment, LogEvent, LogEventType, LogQueryResult, LogStats } from "./types";
+import type { BackupFile, ConversationSummary, LogAttachment, LogEvent, LogEventType, LogQueryResult, LogStats } from "./types";
 
 const cl = classNameFactory("vc-mlj-");
 /** Compte connecté : chaque compte a son propre journal. */
@@ -295,6 +295,16 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
         return out;
     }, [result]);
 
+    // Sauvegardes .html de la conversation choisie (faites par Message Cleaner avant un nettoyage).
+    const [backups, setBackups] = useState<BackupFile[]>([]);
+    useEffect(() => {
+        setBackups([]);
+        if (!channelId || !Native) return;
+        let alive = true;
+        Native.listBackups(acc(), channelId).then(list => alive && setBackups(list)).catch(() => null);
+        return () => { alive = false; };
+    }, [channelId, refresh]);
+
     const current = convs.find(c => c.channelId === channelId);
     const authorName = authorId && (result?.items.find(e => e.author?.id === authorId)?.author?.name ?? UserStore.getUser(authorId)?.username ?? authorId);
 
@@ -398,8 +408,19 @@ function JournalModal({ modalProps, initial }: { modalProps: RenderModalProps; i
                         )}
                     </div>
 
+                    {channelId && backups.length > 0 && (
+                        <div className={cl("backups")} title={t("ml.j.backupHint")}>
+                            <span className={cl("muted")}>{t("ml.j.backups")}</span>
+                            {backups.slice(0, 8).map(b => (
+                                <button key={b.name} className={cl("chip")} onClick={() => Native?.openBackup(acc(), channelId, b.name)} title={`${b.name} · ${formatBytes(b.size)}`}>
+                                    {dateTime(b.at)} · {formatBytes(b.size)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     <div className={cl("footer")}>
-                        <button className={cl("link")} onClick={() => Native?.openFolder(acc())}><FolderIcon width={14} height={14} /> {t("ml.j.openFolder")}</button>
+                        <button className={cl("link")} onClick={() => Native?.openFolder(acc(), channelId)}><FolderIcon width={14} height={14} /> {t(channelId ? "ml.j.openConvFolder" : "ml.j.openFolder")}</button>
                         {current && <button className={cl("link", "link-danger")} onClick={clearCurrent}><DeleteIcon width={14} height={14} /> {t("ml.j.clearConv")}</button>}
                     </div>
                 </section>

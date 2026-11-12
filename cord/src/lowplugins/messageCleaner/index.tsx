@@ -22,7 +22,7 @@ import { ChannelStore, Menu, UserStore } from "@webpack/common";
 import type { ReactElement } from "react";
 
 import { confirmClean, openCleaner, useEngine } from "./CleanerModal";
-import { loadHistory, setBaseDelay, state, stop, Target } from "./engine";
+import { loadHistory, setBackupWanted, setBaseDelay, state, stop, Target } from "./engine";
 
 const settings = definePluginSettings({
     delayMs: {
@@ -30,6 +30,12 @@ const settings = definePluginSettings({
         description: "Delay between two deletions (ms). Lower is faster; Discord slows you down if it is too fast.",
         default: 700,
         onChange: (v: number) => setBaseDelay(v),
+    },
+    backupBeforeClean: {
+        type: OptionType.BOOLEAN,
+        description: "Before cleaning a DM or group, save the whole conversation as an .html file in its MessageLogger folder",
+        default: true,
+        onChange: (v: boolean) => setBackupWanted(v),
     },
 });
 
@@ -133,6 +139,7 @@ export default definePlugin({
 
     start() {
         setBaseDelay(settings.store.delayMs);
+        setBackupWanted(settings.store.backupBeforeClean);
         loadHistory();
         addHeaderBarButton("MessageCleaner", HeaderButton, 7);
     },
