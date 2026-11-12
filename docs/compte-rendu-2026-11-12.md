@@ -3,7 +3,7 @@
 Sauvegarde de l'état d'avant : tag `sauvegarde-avant-fable` et branche `sauvegarde/avant-fable`.
 Pour revenir en arrière : `git reset --hard sauvegarde-avant-fable`.
 
-Cinq commits, dans l'ordre : `b04766a2`, `03485bc4`, `4e4b3917`, `47cadf79`, puis ce compte rendu.
+Six commits de code, dans l'ordre : `b04766a2`, `03485bc4`, `4e4b3917`, `47cadf79`, `30be28f3`, plus ce compte rendu.
 
 ## Avant / après
 
@@ -25,6 +25,8 @@ Cinq commits, dans l'ordre : `b04766a2`, `03485bc4`, `4e4b3917`, `47cadf79`, pui
 | **low-sound — volume** | Volume + limiteur à relâchement fixe (pompage sur les basses). | Réglage « Puissance » (cible LUFS) et limiteur à deux vitesses. |
 | **low-sound — qualité** | Conversion 44,1 → 48 kHz par interpolation linéaire. | Filtre sinc : aigus intacts, pas de repliement. |
 | **low-sound — filtres** | Coupe-bas 12 dB/oct. | Pente 12 / 24 / 48 dB/oct, coupe-haut, affichage LUFS. |
+| **Mini APO — préampli auto (nouveau)** | Le préampli se réglait à la main, au jugé. | Le point le plus fort du set est affiché (« pic +8,0 dB ») ; « Préampli auto » le ramène juste sous 0 dB. |
+| **Veille des patches (nouveau)** | Un patch cassé par une mise à jour de Discord passait inaperçu : c'est arrivé à 3 patches. | Un workflow GitHub rejoue tous les patches sur le build actuel de Discord, 3 fois par jour. S'il échoue, GitHub t'envoie un e-mail. |
 
 ## Optimisation interne de Discord (onglet low-cord)
 
@@ -47,7 +49,9 @@ Le « Mode optimisé » active tout. Rien n'est appliqué tant que le réglage e
 
 ## Pas fait
 
-- Les ajouts « carte blanche » au-delà de ceux listés (anti-clear, MP non lus, retour arrière, bouton mémoire).
-- Blocage des quêtes et promotions de Discord (étudié, pas écrit).
-- Revue en profondeur de MultiInstance, TokenImporter et AutoCorrect (lus en partie, rien d'alarmant trouvé).
-- Améliorations du Mini APO.
+- Blocage des quêtes et promotions de Discord : étudié, pas écrit (le code de Discord autour des quêtes est trop mouvant pour un patch fiable sans test en vrai).
+- MultiInstance, TokenImporter et AutoCorrect ont été relus en entier : rien à corriger (tokens chiffrés par Windows, téléchargements à empreinte fixe, fenêtres cloisonnées). MultiInstance garde des noms internes « abyss-mi » (dossier de session, journal) : les renommer déconnecterait les fenêtres déjà ouvertes, donc laissés tels quels.
+
+## Mes ajouts « carte blanche »
+
+Anti-clear, copie des MP non lus au démarrage, retour arrière automatique des mises à jour, contrôle d'intégrité des mises à jour, bouton « Libérer la mémoire », préampli auto du Mini APO, veille automatique des patches.
