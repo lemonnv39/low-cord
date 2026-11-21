@@ -22,6 +22,7 @@ export const settings = definePluginSettings({
     excluded: { type: OptionType.CUSTOM, default: [] as string[] },
     ghostWatch: { type: OptionType.BOOLEAN, description: "", default: true, hidden: true },
     ghostToast: { type: OptionType.BOOLEAN, description: "", default: true, hidden: true },
+    ghostDms: { type: OptionType.BOOLEAN, description: "", default: true, hidden: true },
 });
 
 export const currentOptions = (): Options => {

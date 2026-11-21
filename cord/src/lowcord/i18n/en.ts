@@ -746,7 +746,7 @@ export const en = {
     "pf.tabRuns": "Runs ({n})",
     "pf.clear": "Clear",
     "pf.ghostWatch": "Detect ghost pings",
-    "pf.ghostWatchHint": "Someone mentions you then deletes the message (or removes the mention) within 15 minutes.",
+    "pf.ghostWatchHint": "Someone mentions you then deletes the message (or removes the mention) within the hour. Caught even in a channel you are not looking at, and checked again when Discord restarts.",
     "pf.ghostToast": "Tell me right away",
     "pf.ghostToastText": "Ghost ping from {author} ({where})",
     "pf.noGhosts": "No ghost ping detected.",
@@ -837,4 +837,7 @@ export const en = {
     "opt.trimNow": "Free memory",
     "opt.trimDone": "{mb} MB freed",
     "opt.trimNothing": "Nothing more to free right now",
+    "pf.ghostDms": "Also count direct messages",
+    "pf.ghostDmsHint": "A direct or group message deleted less than 5 minutes after it was sent.",
+    "pf.g.dm": "DM",
 } satisfies Record<keyof typeof fr, string>;

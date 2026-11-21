@@ -750,7 +750,7 @@ export const fr = {
     "pf.tabRuns": "Applications ({n})",
     "pf.clear": "Vider",
     "pf.ghostWatch": "Repérer les ghost pings",
-    "pf.ghostWatchHint": "Quelqu'un te mentionne puis supprime son message (ou retire la mention) dans les 15 minutes.",
+    "pf.ghostWatchHint": "Quelqu'un te mentionne puis supprime son message (ou retire la mention) dans l'heure. Repéré même dans un salon que tu ne regardes pas, et revérifié au redémarrage de Discord.",
     "pf.ghostToast": "Me prévenir sur le moment",
     "pf.ghostToastText": "Ghost ping de {author} ({where})",
     "pf.noGhosts": "Aucun ghost ping repéré.",
@@ -841,4 +841,7 @@ export const fr = {
     "opt.trimNow": "Libérer la mémoire",
     "opt.trimDone": "{mb} Mo libérés",
     "opt.trimNothing": "Rien de plus à libérer pour l'instant",
+    "pf.ghostDms": "Compter aussi les messages privés",
+    "pf.ghostDmsHint": "Un message privé ou de groupe supprimé moins de 5 minutes après son envoi.",
+    "pf.g.dm": "MP",
 } as const;

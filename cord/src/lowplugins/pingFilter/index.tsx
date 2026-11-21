@@ -34,8 +34,12 @@ export default definePlugin({
 
     start() {
         loadLogs();
-        startGhostWatch(() => settings.store.ghostWatch, g => {
-            if (settings.store.ghostToast) showToast({ text: t("pf.ghostToastText", { author: g.author, where: g.guild ? `${g.guild} · ${g.channel}` : g.channel }) });
+        startGhostWatch({
+            on: () => settings.store.ghostWatch,
+            dms: () => settings.store.ghostDms,
+            notify: g => {
+                if (settings.store.ghostToast) showToast({ text: t("pf.ghostToastText", { author: g.author, where: g.guild ? `${g.guild} · ${g.channel}` : g.channel }) });
+            },
         });
     },
 

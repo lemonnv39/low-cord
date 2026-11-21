@@ -111,7 +111,7 @@ function GhostRow({ g }: { g: GhostLog; }) {
             <div className="lc-pf-log-head">
                 <b>{g.author}</b>
                 <span className={`lc-pf-tag lc-pf-tag-${g.kind}`}>{t(g.kind === "delete" ? "pf.g.deleted" : "pf.g.edited")}</span>
-                <span className="lc-pf-tag">{t(g.target === "me" ? "pf.g.me" : g.target === "role" ? "pf.g.role" : "pf.g.everyone")}</span>
+                <span className="lc-pf-tag">{t(g.target === "me" ? "pf.g.me" : g.target === "role" ? "pf.g.role" : g.target === "dm" ? "pf.g.dm" : "pf.g.everyone")}</span>
                 <span className="lc-pf-muted">{when(g.at)}</span>
             </div>
             <button className="lc-pf-link" onClick={go}>{g.guild ? `${g.guild} · ` : ""}{g.channel}</button>
@@ -123,7 +123,7 @@ function GhostRow({ g }: { g: GhostLog; }) {
 function Journal() {
     useLang();
     const { runs, ghosts } = useLogs();
-    const { ghostWatch, ghostToast } = settings.use(["ghostWatch", "ghostToast"]);
+    const { ghostWatch, ghostToast, ghostDms } = settings.use(["ghostWatch", "ghostToast", "ghostDms"]);
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState<"ghosts" | "runs">("ghosts");
     return (
@@ -145,6 +145,7 @@ function Journal() {
                         <>
                             <Check checked={ghostWatch} onChange={v => { settings.store.ghostWatch = v; }} label={t("pf.ghostWatch")} hint={t("pf.ghostWatchHint")} />
                             <Check checked={ghostToast} disabled={!ghostWatch} onChange={v => { settings.store.ghostToast = v; }} label={t("pf.ghostToast")} />
+                    <Check checked={ghostDms} disabled={!ghostWatch} onChange={v => { settings.store.ghostDms = v; }} label={t("pf.ghostDms")} hint={t("pf.ghostDmsHint")} />
                             {ghosts.length
                                 ? <ul className="lc-pf-log">{ghosts.map((g, i) => <GhostRow key={i} g={g} />)}</ul>
                                 : <div className="lc-pf-muted lc-pf-empty">{t("pf.noGhosts")}</div>}
