@@ -108,6 +108,10 @@ export default {
     },
 
     /** low-cord : mises à jour automatiques (voir src/main/lowcordUpdater.ts). */
+    /** low-cord : journal de performances (voir src/main/lowcordPerf.ts). */
+    lowcordPerf: {
+        log: (kind: string, text: string) => ipcRenderer.send(IpcEvents.LOWCORD_PERF_LOG, kind, text),
+    },
     lowcordUpdate: {
         /** `force` : ignorer l'état vérifié il y a moins d'une minute. */
         check: (force?: boolean) => invoke<UpdateStatus>(IpcEvents.LOWCORD_UPDATE_CHECK, force),

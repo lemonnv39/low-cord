@@ -22,6 +22,7 @@ import "./settings";
 import "./userPlugins";
 import "./lowcordUpdater";
 import "./lowcordOptimize";
+import "./lowcordPerf";
 import "./lowSound";
 
 import { debounce } from "@shared/debounce";

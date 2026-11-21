@@ -151,6 +151,7 @@ window.VencordNative = {
         openFolder: async () => "",
     },
     // Mises à jour automatiques : uniquement sur l'application de bureau.
+    lowcordPerf: { log: () => { } },
     lowcordUpdate: {
         check: async () => ({ enabled: false, ready: false }),
         restart: async () => ({ ok: false }),

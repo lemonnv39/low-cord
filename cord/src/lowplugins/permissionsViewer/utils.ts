@@ -21,7 +21,7 @@ import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { Guild, GuildMember, Role } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
-import { extractAndLoadChunksLazy, findByPropsLazy } from "@webpack";
+import { DefaultExtractAndLoadChunksRegex, extractAndLoadChunksLazy, findByPropsLazy } from "@webpack";
 import { GuildRoleStore, i18n, PermissionsBits } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from ".";
@@ -29,7 +29,13 @@ import { PermissionsSortOrder, settings } from ".";
 export const logger = new Logger("PermissionsViewer");
 export const cl = classNameFactory("vc-permviewer-");
 
-export const loadGetGuildPermissionSpecMap = extractAndLoadChunksLazy([".PRIMARY,badgeTooltipDelay:"]);
+// Le morceau de Discord qui contient les libellés est chargé avec le panneau
+// « mode modérateur » d'un membre : on demande ce même chargement.
+const MOD_VIEW_SIDEBAR = 'name:"GuildMemberModViewSidebar"';
+export const loadGetGuildPermissionSpecMap = extractAndLoadChunksLazy(
+    [MOD_VIEW_SIDEBAR],
+    new RegExp(String.raw`createPromise:\(\)=>${DefaultExtractAndLoadChunksRegex.source},webpackId:[^,]+,${MOD_VIEW_SIDEBAR}`)
+);
 const SpecMapModule = findByPropsLazy("getGuildPermissionSpecMap");
 
 interface PermissionSpec {

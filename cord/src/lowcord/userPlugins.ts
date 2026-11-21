@@ -196,7 +196,10 @@ export function loadUserPlugins() {
     const enabled = isSafeMode() ? [] : getEnabledUserPlugins();
     let boot: ReturnType<typeof VencordNative.userPlugins.boot>;
     try {
-        boot = VencordNative.userPlugins.boot(enabled);
+        // Copie simple : la liste des réglages est un objet surveillé que
+        // l'envoi au processus principal ne sait pas copier (« An object could
+        // not be cloned ») — les plugins perso ne se chargeaient jamais.
+        boot = VencordNative.userPlugins.boot([...enabled]);
     } catch (e) {
         logger.error("Lecture des plugins perso impossible", e);
         return;

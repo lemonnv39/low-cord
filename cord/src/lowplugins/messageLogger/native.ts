@@ -473,10 +473,19 @@ interface QueuedJob extends MediaJob {
     store: Store;
 }
 
+// Téléchargements doux : les petits fichiers (images) passent deux à la fois ;
+// les gros (vidéos) un seul à la fois et à débit limité. Sans ça, une vidéo
+// de 500 Mo occupait toute la connexion et le disque d'un coup : le vocal et
+// les streams perdaient des paquets et le PC ramait pendant le téléchargement.
 const queue: QueuedJob[] = [];
 const queued = new Set<string>();
 let active = 0;
+let activeBig = 0;
 const MAX_ACTIVE = 2;
+const BIG = 20 * 1024 * 1024;
+/** Débit maximal d'un gros fichier (octets par seconde). */
+const BIG_RATE = 6 * 1024 * 1024;
+const isBig = (j: QueuedJob) => (j.attachment.size ?? 0) > BIG;
 
 async function download(job: QueuedJob, attempt = 0): Promise<void> {
     const { attachment: a, channelId, store: st } = job;
@@ -497,10 +506,16 @@ async function download(job: QueuedJob, attempt = 0): Promise<void> {
         if (length > maxMediaBytes) return;
 
         let bytes = 0;
+        const started = Date.now();
+        const throttled = length > BIG || isBig(job);
         const limit = new Transform({
             transform(chunk, _enc, done) {
                 bytes += chunk.length;
-                done(bytes > maxMediaBytes ? new Error("too-big") : null, chunk);
+                if (bytes > maxMediaBytes) return done(new Error("too-big"));
+                // En avance sur le débit permis : on attend avant de continuer.
+                const wait = throttled ? (bytes / BIG_RATE) * 1000 - (Date.now() - started) : 0;
+                if (wait > 20) setTimeout(() => done(null, chunk), wait);
+                else done(null, chunk);
             }
         });
         ensure(dir);
@@ -522,10 +537,16 @@ async function download(job: QueuedJob, attempt = 0): Promise<void> {
 
 function pump() {
     while (active < MAX_ACTIVE && queue.length) {
-        const job = queue.shift()!;
+        // Un seul gros fichier à la fois : les petits passent devant en attendant.
+        const at = activeBig ? queue.findIndex(j => !isBig(j)) : 0;
+        if (at < 0) return;
+        const [job] = queue.splice(at, 1);
+        const big = isBig(job);
         active++;
+        if (big) activeBig++;
         download(job).finally(() => {
             active--;
+            if (big) activeBig--;
             queued.delete(`${job.store.root}|${job.attachment.id}`);
             pump();
         });
@@ -738,7 +759,7 @@ export function claimLegacy(_: IpcMainInvokeEvent, account: unknown, channelIds:
 // ── Réglages, stats, effacement ──────────────────────────────────────────────
 export function configure(_: IpcMainInvokeEvent, opts: { snapshotDays?: number; maxMediaMB?: number; }) {
     if (typeof opts?.snapshotDays === "number" && opts.snapshotDays >= 1) snapshotDays = Math.min(365, opts.snapshotDays);
-    if (typeof opts?.maxMediaMB === "number" && opts.maxMediaMB >= 1) maxMediaBytes = Math.min(2048, opts.maxMediaMB) * 1024 * 1024;
+    if (typeof opts?.maxMediaMB === "number" && opts.maxMediaMB >= 1) maxMediaBytes = Math.min(500, opts.maxMediaMB) * 1024 * 1024;
 }
 
 export function stats(_: IpcMainInvokeEvent, account: unknown): LogStats {

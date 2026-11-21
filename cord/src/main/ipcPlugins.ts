@@ -21,6 +21,8 @@ import { ipcMain } from "electron";
 
 import PluginNatives from "~pluginNatives";
 
+import { noteMainCall } from "./lowcordPerf";
+
 const PluginIpcMappings = {} as Record<string, Record<string, string>>;
 export type PluginIpcMappings = typeof PluginIpcMappings;
 
@@ -32,7 +34,11 @@ for (const [plugin, methods] of Object.entries(PluginNatives)) {
 
     for (const [methodName, method] of entries) {
         const key = `VencordPluginNative_${plugin}_${methodName}`;
-        ipcMain.handle(key, method);
+        const name = `${plugin}.${methodName}`;
+        ipcMain.handle(key, (...args: any[]) => {
+            noteMainCall(name);
+            return (method as (...a: any[]) => unknown)(...args);
+        });
         mappings[methodName] = key;
     }
 }

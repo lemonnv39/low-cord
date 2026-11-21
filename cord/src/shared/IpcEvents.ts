@@ -70,6 +70,7 @@ export const enum IpcEvents {
     LOWCORD_UPDATE_RESTART = "LowCordUpdateRestart",
     LOWCORD_UPDATE_CHANGES = "LowCordUpdateChanges",
     LOWCORD_UPDATE_BOOT_OK = "LowCordUpdateBootOk",
+    LOWCORD_PERF_LOG = "LowCordPerfLog",
     LOWCORD_UPDATE_RETRY_SKIPPED = "LowCordUpdateRetrySkipped",
     LOWSOUND_STATUS = "LowSoundStatus",
     LOWSOUND_INSTALL = "LowSoundInstall",

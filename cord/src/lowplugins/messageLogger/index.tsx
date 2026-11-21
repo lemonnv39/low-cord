@@ -402,6 +402,15 @@ async function rescueEdit(raw: any) {
 
 const JOURNAL_PAGES = 5;
 const MAX_PER_CHANNEL = 500;
+/** Salons gardés en mémoire pendant la session : au-delà, les plus anciens sortent. */
+const MAX_CHANNELS = 150;
+
+/** Rafraîchit la place d'un salon (le plus récent en dernier) et retire les plus anciens. */
+function touchKey<V>(map: Map<string, V>, key: string, value: V) {
+    map.delete(key);
+    map.set(key, value);
+    while (map.size > MAX_CHANNELS) map.delete(map.keys().next().value!);
+}
 /** compte:salon -> suppressions du journal (lues une fois par session) */
 const journalDeletes = new Map<string, Promise<LogEvent[]>>();
 /** compte:salon -> suppressions enregistrées pendant la session (pas forcément encore sur le disque) */
@@ -420,8 +429,8 @@ const keyOf = (channelId: string) => {
 
 /** Ajoute à une liste par salon, en gardant les plus récents. */
 function rememberIn<V>(map: Map<string, Map<string, V>>, key: string, id: string, value: V) {
-    let list = map.get(key);
-    if (!list) map.set(key, list = new Map());
+    const list = map.get(key) ?? new Map<string, V>();
+    touchKey(map, key, list);
     list.delete(id);
     list.set(id, value);
     if (list.size > MAX_PER_CHANNEL) list.delete(list.keys().next().value!);
@@ -433,7 +442,7 @@ function rememberDelete(ev: LogEvent) {
     const list = sessionDeletes.get(key) ?? [];
     list.push(ev);
     if (list.length > MAX_PER_CHANNEL) list.shift();
-    sessionDeletes.set(key, list);
+    touchKey(sessionDeletes, key, list);
 }
 
 function rememberRecord(rec: any) {
@@ -533,7 +542,7 @@ async function restoreHistory(channelId: string | null | undefined) {
         let stored: Promise<LogEvent[]> | undefined;
         if (Native && inJournal(channelId)) {
             stored = journalDeletes.get(key);
-            if (!stored) journalDeletes.set(key, stored = readJournalDeletes(account, channelId));
+            if (!stored) touchKey(journalDeletes, key, stored = readJournalDeletes(account, channelId));
         }
         for (const ev of [...(sessionDeletes.get(key) ?? []), ...(stored ? await stored : [])]) {
             if (ev.partial || !ev.author || records.has(ev.messageId) || dismissed.has(ev.messageId)) continue;
@@ -825,7 +834,8 @@ export default definePlugin({
      */
     handleDelete(cache: any, data: { ids: string[], id: string; mlDeleted?: boolean; local?: boolean; }, isBulk: boolean) {
         try {
-            if (cache == null || (!isBulk && !cache.has(data.id))) return isBulk ? cache : null;
+            // Message déjà retiré du salon (ou jamais chargé) : rien à garder ici.
+            if (cache == null || (!isBulk && !cache.get(data.id))) return isBulk ? cache : null;
 
             /** Pas un vrai message supprimé : à retirer normalement. */
             const notReal = (msg: any) => data.mlDeleted

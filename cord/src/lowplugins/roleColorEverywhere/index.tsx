@@ -98,7 +98,8 @@ export default definePlugin({
             find: '"text":"locked"',
             replacement: [
                 {
-                    match: /(function \i\(\i\)\{let\{id:\i,name:\i,targetRef:\i,popoutProps:\i\}=\i;return\(0,\i\.jsx\)\(\i\.\i,\{ref:\i,)/,
+                    // Discord a ajouté onContextMenu (et parfois d'autres) après popoutProps.
+                    match: /(function \i\(\i\)\{let\{id:\i,name:\i,targetRef:\i,popoutProps:\i(?:,\w+:\i)*\}=\i;return\(0,\i\.jsx\)\(\i\.\i,\{ref:\i,)/,
                     replace: "$1color:arguments[0]?.color,"
                 },
                 {

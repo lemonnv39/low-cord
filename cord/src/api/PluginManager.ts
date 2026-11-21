@@ -28,6 +28,7 @@ import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/Messag
 import { Settings, SettingsStore } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { traceFunction } from "@debug/Tracer";
+import { timePluginHandler } from "@lowcord/perf";
 import { Logger } from "@utils/Logger";
 import { onlyOnce } from "@utils/onlyOnce";
 import { canonicalizeFind, canonicalizeReplacement } from "@utils/patches";
@@ -166,7 +167,8 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
         for (const [event, handler] of Object.entries(p.flux)) {
             const wrappedHandler = p.flux[event] = function () {
                 try {
-                    const res = handler!.apply(p, arguments as any);
+                    // low-cord : un gestionnaire lent est noté dans le journal de performances.
+                    const res = timePluginHandler(p.name, event, () => handler!.apply(p, arguments as any));
                     return res instanceof Promise
                         ? res.catch(e => logger.error(`${p.name}: Error while handling ${event}\n`, e))
                         : res;
