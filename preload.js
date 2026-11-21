@@ -1,4 +1,4 @@
-// Vencord 39a1460
+// Vencord 82bfbc2
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
