@@ -12,6 +12,7 @@
 // invisibles restaient dans la conversation.
 
 import * as DataStore from "@api/DataStore";
+import { Settings } from "@api/Settings";
 import { t } from "@lowcord/i18n";
 import { CanceledError, ExportProgress } from "@lowplugins/exportMessages/exporter";
 import { markOwnCleaning, protectMessages } from "@lowplugins/messageLogger/shield";
@@ -59,6 +60,34 @@ export interface RunRecord {
 }
 
 // ── Réglage de vitesse (mis à jour depuis les réglages du plugin) ────────────
+/**
+ * Mode rapide (section Cleaner de l'onglet low-cord) : au lieu d'une pause
+ * fixe, on suit les en-têtes de limite renvoyés par Discord (requêtes
+ * restantes, délai avant remise à zéro). On va aussi vite que Discord
+ * l'autorise, sans jamais dépasser : c'est ce qui évite les 429 à répétition.
+ */
+export const isFastMode = () => Settings.plugins.Settings?.lowcordCleanerFast === true;
+
+interface Bucket { remaining: number; resetAfter: number; }
+let lastBucket: Bucket | null = null;
+
+export function readBucket(res: any): Bucket | null {
+    const h = res?.headers;
+    if (!h) return null;
+    const get = (k: string) => (typeof h.get === "function" ? h.get(k) : h[k]);
+    const remaining = Number(get("x-ratelimit-remaining"));
+    const resetAfter = Number(get("x-ratelimit-reset-after"));
+    if (!Number.isFinite(remaining) || !Number.isFinite(resetAfter)) return null;
+    return { remaining, resetAfter };
+}
+
+/** Pause « rapide » : minimale tant qu'il reste des requêtes, sinon jusqu'à la remise à zéro. */
+export function fastPause(bucket: Bucket | null, fallback: number) {
+    if (!bucket) return fallback;
+    if (bucket.remaining > 0) return 120 + Math.random() * 120;
+    return bucket.resetAfter * 1000 + 80 + Math.random() * 120;
+}
+
 let baseDelay = 700;
 export function setBaseDelay(ms: number) {
     baseDelay = Math.min(5000, Math.max(250, Math.round(ms) || 700));
@@ -185,10 +214,12 @@ type DeleteResult = "deleted" | "gone" | "skipped" | "failed";
 
 async function deleteOne(channelId: string, messageId: string): Promise<DeleteResult> {
     try {
-        await request(() => RestAPI.del({ url: `/channels/${channelId}/messages/${messageId}` }), "Suppression");
+        const res = await request(() => RestAPI.del({ url: `/channels/${channelId}/messages/${messageId}` }), "Suppression");
+        lastBucket = readBucket(res);
         return "deleted";
     } catch (e: any) {
         if (e instanceof StopError) throw e;
+        lastBucket = readBucket(e);
         if (e?.status === 404) return "gone";
         if (e?.status === 403 || e?.body?.code === SYSTEM_MESSAGE) return "skipped";
         return "failed";
@@ -204,7 +235,9 @@ async function pace(result: DeleteResult) {
     }
     // Petite variation aléatoire : un rythme parfaitement régulier est plus repérable.
     const jitter = 0.85 + Math.random() * 0.3;
-    await sleep(baseDelay * state.penalty * jitter);
+    const safe = baseDelay * state.penalty * jitter;
+    // Rapide : on suit Discord ; après une limite (penalty > 1) on reste prudent.
+    await sleep(isFastMode() && state.penalty <= 1.2 ? fastPause(lastBucket, safe) : safe);
 }
 
 async function openDm(userId: string): Promise<string> {

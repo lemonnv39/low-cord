@@ -1473,3 +1473,168 @@
         animation: none;
     }
 }
+
+/* ── Cleaner (onglet low-cord) ─────────────────────────────────────────── */
+.lc-cl-muted { color: var(--text-muted); font-size: 13px; }
+.lc-cl-pad { padding: 8px 2px 0; }
+
+.lc-cl-search { margin-top: 10px; }
+
+.lc-cl-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+    border-radius: 8px;
+    background: var(--input-background, var(--background-tertiary, rgb(0 0 0 / 20%)));
+    color: var(--text-normal, var(--text-default));
+    font-family: var(--font-code, monospace);
+    font-size: 14px;
+    outline: none;
+    resize: vertical;
+}
+
+.lc-cl-input:focus { border-color: var(--text-muted); }
+.lc-cl-keep { margin-top: 8px; font-size: 13px; }
+
+.lc-cl-found {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 5%));
+}
+
+.lc-cl-icon {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.lc-cl-icon-text {
+    display: grid;
+    place-items: center;
+    background: var(--background-mod-strong, rgb(255 255 255 / 10%));
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.lc-cl-found-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.lc-cl-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 12%));
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-normal, var(--text-default));
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.lc-cl-btn:hover:not(:disabled) { background: var(--background-mod-strong, rgb(255 255 255 / 8%)); }
+.lc-cl-btn-danger { color: var(--text-feedback-critical, var(--status-danger, #f23f43)); }
+.lc-cl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.lc-cl-bulk {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%));
+}
+
+.lc-cl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.lc-cl-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle, rgb(255 255 255 / 8%));
+    border-radius: 8px;
+    background: var(--background-mod-subtle, rgb(255 255 255 / 3%));
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.lc-cl-tile:hover:not(:disabled) {
+    border-color: var(--text-muted);
+    background: var(--background-mod-strong, rgb(255 255 255 / 6%));
+}
+
+.lc-cl-tile:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.lc-cl-tile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.lc-cl-tile-name {
+    color: var(--header-primary, var(--text-strong));
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.lc-cl-tile-danger .lc-cl-tile-name { color: var(--text-feedback-critical, var(--status-danger, #f23f43)); }
+
+.lc-cl-tile-desc {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.lc-cl-progress { border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%)); }
+
+.lc-cl-prow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+}
+
+.lc-cl-prow + .lc-cl-prow { border-top: 1px solid var(--border-subtle, rgb(255 255 255 / 6%)); }
+
+.lc-cl-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-positive, var(--status-positive, #23a55a));
+    animation: lc-cl-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes lc-cl-pulse { 50% { opacity: 0.3; } }
+
+.lc-cl-bar {
+    height: 4px;
+    margin-top: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--background-mod-strong, rgb(255 255 255 / 8%));
+}
+
+.lc-cl-bar > div {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--header-primary, var(--text-strong, #f2f3f5));
+    transition: width 300ms ease;
+}
+
+.lc-cl-confirm p { margin: 0 0 8px; }
