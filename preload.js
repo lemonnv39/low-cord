@@ -1,4 +1,4 @@
-// Vencord a303d54
+// Vencord ba7aede
 // Standalone: true
 // Platform: Universal
 // Updater Disabled: true
