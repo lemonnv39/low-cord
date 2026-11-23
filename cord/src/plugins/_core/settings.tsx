@@ -18,6 +18,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { MainSettingsIcon, PlaceholderIcon, PluginsIcon, VesktopSettingsIcon } from "@components/Icons";
+import CleanerTab, { BroomIcon } from "@lowcord/CleanerTab";
 import { LOWCORD_NAME } from "@lowcord/constants";
 import LowCordTab from "@lowcord/LowCordTab";
 import LowPluginsTab from "@lowcord/plugins/LowPluginsTab";
@@ -190,6 +191,13 @@ export default definePlugin({
                 title: "low-sound",
                 Component: LowSoundTab,
                 Icon: SoundIcon
+            }),
+            // Cleaner : nettoyage du compte (messages, serveurs, groupes, amis).
+            buildEntry({
+                key: "vencord_cleaner",
+                title: "Cleaner",
+                Component: CleanerTab,
+                Icon: BroomIcon
             }),
             ...this.customEntries.map(buildEntry),
             // TODO: Remove deprecated customSections in a future update

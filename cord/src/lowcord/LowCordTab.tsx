@@ -20,7 +20,6 @@ import { relaunch } from "@utils/native";
 import gitHash from "~git-hash";
 
 import { Banner } from "./Banner";
-import { CleanerSection } from "./CleanerSection";
 import { LOWCORD_REPO_URL } from "./constants";
 import { LANGS, setLang, t, useLang } from "./i18n";
 import { OptimizeSection } from "./OptimizeSection";
@@ -81,11 +80,6 @@ function LowCordSettings() {
                 <OptimizeSection />
             </div>
 
-            <Divider className={Margins.top16} />
-
-            <div className={Margins.top16}>
-                <CleanerSection />
-            </div>
 
             <Divider className={Margins.top16} />
 

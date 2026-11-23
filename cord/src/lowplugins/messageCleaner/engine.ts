@@ -413,6 +413,8 @@ async function runTarget(target: Target) {
 }
 
 export function enqueue(targets: Target[]) {
+    // Lancé depuis l'onglet Cleaner sans le plugin actif : historique quand même.
+    void loadHistory();
     for (const target of targets) {
         if (!state.queue.some(t => t.kind === target.kind && t.id === target.id)) state.queue.push(target);
     }

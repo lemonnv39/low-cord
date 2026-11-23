@@ -841,7 +841,7 @@ export const en = {
     "pf.ghostDmsHint": "A direct or group message deleted less than 5 minutes after it was sent.",
     "pf.g.dm": "DM",
     "cl.title": "Cleaner",
-    "cl.hint": "Bulk-clean your account: your messages, servers, groups and friends. One action at a time, at the pace Discord allows. Everything is irreversible.",
+    "cl.hint": "Bulk-clean your account: your messages, servers, groups and friends. One action at a time, at the pace Discord allows. You can leave this page: cleaning keeps going (green dot at the top). Everything is irreversible.",
     "cl.search": "Search by ID",
     "cl.searchDesc": "Paste the ID of a server, channel, DM, group or person. low-cord finds what it is and offers what to clean.",
     "cl.searchPlaceholder": "Server, channel, group or user ID",
@@ -899,4 +899,5 @@ export const en = {
     "cl.messages": "Messages",
     "cl.backup": "Backing up the conversation…",
     "cl.msgProgress": "{deleted} / {total} deleted · {queue} queued",
+    "cl.headerMessages": "Cleaner: {name} — {count} deleted",
 } satisfies Record<keyof typeof fr, string>;

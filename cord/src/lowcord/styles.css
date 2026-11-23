@@ -1654,3 +1654,32 @@
 }
 
 .lc-cl-confirm p { margin: 0 0 8px; }
+
+/* Rond vert de la barre du haut pendant un nettoyage */
+.lc-cl-header-dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    margin: 5px;
+    border-radius: 50%;
+    background: var(--status-positive, #23a55a);
+    box-shadow: 0 0 0 0 rgb(35 165 90 / 55%);
+    animation: lc-cl-breathe 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes lc-cl-breathe {
+    0% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgb(35 165 90 / 55%);
+    }
+
+    50% {
+        opacity: 0.45;
+        box-shadow: 0 0 0 5px rgb(35 165 90 / 0%);
+    }
+
+    100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgb(35 165 90 / 0%);
+    }
+}

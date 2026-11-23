@@ -845,7 +845,7 @@ export const fr = {
     "pf.ghostDmsHint": "Un message privé ou de groupe supprimé moins de 5 minutes après son envoi.",
     "pf.g.dm": "MP",
     "cl.title": "Cleaner",
-    "cl.hint": "Nettoie ton compte en masse : tes messages, tes serveurs, tes groupes, tes amis. Une action à la fois, au rythme que Discord autorise. Tout est irréversible.",
+    "cl.hint": "Nettoie ton compte en masse : tes messages, tes serveurs, tes groupes, tes amis. Une action à la fois, au rythme que Discord autorise. Tu peux quitter cette page : le nettoyage continue (rond vert en haut). Tout est irréversible.",
     "cl.search": "Recherche par ID",
     "cl.searchDesc": "Colle l'ID d'un serveur, d'un salon, d'un MP, d'un groupe ou d'une personne. low-cord trouve ce que c'est et propose quoi nettoyer.",
     "cl.searchPlaceholder": "ID du serveur, salon, groupe ou utilisateur",
@@ -903,4 +903,5 @@ export const fr = {
     "cl.messages": "Messages",
     "cl.backup": "Sauvegarde de la conversation…",
     "cl.msgProgress": "{deleted} / {total} supprimés · {queue} en attente",
+    "cl.headerMessages": "Cleaner : {name} — {count} supprimés",
 } as const;
