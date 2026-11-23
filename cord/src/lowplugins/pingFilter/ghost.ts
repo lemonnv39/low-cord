@@ -233,12 +233,26 @@ function onUpdate({ message }: { message: any; }) {
     report(seen, "edit");
 }
 
+interface LoadEvent {
+    channelId: string;
+    messages: any[];
+    isBefore?: boolean;
+    hasMoreAfter?: boolean;
+    requestStartTime?: number;
+}
+
 /**
  * Discord vient de charger des messages d'un salon (ouverture, défilement) :
- * une mention en attente qui devrait s'y trouver et n'y est pas a été
- * supprimée. Repéré tout de suite, sans attendre la prochaine vérification.
+ * une mention en attente qui devrait s'y trouver et n'y est pas est
+ * peut-être supprimée. Ce n'est qu'un indice : on redemande le message à
+ * Discord (check) au lieu de signaler directement.
+ *
+ * Pourquoi pas directement : en remontant l'historique (isBefore), Discord
+ * envoie toujours hasMoreAfter:false, et un message arrivé pendant le
+ * chargement n'est pas dans la réponse. Les deux faisaient passer des MP
+ * bien présents pour des ghost pings.
  */
-function onLoad({ channelId, messages, hasMoreAfter }: { channelId: string; messages: any[]; hasMoreAfter?: boolean; }) {
+function onLoad({ channelId, messages, isBefore, hasMoreAfter, requestStartTime }: LoadEvent) {
     if (!enabled() || !Array.isArray(messages) || !messages.length) return;
     const pending = [...recent.values()].filter(s => s.channelId === channelId);
     if (!pending.length) return;
@@ -252,11 +266,12 @@ function onLoad({ channelId, messages, hasMoreAfter }: { channelId: string; mess
             if (seen.target !== "dm" && me && !mentionOf(loaded, me, seen.guildId)) report(seen, "edit");
             continue;
         }
-        // Absent alors qu'il est dans la tranche chargée (ou plus récent qu'elle,
-        // quand Discord dit qu'il n'y a rien après) : supprimé.
+        // Reçu après le départ de la demande : ne pouvait pas y être.
+        // (heure en ms depuis 1970 seulement : sinon on ne peut pas comparer)
+        if (requestStartTime && requestStartTime > 1e12 && seen.at >= requestStartTime - 2000) continue;
         const inRange = compareIds(seen.id, oldest) > 0 && compareIds(seen.id, newest) < 0;
-        const afterEnd = compareIds(seen.id, newest) > 0 && hasMoreAfter === false;
-        if (inRange || afterEnd) report(seen, "delete");
+        const afterEnd = !isBefore && compareIds(seen.id, newest) > 0 && hasMoreAfter === false;
+        if (inRange || afterEnd) queueCheck(seen.id);
     }
 }
 
