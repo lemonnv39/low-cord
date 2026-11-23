@@ -481,14 +481,10 @@ export default definePlugin({
                 match: /(?=function (\i)\(\i\){let{channel:.{0,200}?getSortedRoles\()/,
                 replace: "$self.ChannelBeginHeader=$1;"
             }
-        },
-        {
-            find: "2026-02-private-channel-hiding",
-            replacement: {
-                match: /(?<=enableObfuscation|enableIntegrityCheck):!0/g,
-                replace: ":false"
-            }
         }
+        // Patch « 2026-02-private-channel-hiding » retiré : Discord a supprimé
+        // cette expérience (plus d'enableObfuscation / enableIntegrityCheck
+        // dans le build stable du 23/11/2026).
     ],
 
     set ChannelBeginHeader(value: any) {
